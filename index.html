@@ -285,7 +285,7 @@
     --stagger-step: 55ms;
     --t-opacity: 380ms;
     --t-transform: 680ms;
-    --tilt-ms: 0ms;   /* pointer-tilt's transform-transition duration, driven by JS: 0ms while
+    --tilt-ms: var(--t-transform);   /* transform-transition duration for tilt cards. DEFAULT = entrance duration so the fly-in GLIDES; JS drops it to 0ms while
                           actively tracking (instant 1:1 follow), ~500ms for the one eased
                           snap-back on release. A CUSTOM PROPERTY on purpose, not a class switch:
                           CSS transition longhands don't merge across rules of different
@@ -312,7 +312,12 @@
   .js .d3.fly-right{ transform:translate3d(120px,44px,-360px) rotateY(-20deg) rotateX(8deg); }
   .js .d3.in{
     opacity:1;transform:none;will-change:auto;   /* will-change reset: nothing left to accelerate once settled — up to 46 permanently-composited layers otherwise */
-    transition:opacity var(--t-opacity) var(--ease-out-quart);  /* transform DROPPED from the list here on purpose: the 680ms entrance curve has done its job, and per the note above this rule's higher specificity (.js .d3.in, 3 classes) would otherwise permanently override .tilt's transform transition (1 class) on every card that is both, silently reinstating the tilt-chase-lag bug on every settled card. */
+    /* transform KEPT in the transition list so the fly-in glides (CSS uses THIS rule's transition
+       for the transform change when .in is added). Safe for non-tilt elements: they never receive
+       pointer events, so there's no hover-tracking to lag. Tilt cards are handled by the
+       higher-specificity .js .d3.tilt.in rule below, whose transform duration is --tilt-ms. */
+    transition:opacity var(--t-opacity) var(--ease-out-quart),
+               transform var(--t-transform) var(--ease-out-expo);
   }
   /* settled cards that are ALSO interactive .tilt targets: restate the complete transition list
      at higher specificity (4 classes) so it wins outright over .js .d3.in above — transform's
