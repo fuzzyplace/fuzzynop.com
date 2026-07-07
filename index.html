@@ -240,22 +240,133 @@
   }
   footer .nop{color:var(--red)}
 
-  /* ---- motion: 3d world assembles as you scroll ---- */
+  /* ============================================================
+     MOTION SYSTEM — 3D scroll world
+     ============================================================
+     DEPTH MATH. Under `main{perspective:1400px}`, an element at translateZ(z)
+     renders at apparent scale = perspective / (perspective - z). With P=1400:
+       z=-520 (fly-deep,  h2 headings)     -> scale 0.729  (27% recede, most dramatic)
+       z=-360 (fly-left/right, grid cards) -> scale 0.795  (21% recede)
+       z=-300 (fly-rise, labels/body/etc.) -> scale 0.824  (18% recede, subtlest — used most often)
+     Depth scales with visual rarity/importance: the rarer element (one h2 per
+     section) gets the biggest recede; the commonest elements (body copy, labels)
+     get the smallest, so the page never feels like it's "whooshing" everywhere at once.
+
+     TIMING BUDGET (fallback engine, worst case = last card in a 6-up grid row):
+       stagger  = min(index,5) * 55ms  -> max 275ms
+       opacity  = 380ms  ease-out-quart  (finishes FIRST — legible while still gliding)
+       position = 680ms  ease-out-expo   (finishes LAST — the "landing")
+       worst-case total = 275 + 680 = 955ms, under the ~1s ceiling past which an
+       entrance reads as "waiting on the page" rather than "arriving."
+
+     TWO ENGINES, additive and mutually non-conflicting:
+       1) Native CSS scroll-driven animation (animation-timeline / view-timeline) for
+          OPACITY only — compositor-thread only, immune to rAF/background-tab
+          throttling, zero JS per frame. This is the modern, best-available technique
+          for scroll-linked motion. Scoped to opacity (never transform) specifically
+          so it can never fight the pointer-tilt hover effect, which sets `transform`
+          via inline style on the same cards — CSS Animations outrank inline style in
+          the cascade, so if this engine also drove transform it would silently
+          cancel every hover-tilt in supporting browsers.
+       2) IntersectionObserver + CSS transitions drives the actual 3D transform
+          fly-in, in every engine (this is the tested, working system). Its `.in`
+          class rule is a normal-cascade-tier declaration, so JS inline styles from
+          the hover-tilt correctly override it afterward — exactly as before.
+       `animation-timing-function: linear` is used for the fade so the browser
+       doesn't double up on easing an already-scroll-scrubbed value; the eased
+       *shape* of the fade instead comes from ease-out-quart on the keyframe itself
+       where it matters (card fade, hero recede). The progress bar stays perfectly
+       linear on purpose — it represents scroll percentage, so an eased bar would
+       misreport your actual position.
+     ============================================================ */
+  :root{
+    --ease-out-expo:  cubic-bezier(.16,1,.3,1);   /* easeOutExpo — decisive deceleration, used for the 3D "landing" */
+    --ease-out-quart: cubic-bezier(.25,1,.5,1);   /* easeOutQuart — softer decelerate, used for fades */
+    --stagger-step: 55ms;
+    --t-opacity: 380ms;
+    --t-transform: 680ms;
+    --tilt-ms: 0ms;   /* pointer-tilt's transform-transition duration, driven by JS: 0ms while
+                          actively tracking (instant 1:1 follow), ~500ms for the one eased
+                          snap-back on release. A CUSTOM PROPERTY on purpose, not a class switch:
+                          CSS transition longhands don't merge across rules of different
+                          specificity — the highest-specificity matching rule wins its WHOLE
+                          list, so a class-based .leaving/.tilt toggle would need to out-rank
+                          .js .d3.in (see below) on every longhand it cares about, which is
+                          fragile. Threading the duration through a variable sidesteps that
+                          entirely: one rule stays authoritative, only its value changes. */
+  }
+
   section,header,.marks,.talks,.music-wrap{transform-style:preserve-3d}
-  .tilt{transform-style:preserve-3d;transition:transform .3s cubic-bezier(.2,.7,.2,1),border-color .25s ease,box-shadow .3s ease}
+  .tilt{transform-style:preserve-3d;transition:transform var(--tilt-ms) var(--ease-out-expo),border-color .25s ease,box-shadow .3s ease}
   .tilt:hover{box-shadow:0 26px 60px -34px rgba(0,0,0,.85)}
 
-  /* each component starts parked deep in 3d space, then flies to rest when it scrolls into view.
-     JS only toggles .in; the transition does the work → runs in every engine, no rAF needed. */
+  /* ---- Engine 2: IntersectionObserver + transitions — drives the 3D transform, always ---- */
   .js .d3{
     opacity:0;will-change:transform,opacity;
-    transition:opacity .85s ease, transform 1.05s cubic-bezier(.16,.84,.36,1);
+    transition:opacity var(--t-opacity) var(--ease-out-quart),
+               transform var(--t-transform) var(--ease-out-expo);
   }
   .js .d3.fly-deep { transform:translate3d(0,70px,-520px) rotateX(24deg); }
   .js .d3.fly-rise { transform:translate3d(0,80px,-300px) rotateX(16deg); }
   .js .d3.fly-left { transform:translate3d(-120px,44px,-360px) rotateY(20deg) rotateX(8deg); }
   .js .d3.fly-right{ transform:translate3d(120px,44px,-360px) rotateY(-20deg) rotateX(8deg); }
-  .js .d3.in{opacity:1;transform:none}
+  .js .d3.in{
+    opacity:1;transform:none;will-change:auto;   /* will-change reset: nothing left to accelerate once settled — up to 46 permanently-composited layers otherwise */
+    transition:opacity var(--t-opacity) var(--ease-out-quart);  /* transform DROPPED from the list here on purpose: the 680ms entrance curve has done its job, and per the note above this rule's higher specificity (.js .d3.in, 3 classes) would otherwise permanently override .tilt's transform transition (1 class) on every card that is both, silently reinstating the tilt-chase-lag bug on every settled card. */
+  }
+  /* settled cards that are ALSO interactive .tilt targets: restate the complete transition list
+     at higher specificity (4 classes) so it wins outright over .js .d3.in above — transform's
+     duration comes from --tilt-ms (instant while tracking, eased on release, see JS), and
+     border-color/box-shadow are restated here because whichever rule wins owns the WHOLE list,
+     not a per-property merge. */
+  .js .d3.tilt.in{
+    transition:opacity var(--t-opacity) var(--ease-out-quart),
+               transform var(--tilt-ms) var(--ease-out-expo),
+               border-color .25s ease,
+               box-shadow .3s ease;
+  }
+
+  /* ---- Engine 1: native scroll-driven opacity fade, layered on top where supported ---- */
+  @supports (animation-timeline: view()){
+    .d3{
+      animation-name: d3-fade-in;
+      animation-duration: 1ms;              /* nominal: animation-range (not duration) defines the real scroll-mapped span */
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-timeline: view();
+      animation-range: cover 0% cover 30%;   /* fully faded in by 30% through its own on-screen "cover" span */
+    }
+  }
+  @keyframes d3-fade-in{ from{opacity:0} to{opacity:1} }
+
+  /* ---- native enhancement: hero recede, tied to the header's OWN on-screen lifetime —
+     no magic pixel constant, automatically correct at any viewport/header height.
+     Nothing interactive touches header's transform, so it's safe to fully native-drive. ---- */
+  @supports (animation-timeline: view()){
+    header{
+      view-timeline-name: --hero;
+      animation-name: hero-recede;
+      animation-duration: 1ms;
+      animation-timing-function: var(--ease-out-quart);
+      animation-fill-mode: both;
+      animation-timeline: --hero;
+      animation-range: cover 0% cover 100%;   /* the header's entire time on screen, start to finish */
+    }
+  }
+  @keyframes hero-recede{ from{opacity:1;transform:none} to{opacity:.45;transform:translateY(40px) translateZ(-130px)} }
+
+  /* ---- native enhancement: scroll progress bar, fully compositor-driven, perfectly linear ---- */
+  @supports (animation-timeline: scroll()){
+    html{ scroll-timeline-name: --page; scroll-timeline-axis: block }
+    .progress{
+      animation-name: progress-fill;
+      animation-duration: 1ms;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-timeline: --page;
+    }
+  }
+  @keyframes progress-fill{ from{width:0%} to{width:100%} }
 
   /* marks idle-float in 3d once assembled */
   .mark-card svg{transform-style:preserve-3d;animation:float 7s ease-in-out infinite}
@@ -273,7 +384,10 @@
     html{scroll-behavior:auto}
     .atmo,.mark,.mark-card svg{animation:none}
     .js .d3{opacity:1 !important;transform:none !important;transition:none;will-change:auto}
-    .tilt{transition:border-color .2s ease}
+    .d3{animation:none !important}
+    header{animation:none !important;transform:none !important;opacity:1 !important}
+    .progress{animation:none !important}
+    .tilt,.js .d3.tilt.in{transition:border-color .2s ease}
   }
   @media(max-width:760px){
     .music-wrap{grid-template-columns:1fr}
@@ -628,6 +742,9 @@
   var RM = mq('(prefers-reduced-motion: reduce)');
   var FINE = mq('(hover:hover) and (pointer:fine)');
   var scrollTop = function(){ return window.pageYOffset || (document.scrollingElement||document.documentElement).scrollTop || 0; };
+  var supports = function(cond){ return !!(window.CSS && CSS.supports && CSS.supports(cond)); };
+  var HAS_VIEW_TL = supports('(animation-timeline: view())');     /* covers .d3 fade + hero-recede — both CSS-gated on this same test */
+  var HAS_SCROLL_TL = supports('(animation-timeline: scroll())'); /* covers the progress bar */
 
   try {
     /* ---- 3d world assembly: each component flies in from depth as it scrolls into view ----
@@ -640,7 +757,7 @@
       if (grid) {
         var idx = [].slice.call(p.children).indexOf(el);
         if (!/fly-/.test(el.className)) el.classList.add(['fly-left','fly-deep','fly-right'][idx % 3]);
-        el.style.transitionDelay = ((idx % 6) * 90) + 'ms';
+        el.style.transitionDelay = (Math.min(idx, 5) * 55) + 'ms';  /* matches --stagger-step budget: worst case 5*55=275ms + 680ms transform = 955ms total */
       } else if (!/fly-/.test(el.className)) {
         el.classList.add('fly-rise');
       }
@@ -666,33 +783,42 @@
       setTimeout(function(){ d3s.forEach(settle); }, 6000); // failsafe: nothing stays hidden
     }
 
-    /* ---- scroll-driven depth: progress bar + hero recede (scroll EVENT, not rAF — fires everywhere) ---- */
-    var bar = document.querySelector('.progress');
-    var heroEl = document.querySelector('header');
+    /* ---- fallback: progress bar + hero recede, JS scroll-driven (only where the native
+       engines above aren't available — HAS_SCROLL_TL / HAS_VIEW_TL gate each independently,
+       since a browser could in principle support one and not the other). ---- */
+    var bar = HAS_SCROLL_TL ? null : document.querySelector('.progress');
+    var heroEl = HAS_VIEW_TL ? null : document.querySelector('header');
+    var heroH = heroEl ? heroEl.offsetHeight : 0;  /* denominator = the hero's OWN height, so the
+       recede completes exactly as it scrolls out of view — not an arbitrary viewport-height guess */
     var scheduled = false;
     function onScrollFrame(){
       scheduled = false;
-      var hd = document.documentElement, y = scrollTop();
-      var max = hd.scrollHeight - hd.clientHeight;
-      if (bar) bar.style.width = (Math.max(0, Math.min(1, max > 0 ? y / max : 0)) * 100).toFixed(2) + '%';
+      var y = scrollTop();
       if (heroEl && !RM) {
-        var t = Math.min(1, y / (window.innerHeight || 800));
-        heroEl.style.transform = 'translateY(' + (t * 40).toFixed(1) + 'px) translateZ(' + (-t * 130).toFixed(1) + 'px)';
-        heroEl.style.opacity = (1 - t * 0.55).toFixed(3);
+        var r = heroEl.getBoundingClientRect();
+        if (r.bottom > 0) {  /* skip once fully scrolled past — nothing left to animate, saves the write */
+          var t = heroH > 0 ? Math.min(1, y / heroH) : 0;
+          heroEl.style.transform = 'translateY(' + (t * 40).toFixed(1) + 'px) translateZ(' + (-t * 130).toFixed(1) + 'px)';
+          heroEl.style.opacity = (1 - t * 0.55).toFixed(3);
+        }
       }
     }
     function updateBar(){
+      if (!bar) return;
       var hd = document.documentElement, y = scrollTop(), max = hd.scrollHeight - hd.clientHeight;
-      if (bar) bar.style.width = (Math.max(0, Math.min(1, max > 0 ? y / max : 0)) * 100).toFixed(2) + '%';
+      bar.style.width = (Math.max(0, Math.min(1, max > 0 ? y / max : 0)) * 100).toFixed(2) + '%';
     }
     function onScroll(){
       updateBar();  /* cheap + direct: works even where rAF is throttled */
+      if (!heroEl) return;
       if (scheduled) return; scheduled = true;
       if (window.requestAnimationFrame) requestAnimationFrame(onScrollFrame); else onScrollFrame();
     }
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onScroll, { passive: true });
-    onScrollFrame();
+    if (bar || heroEl) {
+      window.addEventListener('scroll', onScroll, { passive: true });
+      window.addEventListener('resize', function(){ if (heroEl) heroH = heroEl.offsetHeight; onScroll(); }, { passive: true });
+      onScrollFrame(); updateBar();
+    }
 
     /* ---- nav active section ---- */
     var jumps = [].slice.call(document.querySelectorAll('.nav a.jump'));
@@ -715,16 +841,31 @@
       Object.keys(secMap).forEach(function(id){ navio.observe(document.getElementById(id)); });
     }
 
-    /* ---- 3d tilt (desktop pointers only) ---- */
+    /* ---- 3d tilt (desktop pointers only) ----
+       No transition while tracking: pointermove fires every ~8-16ms, far faster than any
+       transition duration, so easing DURING tracking would mean each event restarts a curve
+       chasing a target that has already moved again — the tilt would permanently lag behind
+       the real cursor instead of following it 1:1. Instead: --tilt-ms is held at 0ms for
+       instant 1:1 tracking on move, and bumped to 500ms for exactly the return trip on
+       pointerleave, then reset so the next hover is instant again. This is the standard
+       pattern used by e.g. vanilla-tilt.js — driven here via a custom property rather than
+       a class toggle; see the CSS comment on --tilt-ms for why. */
     if (FINE && !RM) {
       [].slice.call(document.querySelectorAll('.tilt')).forEach(function(card){
+        card.addEventListener('pointerenter', function(){ card.style.setProperty('--tilt-ms', '0ms'); });
         card.addEventListener('pointermove', function(ev){
           var r = card.getBoundingClientRect();
           var px = (ev.clientX - r.left) / r.width - 0.5;
           var py = (ev.clientY - r.top) / r.height - 0.5;
           card.style.transform = 'rotateY(' + (px*7).toFixed(2) + 'deg) rotateX(' + (-py*7).toFixed(2) + 'deg) translateZ(8px)';
         });
-        card.addEventListener('pointerleave', function(){ card.style.transform = ''; });
+        card.addEventListener('pointerleave', function(){
+          card.style.setProperty('--tilt-ms', '500ms');
+          card.style.transform = '';
+          var clear = function(){ card.style.setProperty('--tilt-ms', '0ms'); card.removeEventListener('transitionend', clear); };
+          card.addEventListener('transitionend', clear);
+          setTimeout(clear, 600);  /* fallback if transitionend never fires */
+        });
       });
     }
 
