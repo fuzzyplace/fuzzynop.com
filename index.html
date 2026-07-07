@@ -151,6 +151,21 @@
   .talk h3{font-size:17.5px;font-weight:600;line-height:1.3}
   .talk p{color:var(--muted);font-size:14px}
 
+  /* ---- the marks ---- */
+  .marks{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr));gap:14px;margin-top:8px}
+  .mark-card{
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:28px 20px 22px;display:flex;flex-direction:column;align-items:center;
+    text-align:center;gap:8px;transition:transform .25s ease,border-color .25s ease;
+  }
+  .mark-card:hover{transform:translateY(-3px);border-color:rgba(255,61,90,.45)}
+  .mark-card svg{height:92px;width:100%;max-width:180px;display:block;margin-bottom:6px}
+  .mark-card h3{
+    font-family:var(--disp);font-weight:400;text-transform:uppercase;
+    letter-spacing:.03em;font-size:21px;line-height:1;
+  }
+  .mark-card p{color:var(--muted);font-size:13px;max-width:28ch;line-height:1.5}
+
   /* ---- fuzzy place ---- */
   .fp{
     background:linear-gradient(135deg,var(--panel) 0%,var(--panel-2) 100%);
@@ -230,6 +245,116 @@
     <h2>Break it to understand it</h2>
     <p class="lede">It started with cheating at video games — bending a system's rules to see how it really works underneath. That instinct became a career spent on the attacker's side of the glass: building and leading red teams inside some of the largest companies on the internet.</p>
     <p class="body">The through-line of the work: the most interesting attack surface is <b>people</b>. Talks and trainings across the global conference circuit on red teaming, adversary simulation, behavioral security, and offensive psychology at scale — how organizations actually get compromised, and how to build cultures that don't.</p>
+  </section>
+
+  <section id="marks">
+    <div class="label">// The marks</div>
+    <h2>Six marks, one operator</h2>
+    <p class="lede">The whole story told in glyphs — every one drawn from the record. A handle that's secretly an exploit, an origin in cheating at games, a tool shipped to the field, and the tribe's own emblem.</p>
+    <div class="marks">
+
+      <div class="mark-card">
+        <svg viewBox="0 0 200 120" aria-hidden="true" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <g stroke="#e8e2d6" stroke-width="3">
+            <rect x="22" y="16" width="30" height="30" rx="4"/><rect x="52" y="34" width="30" height="30" rx="4"/>
+            <rect x="82" y="52" width="30" height="30" rx="4"/><rect x="112" y="70" width="30" height="30" rx="4"/>
+          </g>
+          <g fill="#e8e2d6" stroke="none" font-family="'SF Mono',Menlo,monospace" font-size="13" font-weight="700" text-anchor="middle">
+            <text x="37" y="36">90</text><text x="67" y="54">90</text><text x="97" y="72">90</text><text x="127" y="90">90</text>
+          </g>
+          <path d="M150 85 L166 85" stroke="#e8e2d6" stroke-width="3"/>
+          <path d="M160 79 L168 85 L160 91" stroke="#e8e2d6" stroke-width="3"/>
+          <path d="M186 74 L186 96 M176 85 L196 85 M179 78 L193 92 M193 78 L179 92" stroke="#ff3d5a" stroke-width="3"/>
+        </svg>
+        <h3>The NOP Sled</h3>
+        <p>fuzz + no-op — the handle is the exploit</p>
+      </div>
+
+      <div class="mark-card">
+        <svg viewBox="0 0 200 120" aria-hidden="true" fill="none" stroke-linecap="round">
+          <g stroke="#e8e2d6" stroke-width="4">
+            <path d="M42 60 Q100 22 158 60"/><path d="M42 60 Q100 98 158 60"/><circle cx="100" cy="60" r="27"/>
+          </g>
+          <circle cx="100" cy="60" r="16" stroke="#ff3d5a" stroke-width="3"/>
+          <circle cx="100" cy="60" r="6" fill="#e8e2d6" stroke="none"/>
+          <path d="M74 60 L126 60 M100 34 L100 86" stroke="#e8e2d6" stroke-width="2"/>
+          <path d="M100 12 L100 20 M72 20 L77 28 M128 20 L123 28 M100 108 L100 100 M72 100 L77 92 M128 100 L123 92" stroke="#e8e2d6" stroke-width="2.5"/>
+        </svg>
+        <h3>The Operator's Eye</h3>
+        <p>you watch the system — not the other way</p>
+      </div>
+
+      <div class="mark-card">
+        <svg viewBox="0 0 200 120" aria-hidden="true">
+          <g fill="#e8e2d6">
+            <path d="M62 25 L52 37 L72 37 Z"/><rect x="59" y="37" width="6" height="10"/>
+            <path d="M92 25 L82 37 L102 37 Z"/><rect x="89" y="37" width="6" height="10"/>
+            <path d="M122 47 L112 35 L132 35 Z"/><rect x="119" y="25" width="6" height="10"/>
+            <path d="M152 47 L142 35 L162 35 Z"/><rect x="149" y="25" width="6" height="10"/>
+            <path d="M53 68 L65 58 L65 78 Z"/><rect x="65" y="65" width="10" height="6"/>
+            <path d="M101 68 L89 58 L89 78 Z"/><rect x="81" y="65" width="10" height="6"/>
+            <path d="M113 68 L125 58 L125 78 Z"/><rect x="125" y="65" width="10" height="6"/>
+            <path d="M161 68 L149 58 L149 78 Z"/><rect x="141" y="65" width="10" height="6"/>
+          </g>
+          <circle cx="92" cy="100" r="12" fill="none" stroke="#ff3d5a" stroke-width="3"/>
+          <text x="92" y="105" fill="#ff3d5a" font-family="'Anton',sans-serif" font-size="15" text-anchor="middle">B</text>
+          <circle cx="120" cy="100" r="12" fill="none" stroke="#ff3d5a" stroke-width="3"/>
+          <text x="120" y="105" fill="#ff3d5a" font-family="'Anton',sans-serif" font-size="15" text-anchor="middle">A</text>
+        </svg>
+        <h3>The First Hack</h3>
+        <p>cheating at games &rarr; reverse engineering</p>
+      </div>
+
+      <div class="mark-card">
+        <svg viewBox="0 0 200 120" aria-hidden="true">
+          <g fill="none" stroke="#e8e2d6" stroke-width="4">
+            <ellipse cx="86" cy="56" rx="27" ry="38"/><ellipse cx="114" cy="62" rx="27" ry="38"/>
+          </g>
+          <g fill="#e8e2d6"><path d="M76 46 L71 40 L81 40 Z"/><path d="M96 46 L91 40 L101 40 Z"/></g>
+          <path d="M76 70 Q86 82 96 70" fill="none" stroke="#ff3d5a" stroke-width="3.5"/>
+          <g fill="#e8e2d6"><path d="M106 52 L101 46 L111 46 Z"/><path d="M126 52 L121 46 L131 46 Z"/></g>
+          <path d="M104 82 Q114 70 124 82" fill="none" stroke="#ff3d5a" stroke-width="3.5"/>
+          <path d="M114 94 L114 104 L126 104" fill="none" stroke="#ff3d5a" stroke-width="2.5"/><circle cx="126" cy="104" r="3" fill="#ff3d5a"/>
+        </svg>
+        <h3>The Human Exploit</h3>
+        <p>the unpatchable vuln is people</p>
+      </div>
+
+      <div class="mark-card">
+        <svg viewBox="0 0 200 120" aria-hidden="true" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <g stroke="#e8e2d6" stroke-width="3.5">
+            <rect x="66" y="24" width="68" height="68" rx="6"/>
+            <path d="M66 40 L56 40 M66 58 L56 58 M66 76 L56 76"/>
+            <path d="M134 40 L144 40 M134 58 L144 58 M134 76 L144 76"/>
+            <path d="M84 24 L84 14 M100 24 L100 14 M116 24 L116 14"/>
+            <path d="M84 92 L84 102 M100 92 L100 102 M116 92 L116 102"/>
+          </g>
+          <path d="M84 58 Q84 42 100 42 Q116 42 116 58 L116 70 L84 70 Z" fill="none" stroke="#e8e2d6" stroke-width="3"/>
+          <circle cx="92" cy="57" r="3" fill="#ff3d5a"/><circle cx="108" cy="57" r="3" fill="#ff3d5a"/>
+          <path d="M100 61 L97 67 L103 67 Z" fill="#e8e2d6"/>
+          <path d="M91 70 L91 78 M100 70 L100 78 M109 70 L109 78" stroke="#e8e2d6" stroke-width="2.5"/>
+        </svg>
+        <h3>MEATPISTOL</h3>
+        <p>the implant you shipped &middot; DEF CON 25</p>
+      </div>
+
+      <div class="mark-card">
+        <svg viewBox="0 0 200 120" aria-hidden="true">
+          <g fill="none" stroke="#e8e2d6" stroke-width="2" stroke-opacity="0.5">
+            <rect x="55" y="12" width="30" height="30"/><rect x="85" y="12" width="30" height="30"/><rect x="115" y="12" width="30" height="30"/>
+            <rect x="55" y="42" width="30" height="30"/><rect x="85" y="42" width="30" height="30"/><rect x="115" y="42" width="30" height="30"/>
+            <rect x="55" y="72" width="30" height="30"/><rect x="85" y="72" width="30" height="30"/><rect x="115" y="72" width="30" height="30"/>
+          </g>
+          <g fill="#e8e2d6">
+            <rect x="85" y="12" width="30" height="30"/><rect x="115" y="42" width="30" height="30"/>
+            <rect x="55" y="72" width="30" height="30"/><rect x="85" y="72" width="30" height="30"/><rect x="115" y="72" width="30" height="30"/>
+          </g>
+        </svg>
+        <h3>The Glider</h3>
+        <p>the hacker's mark — one of the tribe</p>
+      </div>
+
+    </div>
   </section>
 
   <section id="career">
