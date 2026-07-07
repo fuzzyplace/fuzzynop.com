@@ -41,7 +41,8 @@
     color:var(--bone);
     font-family:var(--body);
     line-height:1.6;
-    overflow-x:hidden;
+    overflow-x:hidden;   /* fallback for engines without clip */
+    overflow-x:clip;     /* clip horizontal bleed WITHOUT making body a scroll container (keeps window scrolling + anchor jumps working) */
   }
 
   /* ---- scroll progress ---- */
@@ -239,19 +240,39 @@
   }
   footer .nop{color:var(--red)}
 
-  /* ---- motion: 3d tilt + scroll reveal ---- */
-  .tilt{transform-style:preserve-3d;transition:transform .3s cubic-bezier(.2,.7,.2,1),border-color .25s ease,box-shadow .3s ease;will-change:transform}
+  /* ---- motion: 3d world assembles as you scroll ---- */
+  section,header,.marks,.talks,.music-wrap{transform-style:preserve-3d}
+  .tilt{transform-style:preserve-3d;transition:transform .3s cubic-bezier(.2,.7,.2,1),border-color .25s ease,box-shadow .3s ease}
   .tilt:hover{box-shadow:0 26px 60px -34px rgba(0,0,0,.85)}
-  .js .reveal{opacity:0;transform:translateY(30px) rotateX(9deg);transform-origin:center bottom;transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.2,1)}
-  .js .reveal.in{opacity:1;transform:none}
+
+  /* each component starts parked deep in 3d space, then flies to rest when it scrolls into view.
+     JS only toggles .in; the transition does the work → runs in every engine, no rAF needed. */
+  .js .d3{
+    opacity:0;will-change:transform,opacity;
+    transition:opacity .85s ease, transform 1.05s cubic-bezier(.16,.84,.36,1);
+  }
+  .js .d3.fly-deep { transform:translate3d(0,70px,-520px) rotateX(24deg); }
+  .js .d3.fly-rise { transform:translate3d(0,80px,-300px) rotateX(16deg); }
+  .js .d3.fly-left { transform:translate3d(-120px,44px,-360px) rotateY(20deg) rotateX(8deg); }
+  .js .d3.fly-right{ transform:translate3d(120px,44px,-360px) rotateY(-20deg) rotateX(8deg); }
+  .js .d3.in{opacity:1;transform:none}
+
+  /* marks idle-float in 3d once assembled */
+  .mark-card svg{transform-style:preserve-3d;animation:float 7s ease-in-out infinite}
+  .mark-card:nth-child(2) svg{animation-delay:-1.1s}
+  .mark-card:nth-child(3) svg{animation-delay:-2.3s}
+  .mark-card:nth-child(4) svg{animation-delay:-3.5s}
+  .mark-card:nth-child(5) svg{animation-delay:-4.7s}
+  .mark-card:nth-child(6) svg{animation-delay:-5.9s}
+  @keyframes float{0%,100%{transform:translateY(0) rotateY(0deg)}50%{transform:translateY(-7px) rotateY(10deg)}}
 
   .mark{animation:blink 7s infinite}
   @keyframes blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.08)}}
 
   @media (prefers-reduced-motion: reduce){
     html{scroll-behavior:auto}
-    .atmo,.mark{animation:none}
-    .js .reveal{opacity:1;transform:none;transition:none}
+    .atmo,.mark,.mark-card svg{animation:none}
+    .js .d3{opacity:1 !important;transform:none !important;transition:none;will-change:auto}
     .tilt{transition:border-color .2s ease}
   }
   @media(max-width:760px){
@@ -306,19 +327,19 @@
   </header>
 
   <section id="about">
-    <div class="label reveal">// About</div>
-    <h2 class="reveal">Break it to understand it</h2>
-    <p class="lede reveal">It started with cheating at video games — bending a system's rules to see how it really works underneath. That instinct became a career spent on the attacker's side of the glass: building and leading red teams inside some of the largest companies on the internet.</p>
-    <p class="body reveal">The through-line of the work: the most interesting attack surface is <b>people</b>. Talks and trainings across the global conference circuit on red teaming, adversary simulation, behavioral security, and offensive psychology at scale — how organizations actually get compromised, and how to build cultures that don't.</p>
+    <div class="label d3 fly-rise">// About</div>
+    <h2 class="d3 fly-deep">Break it to understand it</h2>
+    <p class="lede d3 fly-rise">It started with cheating at video games — bending a system's rules to see how it really works underneath. That instinct became a career spent on the attacker's side of the glass: building and leading red teams inside some of the largest companies on the internet.</p>
+    <p class="body d3 fly-rise">The through-line of the work: the most interesting attack surface is <b>people</b>. Talks and trainings across the global conference circuit on red teaming, adversary simulation, behavioral security, and offensive psychology at scale — how organizations actually get compromised, and how to build cultures that don't.</p>
   </section>
 
   <section id="marks">
-    <div class="label reveal">// The marks</div>
-    <h2 class="reveal">Six marks, one operator</h2>
-    <p class="lede reveal">The whole story told in glyphs — every one drawn from the record, and every one a door. Tap a mark to go deeper: my own talks and tools where they exist, the canonical source where they don't.</p>
+    <div class="label d3 fly-rise">// The marks</div>
+    <h2 class="d3 fly-deep">Six marks, one operator</h2>
+    <p class="lede d3 fly-rise">The whole story told in glyphs — every one drawn from the record, and every one a door. Tap a mark to go deeper: my own talks and tools where they exist, the canonical source where they don't.</p>
     <div class="marks">
 
-      <a class="mark-card tilt reveal" href="https://en.wikipedia.org/wiki/NOP_slide" target="_blank" rel="noopener">
+      <a class="mark-card tilt d3" href="https://en.wikipedia.org/wiki/NOP_slide" target="_blank" rel="noopener">
         <svg viewBox="0 0 200 120" aria-hidden="true" fill="none" stroke-linecap="round" stroke-linejoin="round">
           <g stroke="#e8e2d6" stroke-width="3">
             <rect x="22" y="16" width="30" height="30" rx="4"/><rect x="52" y="34" width="30" height="30" rx="4"/>
@@ -336,7 +357,7 @@
         <span class="doorway">read: what a NOP sled is &nearr;</span>
       </a>
 
-      <a class="mark-card tilt reveal" href="https://www.youtube.com/watch?v=SSgzva0Beyk" target="_blank" rel="noopener">
+      <a class="mark-card tilt d3" href="https://www.youtube.com/watch?v=SSgzva0Beyk" target="_blank" rel="noopener">
         <svg viewBox="0 0 200 120" aria-hidden="true" fill="none" stroke-linecap="round">
           <g stroke="#e8e2d6" stroke-width="4">
             <path d="M42 60 Q100 22 158 60"/><path d="M42 60 Q100 98 158 60"/><circle cx="100" cy="60" r="27"/>
@@ -351,7 +372,7 @@
         <span class="doorway">watch: Embrace the Bogeyman &nearr;</span>
       </a>
 
-      <a class="mark-card tilt reveal" href="https://en.wikipedia.org/wiki/Konami_Code" target="_blank" rel="noopener">
+      <a class="mark-card tilt d3" href="https://en.wikipedia.org/wiki/Konami_Code" target="_blank" rel="noopener">
         <svg viewBox="0 0 200 120" aria-hidden="true">
           <g fill="#e8e2d6">
             <path d="M62 25 L52 37 L72 37 Z"/><rect x="59" y="37" width="6" height="10"/>
@@ -373,7 +394,7 @@
         <span class="doorway">read: the Konami Code &nearr;</span>
       </a>
 
-      <a class="mark-card tilt reveal" href="https://www.youtube.com/watch?v=S2UnaPWqzgQ" target="_blank" rel="noopener">
+      <a class="mark-card tilt d3" href="https://www.youtube.com/watch?v=S2UnaPWqzgQ" target="_blank" rel="noopener">
         <svg viewBox="0 0 200 120" aria-hidden="true">
           <g fill="none" stroke="#e8e2d6" stroke-width="4">
             <ellipse cx="86" cy="56" rx="27" ry="38"/><ellipse cx="114" cy="62" rx="27" ry="38"/>
@@ -389,7 +410,7 @@
         <span class="doorway">watch: Behavioral Security &nearr;</span>
       </a>
 
-      <a class="mark-card tilt reveal" href="https://www.youtube.com/watch?v=dbIdo9ilEIY" target="_blank" rel="noopener">
+      <a class="mark-card tilt d3" href="https://www.youtube.com/watch?v=dbIdo9ilEIY" target="_blank" rel="noopener">
         <svg viewBox="0 0 200 120" aria-hidden="true" fill="none" stroke-linecap="round" stroke-linejoin="round">
           <g stroke="#e8e2d6" stroke-width="3.5">
             <rect x="66" y="24" width="68" height="68" rx="6"/>
@@ -408,7 +429,7 @@
         <span class="doorway">watch: the DEF CON 25 talk &nearr;</span>
       </a>
 
-      <a class="mark-card tilt reveal" href="http://www.catb.org/hacker-emblem/" target="_blank" rel="noopener">
+      <a class="mark-card tilt d3" href="http://www.catb.org/hacker-emblem/" target="_blank" rel="noopener">
         <svg viewBox="0 0 200 120" aria-hidden="true">
           <g fill="none" stroke="#e8e2d6" stroke-width="2" stroke-opacity="0.5">
             <rect x="55" y="12" width="30" height="30"/><rect x="85" y="12" width="30" height="30"/><rect x="115" y="12" width="30" height="30"/>
@@ -429,10 +450,10 @@
   </section>
 
   <section id="career">
-    <div class="label reveal">// Career</div>
-    <h2 class="reveal">The record</h2>
+    <div class="label d3 fly-rise">// Career</div>
+    <h2 class="d3 fly-deep">The record</h2>
     <div class="rail">
-      <div class="stop reveal">
+      <div class="stop d3 fly-rise">
         <div class="when">2013 —</div>
         <div>
           <h3>The conference circuit</h3>
@@ -440,7 +461,7 @@
           <a class="src" href="https://infocondb.org/presenter/josh-schwartz-fuzzynop" target="_blank" rel="noopener">source: InfoconDB talk archive &nearr;</a>
         </div>
       </div>
-      <div class="stop reveal">
+      <div class="stop d3 fly-rise">
         <div class="when">Salesforce</div>
         <div>
           <h3>Red Team Lead</h3>
@@ -448,7 +469,7 @@
           <a class="src" href="https://qconsf.com/sf2016/sf2016/users/josh-schwarz.html" target="_blank" rel="noopener">source: QCon SF 2016 speaker bio &nearr;</a>
         </div>
       </div>
-      <div class="stop reveal">
+      <div class="stop d3 fly-rise">
         <div class="when">Verizon Media / Yahoo</div>
         <div>
           <h3>Director, Offensive Security</h3>
@@ -457,7 +478,7 @@
           <a class="src" href="https://securityconversations.com/episode/josh-schwartz-on-red-teaming-and-proactive-security-engineering/" target="_blank" rel="noopener">Security Conversations podcast &nearr;</a>
         </div>
       </div>
-      <div class="stop reveal">
+      <div class="stop d3 fly-rise">
         <div class="when">Now</div>
         <div>
           <h3>Independent consultant</h3>
@@ -468,40 +489,40 @@
   </section>
 
   <section id="talks">
-    <div class="label reveal">// Selected talks</div>
-    <h2 class="reveal">Stage time</h2>
+    <div class="label d3 fly-rise">// Selected talks</div>
+    <h2 class="d3 fly-deep">Stage time</h2>
     <div class="talks">
-      <a class="talk tilt reveal" href="https://www.youtube.com/watch?v=dbIdo9ilEIY" target="_blank" rel="noopener">
+      <a class="talk tilt d3" href="https://www.youtube.com/watch?v=dbIdo9ilEIY" target="_blank" rel="noopener">
         <span class="venue">DEF CON 25 &middot; BruCON 0x09</span>
         <h3>MEATPISTOL — A Modular Malware Implant Framework</h3>
         <p>Co-presented tooling for red team implant development, on the biggest stage in the industry.</p>
         <span class="go">watch: official DEF CON video &nearr;</span>
       </a>
-      <a class="talk tilt reveal" href="https://www.youtube.com/watch?v=S2UnaPWqzgQ" target="_blank" rel="noopener">
+      <a class="talk tilt d3" href="https://www.youtube.com/watch?v=S2UnaPWqzgQ" target="_blank" rel="noopener">
         <span class="venue">NolaCon 2019 &middot; DerbyCon 9</span>
         <h3>Behavioral Security &amp; Offensive Psychology at Scale</h3>
         <p>Why humans are the persistent attack surface — and what scaling defense against that actually looks like.</p>
         <span class="go">watch: full talk &nearr;</span>
       </a>
-      <a class="talk tilt reveal" href="https://www.youtube.com/watch?v=SSgzva0Beyk" target="_blank" rel="noopener">
+      <a class="talk tilt d3" href="https://www.youtube.com/watch?v=SSgzva0Beyk" target="_blank" rel="noopener">
         <span class="venue">NolaCon 2017</span>
         <h3>Embrace the Bogeyman: Tactical Fear Mongering for Those Who Penetrate</h3>
         <p>On being the monster your org needs: making red team findings land instead of getting filed.</p>
         <span class="go">watch: full talk &nearr;</span>
       </a>
-      <a class="talk tilt reveal" href="https://infocondb.org/presenter/josh-schwartz-fuzzynop" target="_blank" rel="noopener">
+      <a class="talk tilt d3" href="https://infocondb.org/presenter/josh-schwartz-fuzzynop" target="_blank" rel="noopener">
         <span class="venue">NolaCon 2018</span>
         <h3>Your Mac Defenestrated — Post-OSXploitation Elevated</h3>
         <p>macOS post-exploitation tradecraft.</p>
         <span class="go">source: InfoconDB &nearr;</span>
       </a>
-      <a class="talk tilt reveal" href="https://www.youtube.com/watch?v=ixWO0e51p-o" target="_blank" rel="noopener">
+      <a class="talk tilt d3" href="https://www.youtube.com/watch?v=ixWO0e51p-o" target="_blank" rel="noopener">
         <span class="venue">HushCon Seattle 2019</span>
         <h3>Business Tradecraft for Hackers in the Corporate Industrial Complex</h3>
         <p>Surviving — and steering — the enterprise as a hacker.</p>
         <span class="go">watch: LevelUp 0x06 recording &nearr;</span>
       </a>
-      <a class="talk tilt reveal" href="https://infocondb.org/presenter/josh-schwartz-fuzzynop" target="_blank" rel="noopener">
+      <a class="talk tilt d3" href="https://infocondb.org/presenter/josh-schwartz-fuzzynop" target="_blank" rel="noopener">
         <span class="venue">Full archive</span>
         <h3>~23 talks, 2013–2019</h3>
         <p>The complete catalogue across DEF CON, DerbyCon, NolaCon, and HushCon.</p>
@@ -511,10 +532,10 @@
   </section>
 
   <section id="music">
-    <div class="label reveal">// Sound</div>
-    <h2 class="reveal">Behind the decks</h2>
-    <p class="lede reveal">Same wiring, different output. Fuzzy plays long, textural sets at the immersive-art parties he throws — after-hours music for the people who stay late.</p>
-    <div class="music-wrap reveal">
+    <div class="label d3 fly-rise">// Sound</div>
+    <h2 class="d3 fly-deep">Behind the decks</h2>
+    <p class="lede d3 fly-rise">Same wiring, different output. Fuzzy plays long, textural sets at the immersive-art parties he throws — after-hours music for the people who stay late.</p>
+    <div class="music-wrap d3 fly-deep">
       <div class="yt-facade tilt" data-yt="E_Jd_RxyoEc" role="button" tabindex="0"
            aria-label="Play: Fuzzy — LIVE at The Fuzzy Place, 1.5 hour DJ set"
            style="background-image:url('https://i.ytimg.com/vi/E_Jd_RxyoEc/hqdefault.jpg')">
@@ -529,16 +550,16 @@
       </div>
       <div class="music-side">
         <p class="note">Sets and originals live across the usual places:</p>
-        <a class="stream" href="https://soundcloud.com/fuzzynop" target="_blank" rel="noopener"><span class="k">SC</span> SoundCloud <span class="arr">&nearr;</span></a>
-        <a class="stream" href="https://open.spotify.com/artist/2KxitG0vU3vl3JaMcovgqM" target="_blank" rel="noopener"><span class="k">SP</span> Spotify <span class="arr">&nearr;</span></a>
-        <a class="stream" href="https://www.mixcloud.com/FZZY/" target="_blank" rel="noopener"><span class="k">MC</span> Mixcloud <span class="arr">&nearr;</span></a>
+        <a class="stream d3" href="https://soundcloud.com/fuzzynop" target="_blank" rel="noopener"><span class="k">SC</span> SoundCloud <span class="arr">&nearr;</span></a>
+        <a class="stream d3" href="https://open.spotify.com/artist/2KxitG0vU3vl3JaMcovgqM" target="_blank" rel="noopener"><span class="k">SP</span> Spotify <span class="arr">&nearr;</span></a>
+        <a class="stream d3" href="https://www.mixcloud.com/FZZY/" target="_blank" rel="noopener"><span class="k">MC</span> Mixcloud <span class="arr">&nearr;</span></a>
       </div>
     </div>
   </section>
 
   <section id="fuzzy-place">
-    <div class="label reveal">// After hours</div>
-    <div class="fp reveal">
+    <div class="label d3 fly-rise">// After hours</div>
+    <div class="fp d3 fly-deep">
       <h2>The Fuzzy Place</h2>
       <p><b>An immersive art space in San Francisco.</b> Counter-surveillance as performance, games that follow you home, and a rotating cast of mimes, clowns, and hackers exploring what privacy means when everything watches back. Art and education — the same curiosity as the day job, pointed somewhere stranger.</p>
       <div class="tags">
@@ -552,29 +573,29 @@
   </section>
 
   <section id="network">
-    <div class="label reveal">// The network</div>
-    <h2 class="reveal">Crews &amp; co-conspirators</h2>
-    <p class="lede reveal">My own crew, and allied outfits whose work I back. The bogeyman keeps good company.</p>
+    <div class="label d3 fly-rise">// The network</div>
+    <h2 class="d3 fly-deep">Crews &amp; co-conspirators</h2>
+    <p class="lede d3 fly-rise">My own crew, and allied outfits whose work I back. The bogeyman keeps good company.</p>
     <div class="talks">
-      <a class="talk tilt reveal" href="https://www.skool.com/stdc" target="_blank" rel="noopener">
+      <a class="talk tilt d3" href="https://www.skool.com/stdc" target="_blank" rel="noopener">
         <span class="venue">My crew &middot; Skool</span>
         <h3>Security Theater Drama Club</h3>
         <p>Artists, performers, and hackers automating their craft — and getting paid for it. The paid room where the game gets serious.</p>
         <span class="go">join: <span class="url">skool.com/stdc</span> &nearr;</span>
       </a>
-      <a class="talk tilt reveal" href="https://propervillains.io/" target="_blank" rel="noopener">
+      <a class="talk tilt d3" href="https://propervillains.io/" target="_blank" rel="noopener">
         <span class="venue">Allied &middot; Security</span>
         <h3>Proper Villains</h3>
         <p>Personal security enlightenment powered by the digital dark arts — high-class hackers for hire for clients in the spotlight.</p>
         <span class="go">visit: <span class="url">propervillains.io</span> &nearr;</span>
       </a>
-      <a class="talk tilt reveal" href="https://pinkteam.xyz" target="_blank" rel="noopener">
+      <a class="talk tilt d3" href="https://pinkteam.xyz" target="_blank" rel="noopener">
         <span class="venue">Allied &middot; Research</span>
         <h3>Pink Team</h3>
         <p>Human-layer security research — a new shade of red teaming, studying trust, identity, and influence in the age of AI.</p>
         <span class="go">visit: <span class="url">pinkteam.xyz</span> &nearr;</span>
       </a>
-      <a class="talk tilt reveal" href="https://parasolsociety.com" target="_blank" rel="noopener">
+      <a class="talk tilt d3" href="https://parasolsociety.com" target="_blank" rel="noopener">
         <span class="venue">Allied &middot; Invitation only</span>
         <h3>Parasol Society</h3>
         <p>By invitation. By summons.</p>
@@ -584,9 +605,9 @@
   </section>
 
   <section id="contact">
-    <div class="label reveal">// Contact</div>
-    <h2 class="reveal">Find the operator</h2>
-    <div class="links reveal">
+    <div class="label d3 fly-rise">// Contact</div>
+    <h2 class="d3 fly-deep">Find the operator</h2>
+    <div class="links d3 fly-rise">
       <a href="https://www.linkedin.com/in/joshuaaschwartz/" target="_blank" rel="noopener">&#128065; Josh Schwartz on LinkedIn</a>
       <a href="https://fuzzy.place" target="_blank" rel="noopener">The Fuzzy Place &rarr; fuzzy.place</a>
       <a href="https://soundcloud.com/fuzzynop" target="_blank" rel="noopener">Behind the decks &rarr; SoundCloud</a>
@@ -606,30 +627,72 @@
   var mq = function(q){ return window.matchMedia && window.matchMedia(q).matches; };
   var RM = mq('(prefers-reduced-motion: reduce)');
   var FINE = mq('(hover:hover) and (pointer:fine)');
+  var scrollTop = function(){ return window.pageYOffset || (document.scrollingElement||document.documentElement).scrollTop || 0; };
 
   try {
-    /* ---- scroll reveal (robust: never leaves content invisible) ---- */
-    var revs = [].slice.call(document.querySelectorAll('.reveal'));
-    var reveal = function(el){ el.classList.add('in'); };
+    /* ---- 3d world assembly: each component flies in from depth as it scrolls into view ----
+       IntersectionObserver + CSS transitions (no per-frame JS) → runs in every engine, fail-open. */
+    var d3s = [].slice.call(document.querySelectorAll('.d3'));
+    // grid cards + streams get a fly direction by column, and a stagger by position
+    d3s.forEach(function(el){
+      var p = el.parentNode, pc = (p && typeof p.className === 'string') ? p.className : '';
+      var grid = /\btalks\b|\bmarks\b|\bmusic-side\b/.test(pc);
+      if (grid) {
+        var idx = [].slice.call(p.children).indexOf(el);
+        if (!/fly-/.test(el.className)) el.classList.add(['fly-left','fly-deep','fly-right'][idx % 3]);
+        el.style.transitionDelay = ((idx % 6) * 90) + 'ms';
+      } else if (!/fly-/.test(el.className)) {
+        el.classList.add('fly-rise');
+      }
+    });
+    var settle = function(el){
+      el.classList.add('in');
+      if (el.style.transitionDelay) {
+        var clear = function(){ el.style.transitionDelay = ''; el.removeEventListener('transitionend', clear); };
+        el.addEventListener('transitionend', clear);
+        setTimeout(clear, 2200);  /* fallback if transitionend never fires */
+      }
+    };
     if (RM || !('IntersectionObserver' in window)) {
-      revs.forEach(reveal);
+      d3s.forEach(settle);
     } else {
       var io = new IntersectionObserver(function(entries){
-        entries.forEach(function(e){ if (e.isIntersecting){ reveal(e.target); io.unobserve(e.target); } });
-      }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
-      var revealInView = function(){
-        var vh = window.innerHeight || document.documentElement.clientHeight;
-        revs.forEach(function(el){
-          if (el.classList.contains('in')) return;
-          var r = el.getBoundingClientRect();
-          if (r.top < vh * 0.94 && r.bottom > 0) reveal(el);
-        });
-      };
-      revs.forEach(function(el){ io.observe(el); });
-      revealInView();  // show whatever is on-screen at load immediately — no wait on the observer
-      document.addEventListener('visibilitychange', function(){ if (!document.hidden) revealInView(); });
-      setTimeout(function(){ revs.forEach(reveal); }, 6000);  // failsafe: nothing can stay hidden
+        entries.forEach(function(e){ if (e.isIntersecting){ settle(e.target); io.unobserve(e.target); } });
+      }, { rootMargin: '0px 0px -12% 0px', threshold: 0.05 });
+      d3s.forEach(function(el){ io.observe(el); });
+      // reveal whatever is already on-screen at load immediately
+      var vh0 = window.innerHeight || document.documentElement.clientHeight;
+      d3s.forEach(function(el){ var r = el.getBoundingClientRect(); if (r.top < vh0 * 0.92 && r.bottom > 0) settle(el); });
+      setTimeout(function(){ d3s.forEach(settle); }, 6000); // failsafe: nothing stays hidden
     }
+
+    /* ---- scroll-driven depth: progress bar + hero recede (scroll EVENT, not rAF — fires everywhere) ---- */
+    var bar = document.querySelector('.progress');
+    var heroEl = document.querySelector('header');
+    var scheduled = false;
+    function onScrollFrame(){
+      scheduled = false;
+      var hd = document.documentElement, y = scrollTop();
+      var max = hd.scrollHeight - hd.clientHeight;
+      if (bar) bar.style.width = (Math.max(0, Math.min(1, max > 0 ? y / max : 0)) * 100).toFixed(2) + '%';
+      if (heroEl && !RM) {
+        var t = Math.min(1, y / (window.innerHeight || 800));
+        heroEl.style.transform = 'translateY(' + (t * 40).toFixed(1) + 'px) translateZ(' + (-t * 130).toFixed(1) + 'px)';
+        heroEl.style.opacity = (1 - t * 0.55).toFixed(3);
+      }
+    }
+    function updateBar(){
+      var hd = document.documentElement, y = scrollTop(), max = hd.scrollHeight - hd.clientHeight;
+      if (bar) bar.style.width = (Math.max(0, Math.min(1, max > 0 ? y / max : 0)) * 100).toFixed(2) + '%';
+    }
+    function onScroll(){
+      updateBar();  /* cheap + direct: works even where rAF is throttled */
+      if (scheduled) return; scheduled = true;
+      if (window.requestAnimationFrame) requestAnimationFrame(onScrollFrame); else onScrollFrame();
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll, { passive: true });
+    onScrollFrame();
 
     /* ---- nav active section ---- */
     var jumps = [].slice.call(document.querySelectorAll('.nav a.jump'));
@@ -686,21 +749,6 @@
       });
     }
 
-    /* ---- scroll progress bar ---- */
-    var bar = document.querySelector('.progress');
-    var ticking = false;
-    function updateBar(){
-      var h = document.documentElement;
-      var max = h.scrollHeight - h.clientHeight;
-      var p = max > 0 ? (window.pageYOffset || h.scrollTop) / max : 0;
-      if (bar) bar.style.width = (Math.max(0, Math.min(1, p)) * 100).toFixed(2) + '%';
-      ticking = false;
-    }
-    window.addEventListener('scroll', function(){
-      if (!ticking) { requestAnimationFrame(updateBar); ticking = true; }
-    }, { passive: true });
-    updateBar();
-
     /* ---- hero 3d depth field ---- */
     var canvas = document.querySelector('.hero-canvas');
     if (canvas && canvas.getContext && !RM) {
@@ -731,7 +779,7 @@
         ctx.clearRect(0, 0, W, H);
         var f = W * 0.6;
         var ox = pointerX * 42 * DPR;
-        var oy = pointerY * 42 * DPR - (window.pageYOffset || 0) * 0.12 * DPR;
+        var oy = pointerY * 42 * DPR - scrollTop() * 0.12 * DPR;
         for (var i = 0; i < pts.length; i++) {
           var p = pts[i];
           p.z -= W * 0.0016;
@@ -763,7 +811,7 @@
     }
   } catch (err) {
     /* fail open: never leave content hidden if the enhancement script throws */
-    [].slice.call(document.querySelectorAll('.reveal')).forEach(function(el){ el.classList.add('in'); });
+    [].slice.call(document.querySelectorAll('.d3')).forEach(function(el){ el.classList.add('in'); el.style.transitionDelay=''; });
   }
 })();
 </script>
