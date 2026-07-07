@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FUZZYNOP — Josh Schwartz</title>
+<meta name="description" content="Josh Schwartz (FuzzyNop) — red teamer, social engineer, and professional bogeyman. Offensive security, adversary simulation, and The Fuzzy Place.">
+<link rel="canonical" href="https://fuzzynop.com/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://fuzzynop.com/">
+<meta property="og:title" content="FUZZYNOP — Josh Schwartz">
+<meta property="og:description" content="Red teamer, social engineer, professional bogeyman. Offensive security, adversary simulation, and The Fuzzy Place.">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 44 26'%3E%3Cpath d='M2 13 Q22 -6 42 13 Q22 32 2 13 Z' fill='none' stroke='%23e8e2d6' stroke-width='3'/%3E%3Ccircle cx='22' cy='13' r='6' fill='%23ff3d5a'/%3E%3C/svg%3E">
+</head>
+<body>
+<style>
+  :root{
+    --ink:#0b0910;
+    --panel:#161020;
+    --panel-2:#1d1529;
+    --bone:#e8e2d6;
+    --muted:#8d8398;
+    --red:#ff3d5a;
+    --violet:#b48cff;
+    --line:rgba(232,226,214,.14);
+    --disp:'Anton','Haettenschweiler',Impact,'Arial Black',sans-serif;
+    --body:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+    --mono:'SF Mono','Menlo','Consolas',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--ink);
+    color:var(--bone);
+    font-family:var(--body);
+    line-height:1.6;
+    overflow-x:hidden;
+  }
+  /* ---- ambient gradient + grain ---- */
+  .atmo{
+    position:fixed;inset:0;z-index:0;pointer-events:none;
+    background:
+      radial-gradient(60vw 60vw at 15% 0%, rgba(255,61,90,.14), transparent 60%),
+      radial-gradient(70vw 50vw at 90% 100%, rgba(180,140,255,.12), transparent 60%);
+    animation:breathe 14s ease-in-out infinite alternate;
+  }
+  @keyframes breathe{
+    from{opacity:.7;transform:translateY(0)}
+    to{opacity:1;transform:translateY(-3%)}
+  }
+  .grain{
+    position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.07;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  @media (prefers-reduced-motion: reduce){
+    .atmo{animation:none}
+    .mark{animation:none}
+  }
+  main{position:relative;z-index:2;max-width:1060px;margin:0 auto;padding:0 28px}
+
+  /* ---- hero ---- */
+  header{min-height:88vh;display:flex;flex-direction:column;justify-content:center;padding:80px 0 60px}
+  .eyeline{display:flex;align-items:center;gap:18px;margin-bottom:10px}
+  .eyeline svg{flex:0 0 auto}
+  .eyeline .rule{height:1px;background:var(--line);flex:1}
+  .kicker{
+    font-family:var(--mono);font-size:13px;letter-spacing:.35em;
+    color:var(--red);text-transform:uppercase;
+  }
+  h1{
+    font-family:var(--disp);
+    font-size:clamp(72px,14vw,168px);
+    line-height:.92;
+    letter-spacing:.01em;
+    text-transform:uppercase;
+    font-weight:400;
+    text-wrap:balance;
+  }
+  h1 .alt{
+    color:transparent;
+    -webkit-text-stroke:2px var(--bone);
+  }
+  .sub{
+    margin-top:26px;max-width:56ch;
+    font-size:clamp(16px,2vw,19px);color:var(--muted);
+  }
+  .sub b{color:var(--bone);font-weight:600}
+  .handles{
+    margin-top:30px;display:flex;flex-wrap:wrap;gap:10px;
+    font-family:var(--mono);font-size:12.5px;
+  }
+  .handles span{
+    border:1px solid var(--line);border-radius:999px;
+    padding:6px 14px;color:var(--muted);letter-spacing:.06em;
+  }
+  .handles span.hot{border-color:rgba(255,61,90,.5);color:var(--red)}
+
+  /* ---- sections ---- */
+  section{padding:72px 0;border-top:1px solid var(--line)}
+  .label{
+    font-family:var(--mono);font-size:12px;letter-spacing:.35em;
+    text-transform:uppercase;color:var(--violet);margin-bottom:28px;
+  }
+  h2{
+    font-family:var(--disp);font-weight:400;text-transform:uppercase;
+    font-size:clamp(34px,5vw,54px);line-height:1.02;margin-bottom:22px;text-wrap:balance;
+  }
+  p.lede{max-width:62ch;color:var(--bone);font-size:17px}
+  p.body{max-width:62ch;color:var(--muted);margin-top:14px}
+  p.body b{color:var(--bone);font-weight:600}
+
+  /* ---- career rail ---- */
+  .rail{display:grid;gap:0;margin-top:8px}
+  .stop{
+    display:grid;grid-template-columns:170px 1fr;gap:22px;
+    padding:26px 0;border-top:1px solid var(--line);
+  }
+  .stop:first-child{border-top:none}
+  .when{font-family:var(--mono);font-size:13px;color:var(--red);letter-spacing:.08em;padding-top:4px;font-variant-numeric:tabular-nums}
+  .stop h3{font-size:19px;font-weight:600;letter-spacing:.01em}
+  .stop p{color:var(--muted);max-width:60ch;margin-top:6px;font-size:15px}
+
+  /* ---- talks grid ---- */
+  .talks{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:8px}
+  a.talk{color:inherit;text-decoration:none}
+  .talk{
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:22px 22px 18px;display:flex;flex-direction:column;gap:8px;
+    transition:transform .25s ease,border-color .25s ease;
+  }
+  .talk:hover,.talk:focus-visible{transform:translateY(-3px);border-color:rgba(255,61,90,.45)}
+  .talk:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+  .talk .go{
+    margin-top:auto;padding-top:10px;
+    font-family:var(--mono);font-size:11.5px;letter-spacing:.12em;
+    color:var(--violet);text-transform:uppercase;
+  }
+  .src{
+    display:inline-block;margin-top:8px;
+    font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;
+    color:var(--violet);text-decoration:none;text-transform:uppercase;
+    border-bottom:1px solid rgba(180,140,255,.35);
+  }
+  .src:hover,.src:focus-visible{color:var(--red);border-bottom-color:rgba(255,61,90,.5)}
+  .src:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+  .talk .venue{font-family:var(--mono);font-size:11.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--red)}
+  .talk h3{font-size:17.5px;font-weight:600;line-height:1.3}
+  .talk p{color:var(--muted);font-size:14px}
+
+  /* ---- fuzzy place ---- */
+  .fp{
+    background:linear-gradient(135deg,var(--panel) 0%,var(--panel-2) 100%);
+    border:1px solid var(--line);border-radius:14px;padding:40px;
+    display:grid;grid-template-columns:1fr;gap:16px;
+  }
+  .fp h2{margin-bottom:0}
+  .fp p{max-width:64ch;color:var(--muted)}
+  .fp p b{color:var(--bone);font-weight:600}
+  .fp .tags{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}
+  .fp .tags span{
+    font-family:var(--mono);font-size:12px;letter-spacing:.08em;
+    border:1px solid rgba(180,140,255,.4);color:var(--violet);
+    border-radius:999px;padding:5px 13px;
+  }
+
+  /* ---- contact ---- */
+  .links{display:flex;flex-wrap:wrap;gap:14px;margin-top:26px}
+  .links a{
+    font-family:var(--mono);font-size:14px;letter-spacing:.04em;
+    color:var(--bone);text-decoration:none;
+    border:1px solid var(--line);border-radius:8px;padding:14px 22px;
+    transition:border-color .2s ease,color .2s ease,background .2s ease;
+  }
+  .links a:hover,.links a:focus-visible{border-color:var(--red);color:var(--red);background:rgba(255,61,90,.06)}
+  .links a:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+
+  footer{
+    border-top:1px solid var(--line);padding:36px 0 60px;
+    display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;
+    font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.06em;
+  }
+  footer .nop{color:var(--red)}
+
+  .mark{animation:blink 7s infinite}
+  @keyframes blink{
+    0%,92%,100%{transform:scaleY(1)}
+    95%{transform:scaleY(.08)}
+  }
+  @media(max-width:640px){
+    .stop{grid-template-columns:1fr;gap:4px}
+    .fp{padding:26px}
+  }
+</style>
+
+<div class="atmo"></div>
+<div class="grain"></div>
+
+<main>
+  <header>
+    <div class="eyeline">
+      <svg class="mark" width="44" height="26" viewBox="0 0 44 26" aria-hidden="true">
+        <path d="M2 13 Q22 -6 42 13 Q22 32 2 13 Z" fill="none" stroke="#e8e2d6" stroke-width="2"/>
+        <circle cx="22" cy="13" r="5.5" fill="#ff3d5a"/>
+      </svg>
+      <span class="kicker">Offensive security &middot; Adversary simulation &middot; Immersive art</span>
+      <div class="rule"></div>
+    </div>
+    <h1>Fuzzy<span class="alt">Nop</span></h1>
+    <p class="sub"><b>Josh Schwartz</b> — red teamer, social engineer, and professional bogeyman. A computer who knows how to computer. Builder of corporate red teams by day; <b>Fuzzy</b> of The Fuzzy Place by night.</p>
+    <div class="handles">
+      <span class="hot">@fuzzynop</span>
+      <span>red team</span>
+      <span>social engineering</span>
+      <span>malware &amp; implants</span>
+      <span>offensive psychology</span>
+    </div>
+  </header>
+
+  <section id="about">
+    <div class="label">// About</div>
+    <h2>Break it to understand it</h2>
+    <p class="lede">It started with cheating at video games — bending a system's rules to see how it really works underneath. That instinct became a career spent on the attacker's side of the glass: building and leading red teams inside some of the largest companies on the internet.</p>
+    <p class="body">The through-line of the work: the most interesting attack surface is <b>people</b>. Talks and trainings across the global conference circuit on red teaming, adversary simulation, behavioral security, and offensive psychology at scale — how organizations actually get compromised, and how to build cultures that don't.</p>
+  </section>
+
+  <section id="career">
+    <div class="label">// Career</div>
+    <h2>The record</h2>
+    <div class="rail">
+      <div class="stop">
+        <div class="when">2013 —</div>
+        <div>
+          <h3>The conference circuit</h3>
+          <p>A decade-plus of talks and trainings on red teaming, social engineering, and adversary simulation — DEF CON, DerbyCon, BruCON, NolaCon, HushCon, SXSW, RSAC.</p>
+          <a class="src" href="https://infocondb.org/presenter/josh-schwartz-fuzzynop" target="_blank" rel="noopener">source: InfoconDB talk archive &nearr;</a>
+        </div>
+      </div>
+      <div class="stop">
+        <div class="when">Salesforce</div>
+        <div>
+          <h3>Red Team Lead</h3>
+          <p>Led the internal red team conducting high-impact offensive security engagements against one of the world's largest SaaS platforms.</p>
+          <a class="src" href="https://qconsf.com/sf2016/sf2016/users/josh-schwarz.html" target="_blank" rel="noopener">source: QCon SF 2016 speaker bio &nearr;</a>
+        </div>
+      </div>
+      <div class="stop">
+        <div class="when">Verizon Media / Yahoo</div>
+        <div>
+          <h3>Director, Offensive Security</h3>
+          <p>Oversaw offensive security, product security engineering, and security engagement functions across the Verizon Media &rarr; Yahoo estate.</p>
+          <a class="src" href="https://www.rsaconference.com/experts/josh-schwartz" target="_blank" rel="noopener">source: RSAC expert bio &nearr;</a>
+          &nbsp;&nbsp;<a class="src" href="https://securityconversations.com/episode/josh-schwartz-on-red-teaming-and-proactive-security-engineering/" target="_blank" rel="noopener">Security Conversations podcast &nearr;</a>
+        </div>
+      </div>
+      <div class="stop">
+        <div class="when">Now</div>
+        <div>
+          <h3>Independent consultant</h3>
+          <p>Full-spectrum red team and adversary emulation engagements, plus training on social engineering and behavioral security. Authorized targets only — that's the whole point.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="talks">
+    <div class="label">// Selected talks</div>
+    <h2>Stage time</h2>
+    <div class="talks">
+      <a class="talk" href="https://www.youtube.com/watch?v=dbIdo9ilEIY" target="_blank" rel="noopener">
+        <span class="venue">DEF CON 25 &middot; BruCON 0x09</span>
+        <h3>MEATPISTOL — A Modular Malware Implant Framework</h3>
+        <p>Co-presented tooling for red team implant development, on the biggest stage in the industry.</p>
+        <span class="go">watch: official DEF CON video &nearr;</span>
+      </a>
+      <a class="talk" href="https://infocondb.org/presenter/josh-schwartz-fuzzynop" target="_blank" rel="noopener">
+        <span class="venue">DerbyCon 9 &middot; NolaCon &middot; HushCon 2019</span>
+        <h3>Behavioral Security &amp; Offensive Psychology at Scale</h3>
+        <p>Why humans are the persistent attack surface — and what scaling defense against that actually looks like.</p>
+        <span class="go">source: InfoconDB &nearr;</span>
+      </a>
+      <a class="talk" href="https://infocondb.org/presenter/josh-schwartz-fuzzynop" target="_blank" rel="noopener">
+        <span class="venue">NolaCon 2017</span>
+        <h3>Embrace the Bogeyman: Tactical Fear Mongering for Those Who Penetrate</h3>
+        <p>On being the monster your org needs: making red team findings land instead of getting filed.</p>
+        <span class="go">source: InfoconDB &nearr;</span>
+      </a>
+      <a class="talk" href="https://infocondb.org/presenter/josh-schwartz-fuzzynop" target="_blank" rel="noopener">
+        <span class="venue">NolaCon 2018</span>
+        <h3>Your Mac Defenestrated — Post-OSXploitation Elevated</h3>
+        <p>macOS post-exploitation tradecraft.</p>
+        <span class="go">source: InfoconDB &nearr;</span>
+      </a>
+      <a class="talk" href="https://www.youtube.com/watch?v=ixWO0e51p-o" target="_blank" rel="noopener">
+        <span class="venue">HushCon Seattle 2019</span>
+        <h3>Business Tradecraft for Hackers in the Corporate Industrial Complex</h3>
+        <p>Surviving — and steering — the enterprise as a hacker.</p>
+        <span class="go">watch: talk video &nearr;</span>
+      </a>
+      <a class="talk" href="https://schedule.sxsw.com/2019/speakers/2005402" target="_blank" rel="noopener">
+        <span class="venue">SXSW 2019 &middot; RSAC</span>
+        <h3>Red teaming for the rest of the world</h3>
+        <p>Bringing adversary thinking beyond the security bubble.</p>
+        <span class="go">source: SXSW 2019 schedule &nearr;</span>
+      </a>
+    </div>
+  </section>
+
+  <section id="fuzzy-place">
+    <div class="label">// After hours</div>
+    <div class="fp">
+      <h2>The Fuzzy Place</h2>
+      <p><b>An immersive art space in San Francisco.</b> Counter-surveillance as performance, games that follow you home, and a rotating cast of mimes, clowns, and hackers exploring what privacy means when everything watches back. Art and education — the same curiosity as the day job, pointed somewhere stranger.</p>
+      <div class="tags">
+        <span>immersive art</span><span>ARG / LARP</span><span>counter-surveillance as art</span><span>san francisco</span>
+      </div>
+      <a class="src" href="https://fuzzy.place" target="_blank" rel="noopener">visit: fuzzy.place &nearr;</a>
+    </div>
+  </section>
+
+  <section id="contact">
+    <div class="label">// Contact</div>
+    <h2>Find the operator</h2>
+    <div class="links">
+      <a href="https://www.linkedin.com/in/joshuaaschwartz/" target="_blank" rel="noopener">&#128065; Josh Schwartz on LinkedIn</a>
+      <a href="https://fuzzy.place" target="_blank" rel="noopener">The Fuzzy Place &rarr; fuzzy.place</a>
+      <a href="https://infocondb.org/presenter/josh-schwartz-fuzzynop" target="_blank" rel="noopener">Talk archive &rarr; InfoconDB</a>
+      <a href="https://www.rsaconference.com/experts/josh-schwartz" target="_blank" rel="noopener">RSAC profile</a>
+    </div>
+  </section>
+
+  <footer>
+    <span>&copy; 2026 Josh Schwartz</span>
+    <span><span class="nop">0x90 0x90 0x90</span> — nothing happened here</span>
+  </footer>
+</main>
+</body>
+</html>
