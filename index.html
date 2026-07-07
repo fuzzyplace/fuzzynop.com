@@ -6,14 +6,19 @@
 <title>FUZZYNOP — Josh Schwartz</title>
 <meta name="description" content="Josh Schwartz (FuzzyNop) — red teamer, social engineer, and professional bogeyman. Offensive security, adversary simulation, and The Fuzzy Place.">
 <link rel="canonical" href="https://fuzzynop.com/">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://fuzzynop.com/">
 <meta property="og:title" content="FUZZYNOP — Josh Schwartz">
 <meta property="og:description" content="Red teamer, social engineer, professional bogeyman. Offensive security, adversary simulation, and The Fuzzy Place.">
-<meta name="twitter:card" content="summary">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 44 26'%3E%3Cpath d='M2 13 Q22 -6 42 13 Q22 32 2 13 Z' fill='none' stroke='%23e8e2d6' stroke-width='3'/%3E%3Ccircle cx='22' cy='13' r='6' fill='%23ff3d5a'/%3E%3C/svg%3E">
-</head>
-<body>
+<meta property="og:image" content="https://fuzzynop.com/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://fuzzynop.com/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2044%2026'%3E%3Cpath%20d='M2%2013%20Q22%20-6%2042%2013%20Q22%2032%202%2013%20Z'%20fill='none'%20stroke='%23e8e2d6'%20stroke-width='3'/%3E%3Ccircle%20cx='22'%20cy='13'%20r='6'%20fill='%23ff3d5a'/%3E%3C/svg%3E">
 <style>
   :root{
     --ink:#0b0910;
@@ -53,10 +58,6 @@
     position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.07;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
-  @media (prefers-reduced-motion: reduce){
-    .atmo{animation:none}
-    .mark{animation:none}
-  }
   main{position:relative;z-index:2;max-width:1060px;margin:0 auto;padding:0 28px}
 
   /* ---- hero ---- */
@@ -70,7 +71,7 @@
   }
   h1{
     font-family:var(--disp);
-    font-size:clamp(72px,14vw,168px);
+    font-size:clamp(52px,14vw,168px);
     line-height:.92;
     letter-spacing:.01em;
     text-transform:uppercase;
@@ -111,7 +112,7 @@
   p.body b{color:var(--bone);font-weight:600}
 
   /* ---- career rail ---- */
-  .rail{display:grid;gap:0;margin-top:8px}
+  .rail{margin-top:8px}
   .stop{
     display:grid;grid-template-columns:170px 1fr;gap:22px;
     padding:26px 0;border-top:1px solid var(--line);
@@ -122,7 +123,8 @@
   .stop p{color:var(--muted);max-width:60ch;margin-top:6px;font-size:15px}
 
   /* ---- talks grid ---- */
-  .talks{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:8px}
+  .talks{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:14px;margin-top:8px}
+  #network p.lede{margin-bottom:20px}
   a.talk{color:inherit;text-decoration:none}
   .talk{
     background:var(--panel);border:1px solid var(--line);border-radius:10px;
@@ -130,12 +132,13 @@
     transition:transform .25s ease,border-color .25s ease;
   }
   .talk:hover,.talk:focus-visible{transform:translateY(-3px);border-color:rgba(255,61,90,.45)}
-  .talk:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+  .talk:focus-visible,.src:focus-visible,.links a:focus-visible{outline:2px solid var(--red);outline-offset:2px}
   .talk .go{
     margin-top:auto;padding-top:10px;
     font-family:var(--mono);font-size:11.5px;letter-spacing:.12em;
     color:var(--violet);text-transform:uppercase;
   }
+  .talk .go .url{text-transform:lowercase}
   .src{
     display:inline-block;margin-top:8px;
     font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;
@@ -143,7 +146,7 @@
     border-bottom:1px solid rgba(180,140,255,.35);
   }
   .src:hover,.src:focus-visible{color:var(--red);border-bottom-color:rgba(255,61,90,.5)}
-  .src:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+  .src+.src{margin-left:14px}
   .talk .venue{font-family:var(--mono);font-size:11.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--red)}
   .talk h3{font-size:17.5px;font-weight:600;line-height:1.3}
   .talk p{color:var(--muted);font-size:14px}
@@ -152,7 +155,7 @@
   .fp{
     background:linear-gradient(135deg,var(--panel) 0%,var(--panel-2) 100%);
     border:1px solid var(--line);border-radius:14px;padding:40px;
-    display:grid;grid-template-columns:1fr;gap:16px;
+    display:grid;gap:16px;
   }
   .fp h2{margin-bottom:0}
   .fp p{max-width:64ch;color:var(--muted)}
@@ -173,7 +176,6 @@
     transition:border-color .2s ease,color .2s ease,background .2s ease;
   }
   .links a:hover,.links a:focus-visible{border-color:var(--red);color:var(--red);background:rgba(255,61,90,.06)}
-  .links a:focus-visible{outline:2px solid var(--red);outline-offset:2px}
 
   footer{
     border-top:1px solid var(--line);padding:36px 0 60px;
@@ -187,12 +189,18 @@
     0%,92%,100%{transform:scaleY(1)}
     95%{transform:scaleY(.08)}
   }
+  @media (prefers-reduced-motion: reduce){
+    html{scroll-behavior:auto}
+    .atmo{animation:none}
+    .mark{animation:none}
+  }
   @media(max-width:640px){
     .stop{grid-template-columns:1fr;gap:4px}
     .fp{padding:26px}
   }
 </style>
-
+</head>
+<body>
 <div class="atmo"></div>
 <div class="grain"></div>
 
@@ -250,7 +258,7 @@
           <h3>Director, Offensive Security</h3>
           <p>Oversaw offensive security, product security engineering, and security engagement functions across the Verizon Media &rarr; Yahoo estate.</p>
           <a class="src" href="https://www.rsaconference.com/experts/josh-schwartz" target="_blank" rel="noopener">source: RSAC expert bio &nearr;</a>
-          &nbsp;&nbsp;<a class="src" href="https://securityconversations.com/episode/josh-schwartz-on-red-teaming-and-proactive-security-engineering/" target="_blank" rel="noopener">Security Conversations podcast &nearr;</a>
+          <a class="src" href="https://securityconversations.com/episode/josh-schwartz-on-red-teaming-and-proactive-security-engineering/" target="_blank" rel="noopener">Security Conversations podcast &nearr;</a>
         </div>
       </div>
       <div class="stop">
@@ -295,13 +303,13 @@
         <span class="venue">HushCon Seattle 2019</span>
         <h3>Business Tradecraft for Hackers in the Corporate Industrial Complex</h3>
         <p>Surviving — and steering — the enterprise as a hacker.</p>
-        <span class="go">watch: talk video &nearr;</span>
+        <span class="go">watch: LevelUp 0x06 recording &nearr;</span>
       </a>
-      <a class="talk" href="https://schedule.sxsw.com/2019/speakers/2005402" target="_blank" rel="noopener">
+      <a class="talk" href="https://www.rsaconference.com/experts/josh-schwartz" target="_blank" rel="noopener">
         <span class="venue">SXSW 2019 &middot; RSAC</span>
         <h3>Red teaming for the rest of the world</h3>
         <p>Bringing adversary thinking beyond the security bubble.</p>
-        <span class="go">source: SXSW 2019 schedule &nearr;</span>
+        <span class="go">source: RSAC speaker profile &nearr;</span>
       </a>
     </div>
   </section>
@@ -314,44 +322,41 @@
       <div class="tags">
         <span>immersive art</span><span>ARG / LARP</span><span>counter-surveillance as art</span><span>san francisco</span>
       </div>
-      <a class="src" href="https://fuzzy.place" target="_blank" rel="noopener">visit: fuzzy.place &nearr;</a>
+      <div>
+        <a class="src" href="https://fuzzy.place" target="_blank" rel="noopener">visit: fuzzy.place &nearr;</a>
+        <a class="src" href="https://www.skool.com/the-fuzzy-place" target="_blank" rel="noopener">join the crew: skool.com/the-fuzzy-place &nearr;</a>
+      </div>
     </div>
   </section>
 
   <section id="network">
     <div class="label">// The network</div>
     <h2>Crews &amp; co-conspirators</h2>
-    <p class="lede">Two communities of my own, and friends whose work I back. The bogeyman keeps good company.</p>
+    <p class="lede">My own crew, and allied outfits whose work I back. The bogeyman keeps good company.</p>
     <div class="talks">
       <a class="talk" href="https://www.skool.com/stdc" target="_blank" rel="noopener">
         <span class="venue">My crew &middot; Skool</span>
         <h3>Security Theater Drama Club</h3>
         <p>Artists, performers, and hackers automating their craft — and getting paid for it. The paid room where the game gets serious.</p>
-        <span class="go">join: skool.com/stdc &nearr;</span>
-      </a>
-      <a class="talk" href="https://www.skool.com/the-fuzzy-place" target="_blank" rel="noopener">
-        <span class="venue">My crew &middot; Skool</span>
-        <h3>The Fuzzy Place</h3>
-        <p>Turn your real life into the game — free for artists, hackers, clownz &amp; party people, playing IRL across 7 cities.</p>
-        <span class="go">join: skool.com/the-fuzzy-place &nearr;</span>
+        <span class="go">join: <span class="url">skool.com/stdc</span> &nearr;</span>
       </a>
       <a class="talk" href="https://propervillains.io/" target="_blank" rel="noopener">
-        <span class="venue">Friends &middot; Security</span>
+        <span class="venue">Allied &middot; Security</span>
         <h3>Proper Villains</h3>
         <p>Personal security enlightenment powered by the digital dark arts — high-class hackers for hire for clients in the spotlight.</p>
-        <span class="go">visit: propervillains.io &nearr;</span>
+        <span class="go">visit: <span class="url">propervillains.io</span> &nearr;</span>
       </a>
       <a class="talk" href="https://pinkteam.xyz" target="_blank" rel="noopener">
-        <span class="venue">Friends &middot; Research</span>
+        <span class="venue">Allied &middot; Research</span>
         <h3>Pink Team</h3>
         <p>Human-layer security research — a new shade of red teaming, studying trust, identity, and influence in the age of AI.</p>
-        <span class="go">visit: pinkteam.xyz &nearr;</span>
+        <span class="go">visit: <span class="url">pinkteam.xyz</span> &nearr;</span>
       </a>
       <a class="talk" href="https://parasolsociety.com" target="_blank" rel="noopener">
-        <span class="venue">Friends &middot; Invitation only</span>
+        <span class="venue">Allied &middot; Invitation only</span>
         <h3>Parasol Society</h3>
         <p>By invitation. By summons.</p>
-        <span class="go">visit: parasolsociety.com &nearr;</span>
+        <span class="go">visit: <span class="url">parasolsociety.com</span> &nearr;</span>
       </a>
     </div>
   </section>
