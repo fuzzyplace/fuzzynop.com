@@ -394,6 +394,32 @@
     .progress{animation:none !important}
     .tilt,.js .d3.tilt.in{transition:border-color .2s ease}
   }
+
+  /* ---- MOBILE / TOUCH: drop 3D entirely, use a light 2D fade-up ----
+     3D perspective + per-frame transforms are a desktop-pointer flourish; on phones they
+     blur text mid-transition, tax the GPU, and (on iOS Safari without scroll-timelines,
+     where the JS fallback writes a translateZ every scroll frame) visibly jank. A uniform,
+     compositor-cheap rise reads better on a small screen. Fires on narrow viewports OR any
+     coarse-pointer device. The pointer-tilt is already gated off on touch in JS. */
+  @media (max-width:760px), (pointer:coarse){
+    main{perspective:none}                 /* no 3D projection — kills all the rotateX/Y + Z depth */
+    .hero-canvas{display:none}             /* mouse-parallax depth field: pointless + costly on touch */
+    .js .d3{
+      will-change:auto;                    /* don't promote ~46 elements to their own layer on a phone GPU */
+      transition:opacity .5s var(--ease-out-quart), transform .55s var(--ease-out-quart);
+    }
+    .js .d3.fly-deep,
+    .js .d3.fly-rise,
+    .js .d3.fly-left,
+    .js .d3.fly-right{ transform:translateY(26px); }   /* flat slide-up: no Z, no rotate, no sideways drift */
+    .js .d3.in,
+    .js .d3.tilt.in{
+      transform:none;
+      transition:opacity .5s var(--ease-out-quart), transform .55s var(--ease-out-quart);
+    }
+    /* hero sits still on mobile — no 3D recede (native OR the JS fallback, which is also gated off in JS) */
+    header{ view-timeline-name:none; animation:none !important; transform:none !important; opacity:1 !important; }
+  }
   @media(max-width:760px){
     .music-wrap{grid-template-columns:1fr}
   }
@@ -746,6 +772,7 @@
   var mq = function(q){ return window.matchMedia && window.matchMedia(q).matches; };
   var RM = mq('(prefers-reduced-motion: reduce)');
   var FINE = mq('(hover:hover) and (pointer:fine)');
+  var COARSE = mq('(pointer:coarse)');  /* phones/tablets: skip the 3D hero-recede + depth-field canvas (CSS drops the 3D fly-in too) */
   var scrollTop = function(){ return window.pageYOffset || (document.scrollingElement||document.documentElement).scrollTop || 0; };
   var supports = function(cond){ return !!(window.CSS && CSS.supports && CSS.supports(cond)); };
   var HAS_VIEW_TL = supports('(animation-timeline: view())');     /* covers .d3 fade + hero-recede — both CSS-gated on this same test */
@@ -792,7 +819,7 @@
        engines above aren't available — HAS_SCROLL_TL / HAS_VIEW_TL gate each independently,
        since a browser could in principle support one and not the other). ---- */
     var bar = HAS_SCROLL_TL ? null : document.querySelector('.progress');
-    var heroEl = HAS_VIEW_TL ? null : document.querySelector('header');
+    var heroEl = (HAS_VIEW_TL || COARSE) ? null : document.querySelector('header');
     var heroH = heroEl ? heroEl.offsetHeight : 0;  /* denominator = the hero's OWN height, so the
        recede completes exactly as it scrolls out of view — not an arbitrary viewport-height guess */
     var scheduled = false;
@@ -897,7 +924,7 @@
 
     /* ---- hero 3d depth field ---- */
     var canvas = document.querySelector('.hero-canvas');
-    if (canvas && canvas.getContext && !RM) {
+    if (canvas && canvas.getContext && !RM && !COARSE) {
       var ctx = canvas.getContext('2d');
       var W, H, DPR, cx, cy, pts, raf;
       var pointerX = 0, pointerY = 0;
