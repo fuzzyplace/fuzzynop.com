@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1200">
+<meta name="robots" content="noindex">
+<title>Fuzzy Nop social card</title>
+<link rel="stylesheet" href="css/site.css">
+<style>
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body { margin: 0; }
+  .og {
+    width: 1200px;
+    height: 630px;
+    box-sizing: border-box;
+    padding: 36px 40px 32px;
+    display: grid;
+    grid-template-columns: 1.25fr 0.75fr;
+    gap: 28px;
+    align-items: stretch;
+  }
+  .og .poster { transform: rotate(-1deg); display: flex; flex-direction: column; justify-content: center; padding: 28px 28px 24px; }
+  .og .poster h1 { font-size: 124px; margin: 10px 0 8px; }
+  .og .sheet { transform: rotate(0.6deg); display: flex; flex-direction: column; justify-content: center; gap: 14px; padding: 22px; }
+  .og .sheet p { margin: 0; }
+  .og-list { display: flex; flex-direction: column; gap: 10px; }
+  .og-list li {
+    background: #fff;
+    border: 3px solid #000;
+    box-shadow: 3px 3px 0 #000;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-family: Montserrat, sans-serif;
+    font-weight: 800;
+    font-size: 22px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .og .badge { align-self: flex-start; margin-top: 8px; }
+</style>
+</head>
+<body>
+  <div class="og">
+    <div class="poster">
+      <p class="kicker">AI red teamer</p>
+      <h1>Fuzzy<br><span>Nop</span></h1>
+      <p class="name">Josh Schwartz</p>
+      <p class="slogan">The models are supposed to <span>say no</span>.</p>
+    </div>
+    <div class="sheet">
+      <p class="kicker">Since March 2024</p>
+      <ul class="og-list">
+        <li>Jailbreaks</li>
+        <li>Prompt injection</li>
+        <li>Agents off the job</li>
+      </ul>
+      <p class="badge">FUZZYNOP</p>
+    </div>
+  </div>
+</body>
+</html>
