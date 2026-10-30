@@ -1,0 +1,14 @@
+Latin subsets, served from this site so pages do not call a font host.
+
+Bangers
+Copyright 2010 The Bangers Project Authors (https://github.com/googlefonts/bangers)
+
+Inter
+Copyright (c) The Inter Project Authors (https://github.com/rsms/inter)
+
+Montserrat
+Copyright 2011 The Montserrat Project Authors (https://github.com/JulietaUla/Montserrat)
+
+These files are licensed under the SIL Open Font License, Version 1.1.
+The license text is in OFL.txt in this folder.
+https://scripts.sil.org/OFL
