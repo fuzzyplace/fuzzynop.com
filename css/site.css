@@ -321,6 +321,15 @@ body {
   max-width: 62ch;
   margin: 4px 0 14px;
 }
+.aside {
+  display: block;
+  margin-top: 12px;
+  max-width: 68ch;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: #334155;
+}
 .display {
   font-size: clamp(44px, 10vw, 80px);
   margin: 0 0 8px;
