@@ -1,0 +1,173 @@
+/* FZNP / Cyborg Dark v2.1 — design tokens. Mirror of design/tokens.json. Edit both together.
+   Palette: black, white, and a full gray ramp. Orange (--md-sys-color-accent) is a highlight only:
+   focus ring, hairlines <= 2px, dots <= 8px, a single glyph. Never a fill behind text. */
+
+:root {
+  color-scheme: dark;
+
+  /* ---- gray ramp (ref) ---- */
+  --md-ref-gray-990: #0A0A0A;
+  --md-ref-gray-980: #0F0F0F;
+  --md-ref-gray-960: #141414;
+  --md-ref-gray-940: #1A1A1A;
+  --md-ref-gray-900: #222221;
+  --md-ref-gray-800: #333331;
+  --md-ref-gray-700: #4A4A47;
+  --md-ref-gray-600: #6E6E6A;
+  --md-ref-gray-500: #8C8C88;
+  --md-ref-gray-400: #A6A6A2;
+  --md-ref-gray-300: #C9C9C4;
+  --md-ref-gray-200: #E6E6E1;
+  --md-ref-gray-100: #F5F5F0;
+
+  /* ---- sys roles (M3 naming) ---- */
+  --md-sys-color-background: var(--md-ref-gray-990);
+  --md-sys-color-on-background: var(--md-ref-gray-100);
+  --md-sys-color-surface: var(--md-ref-gray-990);
+  --md-sys-color-surface-dim: #000000;
+  --md-sys-color-surface-bright: var(--md-ref-gray-800);
+  --md-sys-color-surface-container-lowest: #000000;
+  --md-sys-color-surface-container-low: var(--md-ref-gray-980);
+  --md-sys-color-surface-container: var(--md-ref-gray-960);
+  --md-sys-color-surface-container-high: var(--md-ref-gray-940);
+  --md-sys-color-surface-container-highest: var(--md-ref-gray-900);
+  --md-sys-color-on-surface: var(--md-ref-gray-100);
+  --md-sys-color-on-surface-variant: var(--md-ref-gray-400);
+  --md-sys-color-outline: var(--md-ref-gray-600);
+  --md-sys-color-outline-variant: var(--md-ref-gray-900);
+  --md-sys-color-primary: var(--md-ref-gray-100);
+  --md-sys-color-on-primary: var(--md-ref-gray-990);
+  --md-sys-color-secondary: var(--md-ref-gray-500);
+  --md-sys-color-on-secondary: var(--md-ref-gray-990);
+  --md-sys-color-secondary-container: var(--md-ref-gray-800);
+  --md-sys-color-on-secondary-container: var(--md-ref-gray-200);
+  --md-sys-color-accent: #FF6A13;            /* traffic cone — highlight only */
+  --md-sys-color-inverse-surface: var(--md-ref-gray-100);
+  --md-sys-color-inverse-on-surface: var(--md-ref-gray-990);
+  --md-sys-color-error: #FF4D6D;
+  --md-sys-color-on-error: #000000;
+  --md-sys-color-scrim: rgba(0, 0, 0, .72);
+
+  /* ---- art: ink, paper, fog, silhouettes ---- */
+  --md-sys-color-ink: #050505;
+  --md-sys-color-paper: #EDEDE8;
+  --md-sys-color-on-paper: #050505;
+  --md-sys-color-on-paper-variant: var(--md-ref-gray-700);
+  --md-sys-color-fog-light: #C9C9C3;
+  --md-sys-color-fog-mid: #7A7A75;
+  --md-sys-color-rim: #3C3C39;
+  --md-sys-color-silhouette-far: #2C2C2A;
+  --md-sys-color-silhouette-mid: #111110;
+
+  --md-sys-state-hover: .08;
+  --md-sys-state-focus: .12;
+  --md-sys-state-pressed: .12;
+
+  /* ---- typography ---- */
+  --md-ref-typeface-display: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
+  --md-ref-typeface-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --md-ref-typeface-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* ---- shape ---- */
+  --md-sys-shape-corner-none: 0px;
+  --md-sys-shape-corner-extra-small: 2px;
+  --md-sys-shape-corner-small: 4px;
+  --md-sys-shape-corner-medium: 8px;
+  --md-sys-shape-corner-large: 16px;
+  --md-sys-shape-corner-extra-large: 28px;
+  --md-sys-shape-corner-full: 9999px;
+
+  /* ---- motion ---- */
+  --md-sys-motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --md-sys-motion-easing-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --md-sys-motion-easing-emphasized-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --md-sys-motion-duration-short2: 100ms;
+  --md-sys-motion-duration-short4: 200ms;
+  --md-sys-motion-duration-medium2: 300ms;
+  --md-sys-motion-duration-medium4: 400ms;
+  --md-sys-motion-duration-long2: 500ms;
+  --md-sys-motion-duration-extra-long1: 700ms;
+
+  /* ---- layout ---- */
+  --layout-max: 1200px;
+  --gutter: 16px;
+}
+@media (min-width: 840px) { :root { --gutter: 32px; } }
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --md-sys-motion-duration-short2: 0ms;
+    --md-sys-motion-duration-short4: 0ms;
+    --md-sys-motion-duration-medium2: 0ms;
+    --md-sys-motion-duration-medium4: 0ms;
+    --md-sys-motion-duration-long2: 0ms;
+    --md-sys-motion-duration-extra-long1: 0ms;
+  }
+}
+
+/* ---- Tailwind v4 theme mapping ---- */
+@theme inline {
+  --color-*: initial;
+  --color-background: var(--md-sys-color-background);
+  --color-surface: var(--md-sys-color-surface);
+  --color-surface-dim: var(--md-sys-color-surface-dim);
+  --color-surface-bright: var(--md-sys-color-surface-bright);
+  --color-surface-lowest: var(--md-sys-color-surface-container-lowest);
+  --color-surface-low: var(--md-sys-color-surface-container-low);
+  --color-surface-container: var(--md-sys-color-surface-container);
+  --color-surface-high: var(--md-sys-color-surface-container-high);
+  --color-surface-highest: var(--md-sys-color-surface-container-highest);
+  --color-on-surface: var(--md-sys-color-on-surface);
+  --color-on-surface-variant: var(--md-sys-color-on-surface-variant);
+  --color-outline: var(--md-sys-color-outline);
+  --color-outline-variant: var(--md-sys-color-outline-variant);
+  --color-primary: var(--md-sys-color-primary);
+  --color-on-primary: var(--md-sys-color-on-primary);
+  --color-secondary: var(--md-sys-color-secondary);
+  --color-on-secondary: var(--md-sys-color-on-secondary);
+  --color-secondary-container: var(--md-sys-color-secondary-container);
+  --color-on-secondary-container: var(--md-sys-color-on-secondary-container);
+  --color-accent: var(--md-sys-color-accent);
+  --color-inverse-surface: var(--md-sys-color-inverse-surface);
+  --color-inverse-on-surface: var(--md-sys-color-inverse-on-surface);
+  --color-error: var(--md-sys-color-error);
+  --color-ink: var(--md-sys-color-ink);
+  --color-paper: var(--md-sys-color-paper);
+  --color-on-paper: var(--md-sys-color-on-paper);
+  --color-on-paper-variant: var(--md-sys-color-on-paper-variant);
+  --color-rim: var(--md-sys-color-rim);
+  --color-silhouette-far: var(--md-sys-color-silhouette-far);
+  --color-silhouette-mid: var(--md-sys-color-silhouette-mid);
+  --color-gray-100: var(--md-ref-gray-100);
+  --color-gray-200: var(--md-ref-gray-200);
+  --color-gray-300: var(--md-ref-gray-300);
+  --color-gray-400: var(--md-ref-gray-400);
+  --color-gray-500: var(--md-ref-gray-500);
+  --color-gray-600: var(--md-ref-gray-600);
+  --color-gray-700: var(--md-ref-gray-700);
+  --color-gray-800: var(--md-ref-gray-800);
+  --color-gray-900: var(--md-ref-gray-900);
+  --color-transparent: transparent;
+  --color-current: currentColor;
+
+  --font-display: var(--md-ref-typeface-display);
+  --font-sans: var(--md-ref-typeface-sans);
+  --font-mono: var(--md-ref-typeface-mono);
+
+  --radius-none: var(--md-sys-shape-corner-none);
+  --radius-xs: var(--md-sys-shape-corner-extra-small);
+  --radius-sm: var(--md-sys-shape-corner-small);
+  --radius-md: var(--md-sys-shape-corner-medium);
+  --radius-lg: var(--md-sys-shape-corner-large);
+  --radius-xl: var(--md-sys-shape-corner-extra-large);
+  --radius-full: var(--md-sys-shape-corner-full);
+
+  --ease-standard: var(--md-sys-motion-easing-standard);
+  --ease-emphasized-in: var(--md-sys-motion-easing-emphasized-decelerate);
+  --ease-emphasized-out: var(--md-sys-motion-easing-emphasized-accelerate);
+
+  --breakpoint-md: 600px;
+  --breakpoint-lg: 840px;
+  --breakpoint-xl: 1200px;
+  --breakpoint-2xl: 1600px;
+}
