@@ -129,6 +129,8 @@ export default function App() {
       </main>
 
       <footer className="relative bg-ink">
+        {/* the footer's top edge: a ledge the character can stand on (he knocks on it and the 0x90 under it hops) */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-0" data-perch="0.8" data-ledge="" data-poke-ledge="" aria-hidden="true" />
         <div className="shell flex flex-col gap-2 py-8 md:flex-row md:justify-between">
           <p className="type-label-small text-secondary">© {new Date().getFullYear()} {site.name}</p>
           <p className="type-label-small normal-case text-secondary" data-poke="tap" data-poke-reach="top">{site.footerEgg}</p>

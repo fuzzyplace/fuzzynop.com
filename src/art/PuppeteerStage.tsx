@@ -4,7 +4,8 @@ import { Character, STRIDE, type Action, type CharacterHandle, type Pose } from 
 import { choosePoi, collectPois, remember, type Poi, type Scene, type SceneSurface } from './explore';
 import { KICK, QUIET, SIT_FOR, decideIdle, idleDelay, kickAt, kickDelay, type Fidget } from './idle';
 import { noteRecent, pickVaried } from './moodVariety';
-import { ACT_DUR, FLIP, TAP_AT, TAP_HOP, TURN } from './poses';
+import { ACT_DUR, FLIP, TAP_AT, TAP_HOP, TURN, type AnyAction } from './poses';
+import { createProbeDriver, type Cursor, type SeenLike } from './probeDriver'; // ---- probe hook ----
 import { holdSpot } from './hold';
 import { MechArm, type ArmHandle } from './MechArm';
 import { clamp, easeInOut, lerp, type Pt } from './geometry';
@@ -144,7 +145,7 @@ const WARM_W = { wave: 1.4, lookUp: 1, hop: 0.6, blink: 0.5 };
 
 /** Something he does on the spot: a fidget, an activity at a point of interest, a reaction. */
 type Act = {
-  kind: Action;
+  kind: AnyAction; // an Action, or a probe move (probeDriver.ts plays those)
   at: number;
   dur: number;
   reverse?: boolean;
@@ -189,7 +190,7 @@ type State = {
   route: Move[] | null; // his own way to another perch
   leg: number;
   legAt: number;
-  action: Action | undefined;
+  action: AnyAction | undefined;
   actionK: number;
   want: number; // perch the pointer rests over (-1 = none)
   wantSince: number;
@@ -379,6 +380,7 @@ export function PuppeteerStage() {
       const next = transition(s.m, ev, now);
       if (next === s.m) return false;
       if (import.meta.env.DEV && next.mode !== s.m.mode) console.debug(`[puppet] ${s.m.mode} → ${next.mode}`, ev.type === 'take' ? ev.plan : ev.type);
+      const was = s.m; // ---- probe hook ---- (the driver hears every transition)
       const prev = s.m.mode;
       const prevPlan = s.m.plan;
       s.m = next;
@@ -394,7 +396,7 @@ export function PuppeteerStage() {
         s.flinchAt = now;
         note('flinch:swat', now);
       }
-      if (next.mode === 'idle' && prev === 'landing' && prevPlan && prevPlan.why !== 'edge' && prevPlan.why !== 'press') {
+      if (next.mode === 'idle' && prev === 'landing' && prevPlan && prevPlan.why !== 'edge' && prevPlan.why !== 'press' && prevPlan.why !== 'probe') {
         // set down somewhere new: if he trusts you he greets you once he's found his feet
         s.greetAt = now + rand(250, 600);
         wakeIn((s.greetAt - now) / 1000);
@@ -414,6 +416,7 @@ export function PuppeteerStage() {
         else s.dur = TRANSIT;
         s.lift = plan.kind === 'tour' ? Math.min(200, vp.h * 0.24) : plan.why === 'edge' ? 46 : Math.min(220, vp.h * 0.25);
         if (prev === 'carried' || prev === 'dangling') s.lift = Math.min(s.lift, 80); // already up
+        if (plan.why === 'probe') s.lift = probe.lift(s.from, s.lift); // ---- probe hook ---- (the arc stays under the header)
       }
       if (next.mode === 'landing') {
         s.squash = next.plan?.kind === 'drag' ? 0.05 : 0.12;
@@ -471,6 +474,7 @@ export function PuppeteerStage() {
         s.look = null;
         if (prev === 'fidget') s.act = null;
       }
+      probe.entered(s, was, ev, now); // ---- probe hook ----
       return true;
     };
 
@@ -615,6 +619,7 @@ export function PuppeteerStage() {
     };
     const startFidget = (s: State, f: Fidget, now: number) => {
       s.fidgets = noteRecent(s.fidgets, f, 3);
+      probe.noteWhim(f); // ---- probe hook ---- (variety across everything he does)
       if (f === 'step') {
         // a pace toward whatever he's facing (the pointer, usually), then a curious look
         const v = visitor();
@@ -637,6 +642,7 @@ export function PuppeteerStage() {
     /** Fully trusted, the pointer resting beside him: he sits down by it. */
     const sitBeside = (s: State, p: Pointer, now: number) => {
       if (!go(s, { type: 'sit' }, now)) return;
+      probe.noteWhim('sit'); // ---- probe hook ----
       s.goal = null;
       if (Math.abs(p.x - s.char.x) > 8) s.facing = p.x > s.char.x ? 1 : -1;
       play(s, 'sit', now);
@@ -741,7 +747,11 @@ export function PuppeteerStage() {
         arrive(s, now);
         return true;
       }
-      // a thinking tell: most times he stops and looks where he's going first, a beat, then sets off
+      setOff(s, poi, route, now);
+      return true;
+    };
+    /** Set off along `route` to `poi`. A thinking tell: most times he stops and looks where he's going first, a beat. */
+    const setOff = (s: State, poi: Poi, route: Move[], now: number) => {
       if (!reduce && Math.random() < 0.75 && go(s, { type: 'fidget' }, now)) {
         const to = poi.look ?? { x: route[route.length - 1].to.x, y: route[route.length - 1].to.y - 30 * scale };
         const sx = viewport().sx;
@@ -751,10 +761,9 @@ export function PuppeteerStage() {
         s.pending = { poi, route };
         play(s, 'glance', now, { dur: rand(0.45, 0.95) });
         note(`glance:${poi.id}`, now);
-        return true;
+        return;
       }
       beginRoute(s, poi, route, now);
-      return true;
     };
     const beginRoute = (s: State, poi: Poi, route: Move[], now: number) => {
       s.goal = poi;
@@ -770,6 +779,10 @@ export function PuppeteerStage() {
     const arrive = (s: State, now: number) => {
       const poi = s.goal;
       if (!poi || s.idx < 0) return;
+      // ---- probe hook ---- a probe's spot: the driver takes it from here; anything else is a find
+      if (poi.kind === 'probe') return probe.arrive(s, now);
+      probe.noteWhim(poi.activity);
+      if (poi.activity !== 'sit') probe.noteFind();
       const sx = viewport().sx;
       const me = s.char.x + sx;
       if (poi.face) s.facing = poi.face;
@@ -832,6 +845,40 @@ export function PuppeteerStage() {
       return at;
     };
 
+    // ---- probe hook ---- prod and probe (probeDriver.ts): the driver, and what it may use of the stage
+    let lastBest = -1; // the reading-line perch, last frame
+    const probe = createProbeDriver({
+      scale,
+      vw: vp.w,
+      vh: vp.h,
+      minTop: HEADER + CLEAR,
+      feet: FEET * scale,
+      perches: () => cache,
+      view: () => viewport(),
+      go: (ev, now) => go(st.current!, ev, now),
+      wakeIn,
+      routeTo: (ps: readonly SeenLike[], i: number, x: number) => {
+        const s = st.current!;
+        const sx = viewport().sx;
+        const ok = cache.map((_, j) => (!!ps[j]?.ok && !!ps[j]?.visible) || j === s.idx);
+        if (!ok[i] || s.idx < 0) return null;
+        const S = surfaces(ok);
+        const r = planRoute(S, { s: s.idx, x: cache[s.idx].left + s.walk.x }, { s: i, x: clamp(x, S[i].left, S[i].right) }, limX);
+        return r && r.every((m) => m.to.x >= sx + 40 && m.to.x <= sx + vp.w - 40) ? r : null;
+      },
+      setOff: (poi, route, now) => setOff(st.current!, poi, route, now),
+      arrive: (now) => arrive(st.current!, now),
+      feel,
+      full: (now) => advance(tr.current!, now).full,
+      visitor,
+      cursor: (): Cursor => (sense.touch ? 'touch' : !ptr.current || sense.gone ? 'gone' : st.current && company(st.current, ptr.current) ? 'near' : 'watching'),
+      attnAt: () => attnAt,
+      best: () => lastBest,
+      home,
+      note,
+    });
+    // ---- end probe hook ----
+
     let lastSeen: Seen[] = []; // dev: the last frame's view of the perches
     let frames = 0; // dev: frames run (to check the loop sleeps when he's settled)
     const frame = (now: number, dt: number) => {
@@ -865,6 +912,16 @@ export function PuppeteerStage() {
           best = i;
         }
       });
+      if (best < 0) {
+        // ---- probe hook ---- no plate he can stand on in view (the very bottom of the page): the
+        // footer's ledge will do, rather than dangling (he can knock on it and make the 0x90 hop)
+        const f = cache.findIndex((c, i) => c.el.hasAttribute('data-poke-ledge') && ps[i].ok && ps[i].visible);
+        if (f >= 0) {
+          best = f;
+          bestD = Math.abs(ps[f].top - line);
+        }
+      }
+      lastBest = best; // ---- probe hook ----
 
       if (!st.current) {
         const first = ps[0].pt;
@@ -1017,7 +1074,8 @@ export function PuppeteerStage() {
 
       // ---- the page decides: scroll / perch lost (urgent; interrupts anything but the user's hand / a fall) ----
       const byHand = s.m.plan?.kind === 'hand';
-      if (mode() !== 'falling' && !byHand) {
+      // ---- probe hook ---- (held beside a target for a probe, the driver brings him back itself)
+      if (mode() !== 'falling' && !byHand && !probe.holds(s)) {
         const cur = s.idx >= 0 ? ps[s.idx] : undefined;
         const curOk = !!cur && cur.ok && cur.visible;
         let take: Plan | null = null;
@@ -1184,10 +1242,15 @@ export function PuppeteerStage() {
         const quiet = (now - attnAt) / 1000;
         // shaken, he won't wander off; with the pointer about he stays with it (and minds it)
         const stay = uneasy(tr.current!, now) || !!near;
-        const c = decideIdle({ quiet, explored: s.explored, recent: s.fidgets, rand: Math.random, feel: fl, stay });
-        if (c.kind === 'fidget') startFidget(s, c.fidget, now);
+        // ---- probe hook ---- fidgets avoid what he just did anywhere; an exploration may be a probe; a find
+        // avoids the activity he just did (or anything, if that's all there is)
+        const c = decideIdle({ quiet, explored: s.explored, recent: probe.fidgetRecent(s.fidgets), rand: Math.random, feel: fl, stay });
+        const explore = (mood: 'explore' | 'rest') => startExplore(s, mood, ps, now, probe.fresh) || startExplore(s, mood, ps, now);
+        if (probe.decide(s, c.kind, ps, now)) {
+          // off to probe something
+        } else if (c.kind === 'fidget') startFidget(s, c.fidget, now);
         else if (c.kind === 'claw') clawRelocate(s, ps, now);
-        else if (!startExplore(s, c.kind === 'rest' ? 'rest' : 'explore', ps, now) && !(c.kind === 'rest' && startExplore(s, 'explore', ps, now))) {
+        else if (!explore(c.kind === 'rest' ? 'rest' : 'explore') && !(c.kind === 'rest' && explore('explore'))) {
           // nowhere to go on his own: sometimes the claw obliges, otherwise he stays and fidgets later
           if (Math.random() < 0.4) clawRelocate(s, ps, now);
           else startFidget(s, 'look', now);
@@ -1196,6 +1259,7 @@ export function PuppeteerStage() {
       }
 
       // ---- busy: the thing he's doing plays out; sitting has its own clock ----
+      probe.tick(s, now); // ---- probe hook ---- (a probe's beats, and the touch)
       if (mode() === 'fidget' && (!s.act || now >= s.act.at + s.act.dur * 1000)) {
         const pend = s.pending; // had his look: now he goes
         go(s, { type: 'done' }, now);
@@ -1273,7 +1337,7 @@ export function PuppeteerStage() {
           if (k >= 1) go(s, { type: 'gripped' }, now);
           break;
         case 'dangling':
-          s.char = { ...heldPt };
+          s.char = probe.hold(s, now) ?? { ...heldPt }; // ---- probe hook ---- (held beside a target)
           s.grip = 1;
           break;
         case 'carried': {
@@ -1293,7 +1357,7 @@ export function PuppeteerStage() {
             ragdoll = true;
             break;
           }
-          const target = plan.to < 0 ? heldPt : perchPos(plan.to, plan.x);
+          const target = plan.to < 0 ? (probe.hold(s, now) ?? heldPt) : perchPos(plan.to, plan.x); // ---- probe hook ----
           const e = easeInOut(k);
           const peak = Math.min(s.from.y, target.y) - s.lift;
           const mx = (s.from.x + target.x) / 2;
@@ -1516,7 +1580,7 @@ export function PuppeteerStage() {
       // a glance at the pointer for a moment after it moves, while he stands still
       const looking = free(s.m.mode) && !reduce && fresh && !s.walk.walking && (now - p!.t) / 1000 < LOOK;
       const headY = s.char.y - 28 * scale;
-      const aim = own(s.m.mode) && s.m.mode !== 'exploring' && s.look ? { x: s.look.x - viewport().sx, y: s.look.y - viewport().sy } : null;
+      const aim = ((own(s.m.mode) && s.m.mode !== 'exploring') || probe.looks(s)) && s.look ? { x: s.look.x - viewport().sx, y: s.look.y - viewport().sy } : null; // ---- probe hook ----
       // at ease with you, he keeps an eye on the pointer when it rests by him (a steady aim: the loop still settles).
       // Wary or shaken he never takes his eyes off it, even backing away.
       const watchful = (fl === 'wary' || fl === 'shaken') && free(s.m.mode);
@@ -1618,6 +1682,7 @@ export function PuppeteerStage() {
         actionK: s.actionK,
         kick: s.kick,
         amp: s.amp,
+        aim: probe.aim(), // ---- probe hook ----
         turn,
         tremble: s.tremble,
         mood: { hunch: s.hunch, open: s.open, pat: s.patW },
@@ -1688,8 +1753,31 @@ export function PuppeteerStage() {
             const s = st.current;
             return s && { hunch: s.hunch, open: s.open, pat: s.patW };
           },
-          /** what he did and when: turning points, flinches, greetings, pats, fidgets */
+          /** what he did and when: turning points, flinches, greetings, pats, fidgets, probes */
           events,
+          // ---- probe hook ---- `__puppet.probe('spin')` probes the nearest target of that kind now (caps
+          // ignored; `{ action: 'look' | 'poke' | 'handsOn', win, glanceBack, id }` forces the rest)
+          probe: (kind: Parameters<typeof probe.force>[1], o?: Parameters<typeof probe.force>[4]) => {
+            const s = st.current;
+            if (!s || reduce) return false;
+            if (s.m.mode === 'sitting' || s.m.mode === 'fidget') go(s, { type: 'attend' }, performance.now()); // up off the edge first
+            if (s.m.mode !== 'idle') return false;
+            const ok = probe.force(s, kind, lastSeen, performance.now(), o);
+            loop.wake();
+            return ok;
+          },
+          get probes() {
+            return probe.log;
+          },
+          get probing() {
+            return probe.active;
+          },
+          get whims() {
+            return probe.whims;
+          },
+          get probeCaps() {
+            return probe.caps;
+          },
           /** back to a wary stranger (also forgets the session copy) */
           reset() {
             try {
@@ -1863,6 +1951,7 @@ export function PuppeteerStage() {
       window.clearTimeout(lingerTimer);
       save(performance.now(), true);
       unlightNode();
+      probe.stop(); // ---- probe hook ----
     };
   }, [vp, reduce]);
 
