@@ -96,6 +96,10 @@
 @keyframes sway { 0%, 100% { transform: rotate(-2.2deg); } 50% { transform: rotate(2.2deg); } }
 .sway { transform-box: fill-box; transform-origin: 50% 0; animation: sway 9s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .sway { animation: none; } }
+/* the character breathes: ~1px rise of the upper body, stepped so it repaints ~3×/s, not every frame */
+@keyframes breathe { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-0.6px); } }
+.char-breathe { animation: breathe 4.4s steps(7) infinite; }
+@media (prefers-reduced-motion: reduce) { .char-breathe { animation: none; } }
 
 @layer base {
   html { overflow-x: clip; scroll-behavior: smooth; scroll-padding-top: 72px; -webkit-text-size-adjust: 100%; }

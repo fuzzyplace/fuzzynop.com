@@ -162,7 +162,8 @@ export function Hero() {
       <div className="absolute inset-x-0 bottom-0 z-10">
         <Ground width={Math.max(w, 1)} height={groundH} />
       </div>
-      <div className="absolute inset-x-0" style={{ bottom: groundH * 0.62 }} data-perch={perchX} aria-hidden="true" />
+      {/* desktop: he walks only within the pool of light (a black silhouette vanishes on the dark ground beyond it) */}
+      <div className="absolute inset-x-0" style={{ bottom: groundH * 0.62 }} data-perch={perchX} data-perch-span={narrow ? undefined : 260} aria-hidden="true" />
     </section>
   );
 }
