@@ -42,8 +42,8 @@ function edge(cap: number, step: number, r: () => number, bites: number[], t0: n
       continue;
     }
     const roll = r();
-    if (tear === 0 && roll < 0.1) tear = 2 + Math.floor(r() * 2);
-    if (roll > 0.94) {
+    if (tear === 0 && roll < 0.08) tear = 2 + Math.floor(r() * 2);
+    if (roll > 0.96) {
       // sharp V notch
       const w = 3 + r() * 4;
       pts.push([t, r() * 1.5], [t + w, cap * (0.75 + r() * 0.25)], [t + w * 2, r() * 1.5]);

@@ -140,7 +140,7 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
     const path = (sd: number) => (w > 0 && h > 0 ? `path("${tornPath(w, h, sd)}")` : undefined);
     return { face: path(s0), layers: layout.layers.map((ly) => path(ly.seed)) };
   }, [w, h, s0, layout]);
-  const layerTone = tone === 'paper' ? ['bg-gray-600', 'bg-ink'] : ['bg-gray-700', 'bg-gray-300'];
+  const layerTone = tone === 'paper' ? ['bg-gray-600', 'bg-ink'] : ['bg-gray-700', 'bg-gray-400'];
 
   return (
     <div
