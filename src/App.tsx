@@ -6,7 +6,7 @@ import { Puppeteer } from './art/Puppeteer';
 import { CircuitTree } from './components/CircuitTree';
 import { Experiment } from './components/Experiment';
 import { Cta, PlateHeader } from './components/ui';
-import { contact, experiments, hubPlate, interlude, nav, site } from './content/site';
+import { contact, experiments, hubPlate, interlude, nav, site, ui } from './content/site';
 import { variants } from './content/variants';
 import { Hero } from './sections/Hero';
 
@@ -20,13 +20,15 @@ export default function App() {
     <>
       <ArtDefs />
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:bg-paper focus:px-4 focus:py-2 focus:text-on-paper">
-        Skip to content
+        {ui.skip}
       </a>
 
       <header className="header-fade fixed inset-x-0 top-0 z-40">
         <div className="shell flex h-16 items-center justify-between">
-          <a href="#top" className="type-label-large text-on-surface">FZNP</a>
-          <nav aria-label="Primary">
+          <a href="#top" className="type-label-large text-on-surface" aria-label={ui.markName}>
+            {ui.mark}
+          </a>
+          <nav aria-label={ui.primaryNav}>
             <ul className="hidden gap-8 md:flex">
               {nav.map((n) => (
                 <li key={n.id}>
@@ -128,7 +130,7 @@ export default function App() {
       <footer className="relative bg-ink">
         <div className="shell flex flex-col gap-2 py-8 md:flex-row md:justify-between">
           <p className="type-label-small text-secondary">© {new Date().getFullYear()} {site.name}</p>
-          <p className="type-label-small text-secondary">{site.footerEgg}</p>
+          <p className="type-label-small normal-case text-secondary">{site.footerEgg}</p>
         </div>
       </footer>
 

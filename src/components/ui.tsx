@@ -1,23 +1,6 @@
 import type { ReactNode } from 'react';
-import type { Link } from '../content/site';
 
 type Tone = 'paper' | 'ink';
-
-/** External link: muted → full ink/white on hover, 1px orange underline (the only orange in text). */
-export function ExternalLink({ href, children, tone = 'ink' }: { href: string; children: ReactNode; tone?: Tone }) {
-  const color = tone === 'paper' ? 'text-on-paper-variant hover:text-on-paper' : 'text-on-surface-variant hover:text-on-surface';
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={`type-label-large inline-flex items-center gap-2 decoration-accent decoration-1 underline-offset-8 transition-colors duration-200 ease-standard hover:underline ${color}`}
-    >
-      {children}
-      <span aria-hidden="true">↗</span>
-    </a>
-  );
-}
 
 /** Small hex badge with a section index — machine label. */
 export function HexBadge({ n, tone = 'paper' }: { n: string; tone?: Tone }) {
@@ -42,16 +25,6 @@ export function PlateHeader({ n, eyebrow, title, tone = 'paper' }: { n: string; 
       </div>
       <h2 className="type-display-small mt-5">{title}</h2>
     </header>
-  );
-}
-
-export function Prose({ paragraphs, tone = 'paper' }: { paragraphs: string[]; tone?: Tone }) {
-  return (
-    <div className={`type-body-large max-w-[60ch] space-y-5 ${tone === 'paper' ? 'text-on-paper-variant' : 'text-on-surface-variant'}`}>
-      {paragraphs.map((p) => (
-        <p key={p}>{p}</p>
-      ))}
-    </div>
   );
 }
 
@@ -91,16 +64,3 @@ export function Cta({ cta }: { cta: { label: string; href: string | null; fallba
   );
 }
 
-export function LinkRow({ links, tone = 'paper' }: { links: Link[]; tone?: Tone }) {
-  return (
-    <ul className="flex flex-wrap gap-x-10 gap-y-4">
-      {links.map((l) => (
-        <li key={l.href}>
-          <ExternalLink href={l.href} tone={tone}>
-            {l.label}
-          </ExternalLink>
-        </li>
-      ))}
-    </ul>
-  );
-}

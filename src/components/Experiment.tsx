@@ -7,7 +7,7 @@ import { PlateHeader } from './ui';
  * and a result line. `hypothesis` (interlude folded in) replaces the fragments on EXP. 04.
  */
 export function Experiment({ exp, hypothesis }: { exp: Exp; hypothesis?: string[] }) {
-  const pending = exp.result.length === 1 && exp.result[0] === 'Pending';
+  const pending = !!exp.pending;
   return (
     <>
       <PlateHeader n={exp.n} eyebrow={`${log.eyebrow} ${exp.n}`} title={exp.title} />
