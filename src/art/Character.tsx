@@ -1,25 +1,54 @@
+import { useImperativeHandle, useLayoutEffect, useRef, type Ref } from 'react';
+import { setAttr } from './ticker';
+
 /**
  * The hero character: an original ink silhouette of Z — short sides, textured quiff,
  * rectangular glasses (the only thing that catches light), short beard.
  * Local origin = grip point at the back of the collar. Faces +x.
+ * Rendered once; posed imperatively via `ref.current.set(x, y, scale, pose)`. Hidden until first pose.
  */
 export type Pose = { swing: number; dangle: number; facing: 1 | -1; squash: number };
+export type CharacterHandle = { set: (x: number, y: number, scale: number, pose: Pose) => void };
 
-export function Character({ x, y, scale = 1, pose }: { x: number; y: number; scale?: number; pose: Pose }) {
-  const { swing, dangle, facing, squash } = pose;
-  const legA = dangle * 0.35; // legs drift apart while carried
-  const armA = dangle * 0.5;
+export function Character({ ref }: { ref?: Ref<CharacterHandle> }) {
+  const el = useRef({
+    root: null as SVGGElement | null,
+    legL: null as SVGPathElement | null,
+    legR: null as SVGPathElement | null,
+    armL: null as SVGPathElement | null,
+    armR: null as SVGPathElement | null,
+  }).current;
+
+  useLayoutEffect(() => setAttr(el.root, 'display', 'none'), [el]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      set(x, y, scale, { swing, dangle, facing, squash }) {
+        const legA = dangle * 0.35; // legs drift apart while carried
+        const armA = dangle * 0.5;
+        setAttr(el.root, 'display', null);
+        setAttr(el.root, 'transform', `translate(${x} ${y}) rotate(${(swing * 180) / Math.PI}) scale(${facing * scale} ${scale * (1 - squash)})`);
+        setAttr(el.legL, 'd', `M-3 2 L${-5 - legA * 10} 26 L${-2 - legA * 10} 26 L-0.5 4 Z`);
+        setAttr(el.legR, 'd', `M3 2 L${4 + legA * 9} 26 L${7 + legA * 9} 26 L5.5 3 Z`);
+        setAttr(el.armL, 'd', `M-7 -7 L${-9 - armA * 6} ${8 - armA * 4}`);
+        setAttr(el.armR, 'd', `M7 -7 L${9 + armA * 6} ${8 - armA * 4}`);
+      },
+    }),
+    [el],
+  );
+
   return (
-    <g transform={`translate(${x} ${y}) rotate(${(swing * 180) / Math.PI}) scale(${facing * scale} ${scale * (1 - squash)})`}>
+    <g ref={(e) => void (el.root = e)}>
       <g filter="url(#ink)">
         {/* legs */}
-        <path d={`M-3 2 L${-5 - legA * 10} 26 L${-2 - legA * 10} 26 L-0.5 4 Z`} className="fill-ink" />
-        <path d={`M3 2 L${4 + legA * 9} 26 L${7 + legA * 9} 26 L5.5 3 Z`} className="fill-ink" />
+        <path ref={(e) => void (el.legL = e)} className="fill-ink" />
+        <path ref={(e) => void (el.legR = e)} className="fill-ink" />
         {/* torso — blazer silhouette */}
         <path d="M-8 -9 C-9 -4,-7 4,-6 6 L7 6 C8 2,9 -4,8 -9 C5 -11,-5 -11,-8 -9 Z" className="fill-ink" />
         {/* arms */}
-        <path d={`M-7 -7 L${-9 - armA * 6} ${8 - armA * 4}`} className="stroke-ink" strokeWidth="3" strokeLinecap="round" />
-        <path d={`M7 -7 L${9 + armA * 6} ${8 - armA * 4}`} className="stroke-ink" strokeWidth="3" strokeLinecap="round" />
+        <path ref={(e) => void (el.armL = e)} className="stroke-ink" strokeWidth="3" strokeLinecap="round" />
+        <path ref={(e) => void (el.armR = e)} className="stroke-ink" strokeWidth="3" strokeLinecap="round" />
         {/* neck */}
         <rect x="-2.5" y="-14" width="5" height="6" className="fill-ink" />
         {/* head: skull, short sides, textured quiff, nose, beard */}

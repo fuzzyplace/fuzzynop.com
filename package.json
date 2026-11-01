@@ -11,7 +11,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
-    "check": "npm run typecheck && npm run tokens:contrast && npm run build",
+    "check": "npm run typecheck && npm run test && npm run tokens:contrast && npm run build",
     "tokens:contrast": "node scripts/contrast.mjs",
     "screenshot": "node scripts/screenshot.mjs",
     "test": "vitest run",

@@ -1,5 +1,6 @@
 // Main-thread + frame-timing benchmark for the art engine.
-// Usage: npm run build && npx vite preview --port 4173 & node scripts/perf.mjs [url] [--cpu=4] [--runs=3] [--label=name]
+// Usage: npm run build && npx vite preview --port 4173 & node scripts/perf.mjs [url] [--cpu=4] [--runs=3] [--label=name] [--css="..."]
+// --css injects a stylesheet (diagnostics only, e.g. switch an effect off to measure its cost).
 // Scenarios: "idle" = hero after the tagline is written (arms swaying, character perched);
 //            "scroll" = steady mouse-wheel scroll top → bottom (plates printing, character carried).
 // Reports per scenario: main-thread busy ms/s (script, layout, style), long tasks (> 50 ms),
@@ -12,6 +13,7 @@ const url = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? 'http://lo
 const cpu = Number(args.cpu ?? 4);
 const runs = Number(args.runs ?? 3);
 const label = args.label ?? 'run';
+const css = args.css ?? '';
 
 const pct = (xs, p) => {
   const s = [...xs].sort((a, b) => a - b);
@@ -63,6 +65,7 @@ async function runOnce(browser, vw, vh) {
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Performance.enable');
   await page.goto(url, { waitUntil: 'networkidle' });
+  if (css) await page.addStyleTag({ content: css });
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: cpu });
   await page.waitForTimeout(6000); // tagline written, arm parked
   const idle = await measure(page, cdp, () => page.waitForTimeout(5000));

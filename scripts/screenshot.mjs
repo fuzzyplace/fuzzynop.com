@@ -23,7 +23,7 @@ for (const [w, h, name, reducedMotion] of [
   for (let y = 0; y < total; y += 300) { await page.mouse.wheel(0, 300); await page.waitForTimeout(120); }
   await page.waitForTimeout(600);
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
-  await page.waitForTimeout(reducedMotion === 'reduce' ? 300 : 1500);
+  await page.waitForTimeout(reducedMotion === 'reduce' ? 3000 : 1500);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   await page.screenshot({ path: out(name), fullPage: true });
   console.log(`${name}: ${out(name)}${overflow ? '  ⚠ horizontal overflow' : ''}`);

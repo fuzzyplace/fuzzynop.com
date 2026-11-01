@@ -1,6 +1,13 @@
 # Decisions & open assumptions
 
 ## Decisions
+**2026-10-31 — v2.3 phase 1: ticker + refs (Claude)**
+1. **One shared rAF ticker** (`src/art/ticker.ts`). Loops return `false` to sleep; scroll, layout (body ResizeObserver + `notifyLayout()`), and `data-printed` mutations wake them. A throwing loop drops out without freezing the stage.
+2. **Ref-based rendering:** `MechArm` / `Character` render once and are posed via `ref.current.set(...)`; attribute writes go through a change-skipping `setAttr`. No React render per frame anywhere.
+3. **Plate print progress** no longer uses motion's `useScroll`; same offsets (`start 0.95` → `end 0.7`) computed from cached geometry. motion still drives the `Depth` parallax (already ref-based, no React renders) — kept rather than reimplemented.
+4. **Measured:** the hero arm's `#ink` filter caps desktop idle at ~33 fps (60 without it). Not changed in phase 1 (no visual change). Proposal for a later phase: draw the static ceiling rail in its own filtered layer and give moving arm segments a cheaper edge (pre-baked rough path, or the filter at a smaller region). See `docs/PERF.md`.
+5. Tooling: `scripts/perf.mjs` (benchmark, `--css` diagnostics), `scripts/pixdiff.mjs`, screenshots now desktop / 390 px / reduced motion, Vitest in `npm run check`.
+
 **2026-10-31 — v2.3 direction (Z, voice) → see `docs/HANDOFF.md`**
 1. Character walks slowly toward the mouse; arms pick him up, drag him around, and reset him.
 2. Cut-outs become more dynamic (procedural torn, layered paper).
@@ -31,6 +38,7 @@
 4. **v1 preserved** in `legacy/v1/` as reference; not built or deployed.
 
 ## Open assumptions — Z to confirm
+- [ ] Phase 1 kept the `#ink` rough edge on the moving hero arm even though it costs ~half the frame rate on desktop. OK to swap in a cheaper edge on moving arms (subtle visual change) in a later phase?
 - [ ] Character likeness — quiff/glasses/beard read right? Beanie variant as an easter egg?
 - [ ] Want the character to *do* anything at the contact plate (wave, sit)?
 - [ ] Contact links: LinkedIn + SoundCloud labeled "Sound". Add/remove?

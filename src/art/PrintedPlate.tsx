@@ -1,16 +1,22 @@
-import { useMotionValueEvent, useReducedMotion, useScroll } from 'motion/react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { MechArm } from './MechArm';
+import { useReducedMotion } from 'motion/react';
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
+import { MechArm, type ArmHandle } from './MechArm';
 import { clamp, easeInOut, lerp } from './geometry';
+import { docTop, onLayout, setAttr, ticker } from './ticker';
 import { useSize } from './useSize';
 
 /**
  * A paper-cut content plate that a rail-mounted arm 3D-prints, bottom-up, as you scroll.
  * Text is always in the DOM (screen readers, no-JS); only the visual reveal is clipped.
  * Exposes data-perch / data-printed so the Puppeteer can set the character down on it.
+ *
+ * Scroll progress uses motion's offset convention (['start 0.95', 'end 0.7']) on cached
+ * geometry; scroll events are coalesced into one ticker frame that writes through refs.
  */
 const OVER = 240; // space above the plate the arm works in
 const SIDE = 44; // gutter for the rail
+const START = 0.95; // progress 0: plate top at 95% of the viewport
+const END = 0.7; // progress 1: plate bottom at 70% of the viewport
 
 type Props = {
   id?: string;
@@ -22,50 +28,119 @@ type Props = {
 };
 
 export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right' ? 0.18 : 0.82, className = '', children }: Props) {
+  const outer = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const clip = useRef<HTMLDivElement>(null);
+  const lines = useRef<SVGGElement>(null);
+  const edgeLine = useRef<SVGLineElement>(null);
+  const hotLine = useRef<SVGLineElement>(null);
+  const postL = useRef<SVGLineElement>(null);
+  const postR = useRef<SVGLineElement>(null);
+  const armRef = useRef<ArmHandle>(null);
   const { w, h } = useSize(ref);
   const reduce = useReducedMotion();
-  const { scrollYProgress } = useScroll({ target: ref, offset: ['start 0.95', 'end 0.7'] });
-  const [p, setP] = useState(0);
-  const [forced, setForced] = useState(false);
-  useMotionValueEvent(scrollYProgress, 'change', setP);
-  useEffect(() => setP(scrollYProgress.get()), [scrollYProgress]);
+  const forced = useRef(false);
+  const lastInset = useRef('');
+  const geo = useRef({ top: 0, height: 0, vh: 1 });
 
-  const prog = reduce || forced ? 1 : p;
-  const pr = clamp(prog / 0.86); // printing
-  const back = clamp((prog - 0.86) / 0.14); // retract
-  const printed = pr >= 1;
+  const measure = () => {
+    const el = ref.current;
+    if (!el) return;
+    geo.current = { top: docTop(el), height: el.clientHeight, vh: document.documentElement.clientHeight };
+  };
+  const progress = () => {
+    const { top, height, vh } = geo.current;
+    const from = top - START * vh;
+    const to = top + height - END * vh;
+    return to > from ? clamp((window.scrollY - from) / (to - from)) : 1;
+  };
 
-  // geometry in overlay space (plate origin at SIDE, OVER).
-  // A 3D-printer gantry: a beam rises with the print edge; the arm rides the beam.
-  const ox = SIDE;
-  const oy = OVER;
-  const edge = oy + h * (1 - pr);
+  const draw = useRef<() => void>(() => {});
+  draw.current = () => {
+    const prog = reduce || forced.current ? 1 : progress();
+    const pr = clamp(prog / 0.86); // printing
+    const back = clamp((prog - 0.86) / 0.14); // retract
+    const printed = pr >= 1;
+    const printing = pr > 0 && pr < 1;
+    setAttr(outer.current, 'data-printed', printed ? '1' : '0');
+    const inset = h === 0 && !reduce ? 'inset(100% 0 0 0)' : `inset(${(h * (1 - pr)).toFixed(1)}px -2px -2px -2px)`;
+    if (clip.current && lastInset.current !== inset) clip.current.style.clipPath = lastInset.current = inset;
+    if (!w) return;
+
+    // geometry in overlay space (plate origin at SIDE, OVER).
+    // A 3D-printer gantry: a beam rises with the print edge; the arm rides the beam.
+    const ox = SIDE;
+    const oy = OVER;
+    const edge = oy + h * (1 - pr);
+    const t = Math.min(20, Math.max(12, w * 0.022));
+    const l = Math.max(120, OVER * 0.6);
+    const beamY = lerp(edge - OVER * 0.82, OVER * 0.1, back);
+    const passes = 9;
+    const sweep = 0.5 - 0.5 * Math.cos(pr * Math.PI * passes);
+    const xl = ox + 20;
+    const xr = ox + w - 20;
+    const dir = side === 'right' ? 1 : -1;
+    const printTip = { x: side === 'right' ? lerp(xr, xl, sweep) : lerp(xl, xr, sweep), y: edge };
+    const rest = { x: side === 'right' ? ox + w - 70 : ox + 70, y: OVER * 0.1 + l * 1.15 };
+    const tip = back > 0 ? { x: lerp(printTip.x, rest.x, easeInOut(back)), y: lerp(printTip.y, rest.y, easeInOut(back)) } : printTip;
+    const base = { x: clamp(tip.x + dir * 80, ox - 10, ox + w + 10), y: beamY };
+
+    setAttr(lines.current, 'display', printing ? null : 'none');
+    if (printing) {
+      setAttr(edgeLine.current, 'y1', edge);
+      setAttr(edgeLine.current, 'y2', edge);
+      setAttr(hotLine.current, 'x1', printTip.x - 36);
+      setAttr(hotLine.current, 'x2', printTip.x + 36);
+      setAttr(hotLine.current, 'y1', edge);
+      setAttr(hotLine.current, 'y2', edge);
+    }
+    setAttr(postL.current, 'y2', beamY + t * 0.6);
+    setAttr(postR.current, 'y2', beamY + t * 0.6);
+    armRef.current?.set({ base, tip, bend: dir === 1 ? -1 : 1, hot: printing ? 1 : 0, railY: beamY });
+  };
+
+  // every render (mount, resize): re-measure and redraw before paint
+  useLayoutEffect(() => {
+    measure();
+    draw.current();
+  });
+
+  useEffect(() => {
+    if (reduce) return;
+    const loop = ticker.loop(() => {
+      draw.current();
+      return false; // one frame per wake: scroll/layout events are coalesced
+    });
+    const wake = () => loop.wake();
+    const offLayout = onLayout(() => {
+      measure();
+      wake();
+    });
+    window.addEventListener('scroll', wake, { passive: true });
+    return () => {
+      loop.stop();
+      offLayout();
+      window.removeEventListener('scroll', wake);
+    };
+  }, [reduce]);
+
   const t = Math.min(20, Math.max(12, w * 0.022));
-  const toolLen = t * 3.2;
   const l = Math.max(120, OVER * 0.6);
-  const beamY = lerp(edge - OVER * 0.82, OVER * 0.1, back);
-  const passes = 9;
-  const sweep = 0.5 - 0.5 * Math.cos(pr * Math.PI * passes);
-  const xl = ox + 20;
-  const xr = ox + w - 20;
-  const dir = side === 'right' ? 1 : -1;
-  const printTip = { x: side === 'right' ? lerp(xr, xl, sweep) : lerp(xl, xr, sweep), y: edge };
-  const rest = { x: side === 'right' ? ox + w - 70 : ox + 70, y: OVER * 0.1 + l * 1.15 };
-  const tip = back > 0 ? { x: lerp(printTip.x, rest.x, easeInOut(back)), y: lerp(printTip.y, rest.y, easeInOut(back)) } : printTip;
-  const base = { x: clamp(tip.x + dir * 80, ox - 10, ox + w + 10), y: beamY };
-  const printing = pr > 0 && pr < 1;
+  const ox = SIDE;
 
   return (
     <div
+      ref={outer}
       id={id}
       className={`relative ${className}`}
       data-perch={perch}
-      data-printed={printed ? '1' : '0'}
-      onFocus={() => setForced(true)}
+      onFocus={() => {
+        forced.current = true;
+        draw.current();
+      }}
     >
       <div ref={ref} className="plate-shadow">
-        <div style={{ clipPath: h === 0 && !reduce ? 'inset(100% 0 0 0)' : `inset(${(h * (1 - pr)).toFixed(1)}px -2px -2px -2px)` }}>
+        <div ref={clip}>
           <div className={`plate-cut ${tone === 'paper' ? 'plate-paper text-on-paper' : 'plate-ink text-on-surface'} px-7 py-10 md:px-12 md:py-14`}>
             {children}
           </div>
@@ -79,28 +154,16 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
           viewBox={`0 0 ${w + SIDE * 2} ${h + OVER}`}
           aria-hidden="true"
         >
-          {printing && (
-            <>
-              <line x1={ox} x2={ox + w} y1={edge} y2={edge} className="stroke-gray-600" strokeWidth={1} strokeDasharray="2 5" />
-              <line x1={printTip.x - 36} x2={printTip.x + 36} y1={edge} y2={edge} className="stroke-accent" strokeWidth={1} opacity={0.8} />
-            </>
-          )}
+          <g ref={lines}>
+            <line ref={edgeLine} x1={ox} x2={ox + w} className="stroke-gray-600" strokeWidth={1} strokeDasharray="2 5" />
+            <line ref={hotLine} className="stroke-accent" strokeWidth={1} opacity={0.8} />
+          </g>
           {/* gantry posts */}
           <g className="stroke-ink" filter="url(#ink)">
-            <line x1={ox - 14} x2={ox - 14} y1={0} y2={beamY + t * 0.6} strokeWidth={t * 0.3} />
-            <line x1={ox + w + 14} x2={ox + w + 14} y1={0} y2={beamY + t * 0.6} strokeWidth={t * 0.3} />
+            <line ref={postL} x1={ox - 14} x2={ox - 14} y1={0} strokeWidth={t * 0.3} />
+            <line ref={postR} x1={ox + w + 14} x2={ox + w + 14} y1={0} strokeWidth={t * 0.3} />
           </g>
-          <MechArm
-            base={base}
-            tip={tip}
-            l1={l}
-            l2={l}
-            bend={dir === 1 ? -1 : 1}
-            t={t}
-            toolLen={toolLen}
-            hot={printing ? 1 : 0}
-            rail={{ x1: ox - 22, y1: beamY, x2: ox + w + 22, y2: beamY }}
-          />
+          <MechArm ref={armRef} l1={l} l2={l} t={t} toolLen={t * 3.2} rail={{ x1: ox - 22, x2: ox + w + 22 }} />
         </svg>
       )}
     </div>

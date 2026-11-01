@@ -1,14 +1,19 @@
 import { useReducedMotion } from 'motion/react';
-import { useEffect, useRef, useState } from 'react';
-import { Character, type Pose } from './Character';
-import { MechArm } from './MechArm';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Character, type CharacterHandle, type Pose } from './Character';
+import { MechArm, type ArmHandle } from './MechArm';
 import { clamp, easeInOut, lerp, type Pt } from './geometry';
+import { onLayout, setAttr, ticker } from './ticker';
 
 /**
  * A ceiling-rail arm that carries the character around the page.
  * Perches = elements with [data-perch] (fraction along their top edge). A plate only becomes
  * a perch once it's printed ([data-printed="1"]). The character is set down on whichever
  * perch sits nearest the reading line; between perches the claw grabs him by the collar.
+ *
+ * Perch rects are cached in document space (re-measured on layout changes only), so a frame
+ * does no layout reads. The loop sleeps once he's perched and settled; scroll, layout and
+ * print-state changes wake it.
  */
 const TRANSIT = 1.25; // s
 const FEET = 26; // character units from origin to feet
@@ -25,12 +30,15 @@ type State = {
   facing: 1 | -1;
   squash: number;
 };
+type Perch = { el: HTMLElement; left: number; top: number; width: number; f: number };
 
 export function Puppeteer() {
   const reduce = useReducedMotion();
-  const [, force] = useState(0);
   const [vp, setVp] = useState({ w: 0, h: 0 });
   const st = useRef<State | null>(null);
+  const charRef = useRef<CharacterHandle>(null);
+  const armRef = useRef<ArmHandle>(null);
+  const tiltRef = useRef<SVGGElement>(null);
 
   useEffect(() => {
     const onResize = () => setVp({ w: window.innerWidth, h: window.innerHeight });
@@ -39,32 +47,39 @@ export function Puppeteer() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  useEffect(() => {
+  // layout effect: a resize re-poses the arm in the same commit that gives it new lengths
+  useLayoutEffect(() => {
     if (!vp.w) return;
-    let raf = 0;
-    let last = performance.now();
     const scale = vp.w < 700 ? 1.3 : 1.85;
-
-    const perches = () =>
-      Array.from(document.querySelectorAll<HTMLElement>('[data-perch]')).map((el) => {
+    let cache: Perch[] = [];
+    const measure = () => {
+      const sx = window.scrollX;
+      const sy = window.scrollY;
+      cache = Array.from(document.querySelectorAll<HTMLElement>('[data-perch]')).map((el) => {
         const r = el.getBoundingClientRect();
-        const f = parseFloat(el.dataset.perch ?? '0.5');
+        return { el, left: r.left + sx, top: r.top + sy, width: r.width, f: parseFloat(el.dataset.perch ?? '0.5') };
+      });
+    };
+    measure();
+    let dirty = false;
+
+    const frame = (now: number, dt: number) => {
+      if (dirty) {
+        measure(); // coalesced: at most one layout read per wake
+        dirty = false;
+      }
+      const sy = window.scrollY;
+      const sx = window.scrollX;
+      const ps = cache.map((p) => {
+        const top = p.top - sy;
         return {
-          ok: el.dataset.printed !== '0',
-          pt: { x: r.left + r.width * f, y: r.top - FEET * scale },
-          top: r.top,
-          visible: r.top > 70 && r.top < vp.h - 8,
+          ok: p.el.dataset.printed !== '0',
+          pt: { x: p.left - sx + p.width * p.f, y: top - FEET * scale },
+          top,
+          visible: top > 70 && top < vp.h - 8,
         };
       });
-
-    const frame = (now: number) => {
-      const dt = Math.min(0.05, (now - last) / 1000);
-      last = now;
-      const ps = perches();
-      if (!ps.length) {
-        raf = requestAnimationFrame(frame);
-        return;
-      }
+      if (!ps.length) return false; // layout / print-state changes wake us when perches appear
       const line = vp.h * 0.5;
       let best = -1;
       let bestD = Infinity;
@@ -105,8 +120,9 @@ export function Puppeteer() {
       }
       const target = s.idx >= 0 ? ps[s.idx].pt : heldPt;
       const prevX = s.char.x;
+      let k = 1;
       if (s.transitStart >= 0) {
-        const k = clamp((now - s.transitStart) / 1000 / TRANSIT);
+        k = clamp((now - s.transitStart) / 1000 / TRANSIT);
         const e = easeInOut(k);
         const lift = Math.min(s.from.y, target.y) - Math.min(220, vp.h * 0.25);
         // quadratic arc from → peak → target (target tracks scroll live)
@@ -132,40 +148,64 @@ export function Puppeteer() {
       s.squash = Math.max(0, s.squash - dt * 0.6);
       if (Math.abs(vx) > 30) s.facing = vx > 0 ? 1 : -1;
       else if (!carried) s.facing = s.char.x < vp.w / 2 ? 1 : -1;
-      s.baseX = lerp(s.baseX, s.char.x + (carried ? 0 : 60), 1 - Math.pow(0.02, dt));
+      const baseGoal = s.char.x + (carried ? 0 : 60);
+      s.baseX = lerp(s.baseX, baseGoal, 1 - Math.pow(0.02, dt));
+      draw(now);
 
-      force((n) => (n + 1) % 1e6);
-      raf = requestAnimationFrame(frame);
+      // settled: perched, swing and squash at rest, carriage arrived → sleep until something changes
+      const settled = !carried && Math.abs(s.swing) < 1e-4 && Math.abs(s.swingV) < 1e-4 && s.squash === 0 && Math.abs(s.baseX - baseGoal) < 1e-4; // tight: a looser snap leaves the carriage visibly off by a sub-pixel
+      return !settled;
     };
-    raf = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(raf);
+
+    const draw = (now: number) => {
+      const s = st.current;
+      if (!s) return;
+      const held = s.idx === -1;
+      const moving = s.transitStart >= 0;
+      const carried = moving || held;
+      const k = moving ? clamp((now - s.transitStart) / 1000 / TRANSIT) : 1;
+      const collar = { x: s.char.x + COLLAR.x * s.facing * scale, y: s.char.y + COLLAR.y * scale };
+      const hover = { x: s.char.x + 70, y: Math.max(vp.h * 0.08, s.char.y - 170) };
+      // grip: closes at the start of a carry; opens at the end only if setting him down on a perch
+      const gripW = held && !moving ? 1 : moving ? clamp(Math.min(k / 0.08, held ? 1 : (1 - k) / 0.08)) : 0;
+      const tip = { x: lerp(hover.x, collar.x, gripW), y: lerp(hover.y, collar.y, gripW) };
+      const t = vp.w < 700 ? 12 : 20;
+      const base = { x: s.baseX, y: -t * 2 };
+      const pose: Pose = { swing: 0, dangle: carried ? 1 : 0, facing: s.facing, squash: s.squash };
+      // character pivots on the collar while carried
+      setAttr(tiltRef.current, 'transform', carried ? `rotate(${(s.swing * 180) / Math.PI} ${collar.x} ${collar.y})` : null);
+      charRef.current?.set(s.char.x, s.char.y, scale, pose);
+      armRef.current?.set({ base, tip, bend: tip.x > base.x ? -1 : 1, grip: gripW });
+    };
+
+    const loop = ticker.loop(frame);
+    const wake = () => loop.wake();
+    const offLayout = onLayout(() => {
+      dirty = true;
+      wake();
+    });
+    const mo = new MutationObserver(wake);
+    mo.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['data-printed'] });
+    window.addEventListener('scroll', wake, { passive: true });
+    draw(performance.now());
+    wake();
+    return () => {
+      loop.stop();
+      offLayout();
+      mo.disconnect();
+      window.removeEventListener('scroll', wake);
+    };
   }, [vp, reduce]);
 
-  const s = st.current;
-  if (!s || !vp.w) return null;
-
-  const scale = vp.w < 700 ? 1.3 : 1.85;
-  const held = s.idx === -1;
-  const moving = s.transitStart >= 0;
-  const carried = moving || held;
-  const k = moving ? clamp((performance.now() - s.transitStart) / 1000 / TRANSIT) : 1;
-  const collar = { x: s.char.x + COLLAR.x * s.facing * scale, y: s.char.y + COLLAR.y * scale };
-  const hover = { x: s.char.x + 70, y: Math.max(vp.h * 0.08, s.char.y - 170) };
-  // grip: closes at the start of a carry; opens at the end only if setting him down on a perch
-  const gripW = held && !moving ? 1 : moving ? clamp(Math.min(k / 0.08, held ? 1 : (1 - k) / 0.08)) : 0;
-  const tip = { x: lerp(hover.x, collar.x, gripW), y: lerp(hover.y, collar.y, gripW) };
+  if (!vp.w) return null;
   const t = vp.w < 700 ? 12 : 20;
   const l = vp.h * 0.42;
-  const base = { x: s.baseX, y: -t * 2 };
-  const pose: Pose = { swing: carried ? s.swing : 0, dangle: carried ? 1 : 0, facing: s.facing, squash: s.squash };
-
   return (
     <svg className="pointer-events-none fixed inset-0 z-30 h-full w-full overflow-visible" viewBox={`0 0 ${vp.w} ${vp.h}`} aria-hidden="true">
-      {/* character pivots on the collar while carried */}
-      <g transform={carried ? `rotate(${(s.swing * 180) / Math.PI} ${collar.x} ${collar.y})` : undefined}>
-        <Character x={s.char.x} y={s.char.y} scale={scale} pose={{ ...pose, swing: 0 }} />
+      <g ref={tiltRef}>
+        <Character ref={charRef} />
       </g>
-      <MechArm base={base} tip={tip} l1={l} l2={l} bend={tip.x > base.x ? -1 : 1} t={t} tool="claw" toolLen={t * 2.6} grip={gripW} />
+      <MechArm ref={armRef} l1={l} l2={l} t={t} tool="claw" toolLen={t * 2.6} />
     </svg>
   );
 }

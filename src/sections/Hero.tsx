@@ -2,8 +2,9 @@ import { useReducedMotion } from 'motion/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { hero } from '../content/site';
 import { Depth, Ground, HexLattice, SpiderLeg, Splatter } from '../art/Decor';
-import { MechArm } from '../art/MechArm';
+import { MechArm, type ArmHandle } from '../art/MechArm';
 import { clamp, easeInOut, lerp, type Pt } from '../art/geometry';
+import { notifyLayout, ticker } from '../art/ticker';
 import { useSize } from '../art/useSize';
 
 /** The arm writes the tagline line by line, then withdraws and idles. */
@@ -17,11 +18,10 @@ type Box = { x: number; y: number; w: number; h: number };
 export function Hero() {
   const ref = useRef<HTMLElement>(null);
   const lines = useRef<(HTMLSpanElement | null)[]>([]);
+  const armRef = useRef<ArmHandle>(null);
   const { w, h } = useSize(ref);
   const reduce = useReducedMotion();
   const [boxes, setBoxes] = useState<Box[]>([]);
-  const [time, setTime] = useState(0);
-  const [scrollY, setScrollY] = useState(0);
   const n = hero.tagline.length;
   const writeEnd = DELAY + n * PER_LINE;
 
@@ -34,65 +34,86 @@ export function Hero() {
         return { x: r.left - host.left, y: r.top - host.top, w: r.width, h: r.height };
       }),
     );
+    notifyLayout(); // the ground perch moves with w (groundH) without resizing the body
   }, [w, h]);
 
-  useEffect(() => {
-    if (reduce) {
-      setTime(writeEnd + RETRACT);
-      return;
+  // Draw one frame of the hero at `time` (s since load) — tagline reveal + arm pose. DOM writes only.
+  const draw = useRef<(time: number) => void>(() => {});
+  draw.current = (time: number) => {
+    const scrollY = reduce ? 0 : window.scrollY;
+    // reveal fraction per line
+    const q = hero.tagline.map((_, i) => (reduce ? 1 : clamp((time - DELAY - i * PER_LINE - PER_LINE * TRAVEL) / (PER_LINE * (1 - TRAVEL)))));
+    q.forEach((v, i) => {
+      const el = lines.current[i];
+      if (el) el.style.clipPath = `inset(-10% ${((1 - v) * 100).toFixed(2)}% -10% 0)`;
+    });
+    if (!w) return;
+
+    // arm geometry — the base rides the ceiling rail, trailing the tip, so reach stays modest
+    const narrow = w < 700;
+    const t = clamp(w * 0.022, 12, 30);
+    const sway = reduce ? { x: 0, y: 0 } : { x: Math.sin(time * 0.6) * 18, y: Math.cos(time * 0.45) * 12 };
+    const rest: Pt = { x: w * 0.7 + sway.x, y: h * (narrow ? 0.26 : 0.34) + sway.y - scrollY * 0.6 };
+
+    let tip = rest;
+    let hot = 0;
+    if (boxes.length === n && !reduce) {
+      const mid = (b: Box) => b.y + Math.min(b.h, h * 0.16) * 0.58;
+      if (time < writeEnd) {
+        const i = clamp(Math.floor((time - DELAY) / PER_LINE), 0, n - 1);
+        const s = clamp((time - DELAY - i * PER_LINE) / PER_LINE);
+        const b = boxes[i];
+        const prev = i === 0 ? rest : { x: boxes[i - 1].x + boxes[i - 1].w, y: mid(boxes[i - 1]) };
+        if (time < DELAY) tip = rest;
+        else if (s < TRAVEL) {
+          const e = easeInOut(s / TRAVEL);
+          tip = { x: lerp(prev.x, b.x, e), y: lerp(prev.y, mid(b), e) - Math.sin(Math.PI * e) * 60 };
+        } else {
+          tip = { x: b.x + q[i] * b.w, y: mid(b) + Math.sin(q[i] * 40) * 2 };
+          hot = 1;
+        }
+      } else {
+        const k = easeInOut(clamp((time - writeEnd) / RETRACT));
+        const last = boxes[n - 1];
+        tip = { x: lerp(last.x + last.w, rest.x, k), y: lerp(mid(last), rest.y, k) };
+      }
     }
-    let raf = 0;
-    const start = performance.now();
-    const loop = (now: number) => {
-      if (window.scrollY < window.innerHeight * 1.2) setTime((now - start) / 1000);
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    const onScroll = () => setScrollY(window.scrollY);
-    window.addEventListener('scroll', onScroll, { passive: true });
+    const base: Pt = { x: clamp(tip.x + w * (narrow ? 0.3 : 0.22), 0, w + t), y: -t * 0.6 };
+    armRef.current?.set({ base, tip, bend: -1, hot, railY: -4 });
+  };
+
+  // clock starts at mount; the loop runs only while the hero is near the viewport
+  const start = useRef(0);
+  const time = useRef(0);
+  useEffect(() => {
+    start.current = performance.now();
+  }, []);
+  useLayoutEffect(() => {
+    draw.current(reduce ? writeEnd + RETRACT : time.current);
+  });
+  useEffect(() => {
+    if (reduce) return;
+    const near = () => window.scrollY < window.innerHeight * 1.2;
+    const loop = ticker.loop((now) => {
+      if (!near()) return false;
+      time.current = (now - start.current) / 1000;
+      draw.current(time.current);
+      return true;
+    });
+    const wake = () => near() && loop.wake();
+    window.addEventListener('scroll', wake, { passive: true });
+    wake();
     return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener('scroll', onScroll);
+      loop.stop();
+      window.removeEventListener('scroll', wake);
     };
-  }, [reduce, writeEnd]);
+  }, [reduce]);
 
-  // reveal fraction per line
-  const q = hero.tagline.map((_, i) => (reduce ? 1 : clamp((time - DELAY - i * PER_LINE - PER_LINE * TRAVEL) / (PER_LINE * (1 - TRAVEL)))));
-
-  // arm geometry — the base rides the ceiling rail, trailing the tip, so reach stays modest
   const narrow = w < 700;
   const groundH = narrow ? 70 : 96;
   const perchX = narrow ? 0.82 : 0.9;
   const t = clamp(w * 0.022, 12, 30);
-  const toolLen = t * 3.2;
   const l = h * (narrow ? 0.46 : 0.5);
-  const sway = reduce ? { x: 0, y: 0 } : { x: Math.sin(time * 0.6) * 18, y: Math.cos(time * 0.45) * 12 };
-  const rest: Pt = { x: w * 0.7 + sway.x, y: h * (narrow ? 0.26 : 0.34) + sway.y - scrollY * 0.6 };
-
-  let tip = rest;
-  let hot = 0;
-  if (boxes.length === n && !reduce) {
-    const mid = (b: Box) => b.y + Math.min(b.h, h * 0.16) * 0.58;
-    if (time < writeEnd) {
-      const i = clamp(Math.floor((time - DELAY) / PER_LINE), 0, n - 1);
-      const s = clamp((time - DELAY - i * PER_LINE) / PER_LINE);
-      const b = boxes[i];
-      const prev = i === 0 ? rest : { x: boxes[i - 1].x + boxes[i - 1].w, y: mid(boxes[i - 1]) };
-      if (time < DELAY) tip = rest;
-      else if (s < TRAVEL) {
-        const e = easeInOut(s / TRAVEL);
-        tip = { x: lerp(prev.x, b.x, e), y: lerp(prev.y, mid(b), e) - Math.sin(Math.PI * e) * 60 };
-      } else {
-        tip = { x: b.x + q[i] * b.w, y: mid(b) + Math.sin(q[i] * 40) * 2 };
-        hot = 1;
-      }
-    } else {
-      const k = easeInOut(clamp((time - writeEnd) / RETRACT));
-      const last = boxes[n - 1];
-      tip = { x: lerp(last.x + last.w, rest.x, k), y: lerp(mid(last), rest.y, k) };
-    }
-  }
-  const base: Pt = { x: clamp(tip.x + w * (narrow ? 0.3 : 0.22), 0, w + t), y: -t * 0.6 };
 
   return (
     <section ref={ref} id="top" className="relative flex min-h-[100svh] flex-col justify-end overflow-hidden">
@@ -123,7 +144,6 @@ export function Hero() {
                 lines.current[i] = el;
               }}
               className="block w-fit py-1"
-              style={{ clipPath: `inset(-10% ${((1 - q[i]) * 100).toFixed(2)}% -10% 0)` }}
             >
               {line}
             </span>
@@ -134,7 +154,7 @@ export function Hero() {
       {/* the arm */}
       {w > 0 && (
         <svg className="pointer-events-none absolute inset-0 z-20 h-full w-full overflow-visible" viewBox={`0 0 ${w} ${h}`} aria-hidden="true">
-          <MechArm base={base} tip={tip} l1={l} l2={l} bend={-1} t={t} toolLen={toolLen} hot={hot} rail={{ x1: 0, y1: -4, x2: w, y2: -4 }} />
+          <MechArm ref={armRef} l1={l} l2={l} t={t} toolLen={t * 3.2} rail={{ x1: 0, x2: w }} />
         </svg>
       )}
 
