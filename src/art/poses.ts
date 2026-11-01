@@ -500,3 +500,178 @@ export function turnPose(k: number, hop: boolean): TurnPose {
   const u = (k - FLIP) / (1 - FLIP);
   return { flipped, headBack: false, dx: 1.4 * (1 - s01(u)), cross: (hop ? 1.5 : 4) * (1 - s01(u)), lift, sx: 0.92 + 0.08 * s01(u) };
 }
+
+// ---- probe poses ----
+/**
+ * What he does to the page's probe targets (probeDriver.ts): consider it, lean in, prod it, pick at a
+ * corner, lift an edge to look under it, rattle a handle, tug a node, knock on a surface, and the
+ * "did you see that?" shrug after. Kept apart from `Action` so other pose sets and these never
+ * collide; Character.tsx draws either. `aim` is the front arm's reach angle (hang() convention:
+ * -PI/2 = straight ahead, more negative = up, less = down). Arms live in the body's space (they ride
+ * the lean and the crouch).
+ */
+export type ProbeMove = 'consider' | 'inspect' | 'feint' | 'prod' | 'pick' | 'lift' | 'rattle' | 'tug' | 'knock' | 'shrug';
+export type AnyAction = Action | ProbeMove;
+export const PROBE_MOVES: readonly ProbeMove[] = ['consider', 'inspect', 'feint', 'prod', 'pick', 'lift', 'rattle', 'tug', 'knock', 'shrug'];
+export const isProbeMove = (a: string | undefined): a is ProbeMove => !!a && (PROBE_MOVES as readonly string[]).includes(a);
+export const PROBE_DUR: Record<ProbeMove, number> = { consider: 1.8, inspect: 1.6, feint: 0.7, prod: 0.95, pick: 1.7, lift: 2.4, rattle: 1.25, tug: 1.15, knock: 1.3, shrug: 1.35 };
+/** Progress at which his hand meets the target (the stage calls targets.ts `poke` then). */
+export const PROBE_HIT: Partial<Record<ProbeMove, readonly number[]>> = { prod: [0.42], pick: [0.6], lift: [0.3], rattle: [0.16], tug: [0.42], knock: [0.32, 0.56] };
+/** Where the front hand is (body units from the collar, facing +x, standing) at the moment of contact. */
+export const PROBE_REACH: Partial<Record<ProbeMove, P2>> = { prod: [23.5, -7], rattle: [20, -5], tug: [21, -6], pick: [24, 22], knock: [14, 26] };
+export const AIM_AHEAD = -Math.PI / 2;
+/** Seconds for a move (an on-the-spot Action or a probe move). */
+export const durOf = (a: AnyAction) => (isProbeMove(a) ? PROBE_DUR[a] : ACT_DUR[a]);
+
+const mid = (a: P2, b: P2): P2 => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+/** A bent arm from the shoulder to `hand`: the elbow sits below the straight line by `drop` units. */
+const elbowTo = (sh: P2, hand: P2, drop: number): P2 => {
+  const m = mid(sh, hand);
+  return [m[0] - drop * 0.3, m[1] + drop];
+};
+
+/** Layer probe move `m` at progress k onto the standing body `b` (never mutates `b`). */
+export function probePose(m: ProbeMove, k: number, b: Body, aim = AIM_AHEAD): Body {
+  k = clamp(k);
+  const o: Body = { ...b };
+  aim = clamp(aim, -2.7, -0.3);
+  switch (m) {
+    case 'consider': {
+      // hand to his chin, weight back, a slow drift of the head; a finger taps the chin twice
+      const w = envelope(k, 0.14, 0.16);
+      const tapChin = k > 0.45 && k < 0.7 ? Math.max(0, Math.sin(((k - 0.45) / 0.25) * Math.PI * 2)) : 0;
+      o.elbowR = [lerp(9, 11, w), lerp(1, 0, w)];
+      o.handR = [lerp(b.handR[0], 8.6, w), lerp(b.handR[1], -13.6 + tapChin * 1.1, w)];
+      o.handL = [lerp(b.handL[0], 2, w), lerp(b.handL[1], 2, w)];
+      o.dx = -0.5 * w;
+      o.head += (0.06 * Math.sin(k * Math.PI * 1.4) + 0.04) * w;
+      break;
+    }
+    case 'inspect': {
+      // leans in for a closer look, hands behind his back, then eases back
+      const w = envelope(k, 0.3, 0.3);
+      o.dx = 2.8 * w;
+      o.dy = 1.6 * w;
+      o.head += 0.22 * w;
+      o.handL = [lerp(b.handL[0], -10, w), lerp(b.handL[1], 3, w)];
+      o.handR = [lerp(b.handR[0], -8.5, w), lerp(b.handR[1], 4, w)];
+      o.elbowR = [lerp(9, -1, w), lerp(1, 0, w)];
+      o.kneeR += 1.2 * w;
+      break;
+    }
+    case 'feint': {
+      // reaches halfway, thinks better of it, takes the hand back to his chest
+      const up = envelope(k, 0.15, 0.25); // hand up to his chest and back down
+      const w = bump(k, 0.4);
+      const tip = hang(SH_R, 15, aim);
+      const chest: P2 = [10, -5];
+      o.handR = toward(b.handR, toward(chest, toward(chest, tip, 0.55), w), up);
+      o.elbowR = elbowTo(SH_R, o.handR, 3 * (1 - w * 0.5) * up);
+      o.dx = 0.9 * w - 0.4 * Math.sin(clamp((k - 0.5) / 0.5) * Math.PI);
+      o.head += -0.05 * w;
+      break;
+    }
+    case 'prod': {
+      // winds up, jabs a finger out to full stretch, holds a beat, takes it back
+      const ext = k < 0.42 ? s01((k - 0.12) / 0.3) : k < 0.62 ? 1 : 1 - s01((k - 0.62) / 0.38);
+      const up = envelope(k, 0.12, 0.15); // hand up to his chest first, back down after
+      const tip = hang(SH_R, 15, aim);
+      const chest: P2 = [10, -5];
+      o.handR = toward(b.handR, toward(chest, tip, ext), up);
+      o.elbowR = elbowTo(SH_R, o.handR, 3.2 * (1 - ext) * up);
+      o.handL = toward(b.handL, [-4, 1], envelope(k, 0.2, 0.2));
+      o.dx = 1.5 * ext;
+      o.head += -0.04 * ext;
+      o.kneeR += 0.8 * ext;
+      break;
+    }
+    case 'pick': {
+      // down on his haunches at the corner, fingers picking at it, then it lifts in his hand
+      const w = envelope(k, 0.16, 0.18);
+      const picking = k > 0.22 && k < 0.58 ? Math.sin(k * Math.PI * 22) * 0.8 : 0;
+      const lifted = k > 0.6 ? envelope((k - 0.6) / 0.4, 0.15, 0.3) : 0;
+      o.dy = 8 * w;
+      o.dx = 3 * w;
+      o.head += 0.48 * w - 0.12 * lifted;
+      o.elbowR = [lerp(9, 14, w), lerp(1, 6, w)];
+      o.handR = [lerp(b.handR[0], 20 + picking * 0.4, w), lerp(b.handR[1], 14 + picking - 3.5 * lifted, w)];
+      o.handL = [lerp(b.handL[0], 4, w), lerp(b.handL[1], 6, w)];
+      o.kneeL += 2 * w;
+      o.kneeR += 2 * w;
+      break;
+    }
+    case 'lift': {
+      // crouches, gets both hands under the edge, lifts it and ducks his head to look underneath
+      const w = envelope(k, 0.14, 0.16);
+      const up = k > 0.26 ? envelope((k - 0.26) / 0.7, 0.12, 0.25) : 0;
+      const look = k > 0.36 && k < 0.86 ? envelope((k - 0.36) / 0.5, 0.25, 0.3) : 0;
+      o.dy = 9 * w + 1.5 * look;
+      o.dx = 2.4 * w + 1.6 * look;
+      o.head += 0.4 * w + 0.45 * look;
+      o.elbowR = [lerp(9, 12, w), lerp(1, 8, w)];
+      o.elbowL = [lerp(-9, 2, w), lerp(1, 9, w)];
+      o.handR = [lerp(b.handR[0], 15, w), lerp(b.handR[1], 16.5 - 3.5 * up, w)];
+      o.handL = [lerp(b.handL[0], 10, w), lerp(b.handL[1], 17 - 3.5 * up, w)];
+      o.kneeL += 2.2 * w;
+      o.kneeR += 2.2 * w;
+      break;
+    }
+    case 'rattle': {
+      // both hands on it like a door handle; shakes it hard, leaning back
+      const w = envelope(k, 0.12, 0.2);
+      const shake = k > 0.14 && k < 0.78 ? Math.sin(k * Math.PI * 30) * 1.3 * envelope((k - 0.14) / 0.64, 0.1, 0.2) : 0;
+      const grip = hang(SH_R, 15, aim + 0.15);
+      o.handR = toward(b.handR, [grip[0] - 2 + shake, grip[1] + 1], w);
+      o.handL = toward(b.handL, [grip[0] - 4 + shake, grip[1] + 2.5], w);
+      o.elbowR = toward([9, 1], [12.5, 2], w);
+      o.elbowL = toward([-9, 1], [3, 3], w);
+      o.dx = -0.9 * w + shake * 0.3;
+      o.head += 0.06 * w;
+      o.kneeL += 1.2 * w;
+      o.kneeR += 1.2 * w;
+      break;
+    }
+    case 'tug': {
+      // reaches, takes hold, gives it a short pull (leaning back), lets go
+      const reach = k < 0.36 ? s01(k / 0.36) : 1;
+      const pull = k > 0.36 && k < 0.8 ? bump((k - 0.36) / 0.44, 0.25) : 0;
+      const off = k > 0.8 ? s01((k - 0.8) / 0.2) : 0;
+      const tip = hang(SH_R, 15, aim);
+      o.handR = toward(toward(b.handR, tip, reach), [tip[0] - 5, tip[1] + 1], pull);
+      o.handR = toward(o.handR, b.handR, off);
+      o.elbowR = elbowTo(SH_R, o.handR, 2 + 2 * pull);
+      o.dx = 1.2 * reach * (1 - off) - 2.2 * pull;
+      o.head += 0.05 * pull;
+      o.L = { x: b.L.x - 1.2 * pull, lift: b.L.lift };
+      break;
+    }
+    case 'knock': {
+      // crouches and raps twice on the surface in front of him, head cocked to listen
+      const w = envelope(k, 0.18, 0.2);
+      const rap = (at: number) => Math.max(0, 1 - Math.abs(k - at) / 0.06);
+      const r = Math.max(rap(0.32), rap(0.56));
+      o.dy = 8.5 * w;
+      o.dx = 2 * w;
+      o.head += 0.3 * w + 0.12 * (k > 0.6 ? w : 0);
+      o.elbowR = [lerp(9, 13, w), lerp(1, 4, w)];
+      o.handR = [lerp(b.handR[0], 12, w), lerp(b.handR[1], 12 + 4 * r, w)];
+      o.handL = [lerp(b.handL[0], 4, w), lerp(b.handL[1], 6, w)];
+      o.kneeL += 2 * w;
+      o.kneeR += 2 * w;
+      break;
+    }
+    case 'shrug': {
+      // "did you see that?": hands come up and out, palms up, chin up at you, a small lift
+      const w = envelope(k, 0.2, 0.28);
+      const lift = Math.sin(Math.min(1, k / 0.6) * Math.PI) * w;
+      o.elbowL = toward([-9, 1], [-11, 0], w);
+      o.elbowR = toward([9, 1], [11, 0], w);
+      o.handL = toward(b.handL, [-15, -4 - lift], w);
+      o.handR = toward(b.handR, [15, -4 - lift], w);
+      o.dy = -0.8 * lift;
+      o.head += -0.12 * w + 0.08 * Math.sin(k * Math.PI * 2) * w;
+      break;
+    }
+  }
+  return o;
+}
