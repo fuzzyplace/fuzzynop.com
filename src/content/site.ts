@@ -3,11 +3,8 @@
 
 export type Link = { label: string; href: string };
 
-// Own profiles only — URLs exactly as listed in docs/CONTENT.md "Allowed links".
+// Own profiles only — URLs exactly as listed in docs/CONTENT.md "Allowed links". Link tree: src/content/links.ts.
 const LINKEDIN = 'https://www.linkedin.com/in/joshuaaschwartz/';
-const SOUNDCLOUD = 'https://soundcloud.com/fuzzynop';
-const SPOTIFY = 'https://open.spotify.com/artist/2KxitG0vU3vl3JaMcovgqM';
-const MIXCLOUD = 'https://www.mixcloud.com/FZZY/';
 
 export const site = {
   name: 'Josh Schwartz',
@@ -128,28 +125,11 @@ export const now = {
   areas: ['Consciousness', 'Wellness for hackers', 'AI safety', 'Cyborg psychology'],
 };
 
-/**
- * Link hub (HANDOFF §3.4). Each entry is one pieced-together hex.
- * href: null = placeholder for Z to fill (rendered hollow, aria-disabled, not focusable).
- * Never invent a URL here — only ones listed in docs/CONTENT.md.
- */
-export type HubItem = { label: string; href: string | null; kind: 'social' | 'work' | 'source' | 'sound' };
-
+/** Plate header for the circuit tree; the links themselves live in src/content/links.ts. */
 export const hubPlate = {
   eyebrow: 'Links',
   title: 'Elsewhere.',
 };
-
-export const hub: HubItem[] = [
-  { label: 'LinkedIn', href: LINKEDIN, kind: 'social' },
-  { label: 'SoundCloud', href: SOUNDCLOUD, kind: 'sound' },
-  { label: 'Spotify', href: SPOTIFY, kind: 'sound' },
-  { label: 'Mixcloud', href: MIXCLOUD, kind: 'sound' },
-  { label: 'Notes', href: null, kind: 'work' },
-  { label: 'Projects', href: null, kind: 'work' },
-  { label: 'Sources', href: null, kind: 'source' },
-  { label: 'Archive', href: null, kind: 'source' },
-];
 
 export const contact = {
   eyebrow: 'Contact',

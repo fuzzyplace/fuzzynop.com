@@ -3,10 +3,10 @@ import { ArtDefs } from './art/ArtDefs';
 import { Depth, HexLattice, SpiderLeg, Splatter } from './art/Decor';
 import { PrintedPlate } from './art/PrintedPlate';
 import { Puppeteer } from './art/Puppeteer';
+import { CircuitTree } from './components/CircuitTree';
 import { Experiment } from './components/Experiment';
-import { Honeycomb } from './components/HexShards';
 import { Cta, PlateHeader } from './components/ui';
-import { contact, experiments, hub, hubPlate, interlude, nav, site } from './content/site';
+import { contact, experiments, hubPlate, interlude, nav, site } from './content/site';
 import { variants } from './content/variants';
 import { Hero } from './sections/Hero';
 
@@ -101,20 +101,14 @@ export default function App() {
             </PrintedPlate>
           </div>
 
-          {/* ---- Hub: links, pieced together ---- */}
+          {/* ---- Links: the circuit tree (data: src/content/links.ts) ---- */}
           <div className="plate-slot relative grid lg:grid-cols-12">
             <Depth depth={0.5} className="-left-40 -top-24">
               <HexLattice cols={6} rows={6} r={38} tone="far" seed={63} />
             </Depth>
             <PrintedPlate id="links" side="right" className="mx-6 lg:col-span-8 lg:col-start-1 lg:mx-0">
-              <PlateHeader n="04" eyebrow={hubPlate.eyebrow} title={hubPlate.title} />
-              <Honeycomb
-                className="mt-10"
-                variant="link"
-                cols={4}
-                label="Links"
-                items={hub.map((h) => ({ label: h.label, href: h.href, meta: h.kind }))}
-              />
+              <PlateHeader n="↗" eyebrow={hubPlate.eyebrow} title={hubPlate.title} />
+              <CircuitTree className="mt-10" label={hubPlate.eyebrow} />
             </PrintedPlate>
           </div>
 
@@ -124,7 +118,7 @@ export default function App() {
               <Splatter size={150} seed={72} />
             </Depth>
             <PrintedPlate id="contact" side="left" tone="ink" className="mx-6 lg:col-span-5 lg:col-start-7 lg:mx-0">
-              <PlateHeader n="05" eyebrow={contact.eyebrow} title={contact.title} tone="ink" />
+              <PlateHeader n="@" eyebrow={contact.eyebrow} title={contact.title} tone="ink" />
               <Cta cta={site.cta} />
             </PrintedPlate>
           </div>
