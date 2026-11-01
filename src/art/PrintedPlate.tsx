@@ -9,15 +9,22 @@ import { useSize } from './useSize';
 /**
  * A paper-cut content plate that a rail-mounted arm 3D-prints, bottom-up, as you scroll.
  * Text is always in the DOM (screen readers, no-JS); only the visual reveal is clipped.
- * Exposes data-perch / data-printed so the Puppeteer can set the character down on it.
+ * Exposes data-perch / data-printed so the Puppeteer can set the character down on it, and, while
+ * printing, data-printing + data-arm ("baseX baseY tipX tipY", px from the plate's top-left) so he can watch it
+ * (data-arm stays while the arm retracts off the finished plate, so he can duck it).
  *
- * Scroll progress uses motion's offset convention (['start 0.95', 'end 0.7']) on cached
+ * Scroll progress uses motion's offset convention (['start 0.95', 'end 0.7'], capped so the top is
+ * done by mid-viewport) on cached
  * geometry; scroll events are coalesced into one ticker frame that writes through refs.
  */
 const OVER = 240; // space above the plate the arm works in
 const SIDE = 44; // gutter for the rail
 const START = 0.95; // progress 0: plate top at 95% of the viewport
 const END = 0.7; // progress 1: plate bottom at 70% of the viewport
+// ...or sooner: a plate is done printing by the time its top edge reaches the middle of the viewport
+// (progress 0.86 ≈ top at 50%), so a tall plate's heading isn't still unprinted under the header and
+// its top edge is a perch while there's room for the character below the header.
+const TOP_DONE = 0.43;
 const BLEED = 28; // reveal-clip overhang so the backing paper layers aren't chopped
 
 type Props = {
@@ -54,7 +61,7 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
   const progress = () => {
     const { top, height, vh } = geo.current;
     const from = top - START * vh;
-    const to = top + height - END * vh;
+    const to = Math.min(top + height - END * vh, top - TOP_DONE * vh);
     return to > from ? clamp((window.scrollY - from) / (to - from)) : 1;
   };
 
@@ -89,6 +96,10 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
     const tip = back > 0 ? { x: lerp(printTip.x, rest.x, easeInOut(back)), y: lerp(printTip.y, rest.y, easeInOut(back)) } : printTip;
     const base = { x: clamp(tip.x + dir * 80, ox - 10, ox + w + 10), y: beamY };
 
+    // for the character: a plate being printed is something to watch (and to duck when its arm swings past)
+    setAttr(outer.current, 'data-printing', printing ? '1' : null);
+    // the arm is exposed while it prints and while it swings back up off the finished plate (where he may stand)
+    setAttr(outer.current, 'data-arm', printing || (back > 0 && back < 1) ? `${(base.x - SIDE).toFixed(0)} ${(base.y - OVER).toFixed(0)} ${(tip.x - SIDE).toFixed(0)} ${(tip.y - OVER).toFixed(0)}` : null);
     setAttr(lines.current, 'display', printing ? null : 'none');
     if (printing) {
       setAttr(edgeLine.current, 'y1', edge);

@@ -64,9 +64,9 @@
   --md-sys-state-pressed: .12;
 
   /* ---- typography ---- */
-  --md-ref-typeface-display: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
+  --md-ref-typeface-display: 'Chakra Petch', ui-sans-serif, system-ui, sans-serif;
   --md-ref-typeface-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --md-ref-typeface-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --md-ref-typeface-mono: 'Share Tech Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
   /* ---- shape ---- */
   --md-sys-shape-corner-none: 0px;

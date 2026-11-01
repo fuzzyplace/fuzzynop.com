@@ -13,6 +13,7 @@ const PER_LINE = 1.15;
 const TRAVEL = 0.22; // share of each line spent moving to its start
 const RETRACT = 0.9;
 
+
 type Box = { x: number; y: number; w: number; h: number };
 
 export function Hero() {
@@ -22,12 +23,14 @@ export function Hero() {
   const { w, h } = useSize(ref);
   const reduce = useReducedMotion();
   const [boxes, setBoxes] = useState<Box[]>([]);
-  const n = hero.tagline.length;
+  const text = hero.question; // the open question (main story: docs/NARRATIVE.md), left with a blinking cursor
+  const n = text.length;
   const writeEnd = DELAY + n * PER_LINE;
 
   useLayoutEffect(() => {
     const host = ref.current?.getBoundingClientRect();
     if (!host) return;
+    lines.current.length = n;
     setBoxes(
       lines.current.map((el) => {
         const r = el!.getBoundingClientRect();
@@ -42,7 +45,7 @@ export function Hero() {
   draw.current = (time: number) => {
     const scrollY = reduce ? 0 : window.scrollY;
     // reveal fraction per line
-    const q = hero.tagline.map((_, i) => (reduce ? 1 : clamp((time - DELAY - i * PER_LINE - PER_LINE * TRAVEL) / (PER_LINE * (1 - TRAVEL)))));
+    const q = text.map((_, i) => (reduce ? 1 : clamp((time - DELAY - i * PER_LINE - PER_LINE * TRAVEL) / (PER_LINE * (1 - TRAVEL)))));
     q.forEach((v, i) => {
       const el = lines.current[i];
       if (el) el.style.clipPath = `inset(-10% ${((1 - v) * 100).toFixed(2)}% -10% 0)`;
@@ -143,7 +146,7 @@ export function Hero() {
       <div className="shell relative z-10 pb-44 pt-40">
         <p className="type-label-medium text-gray-300">{hero.eyebrow}</p>
         <h1 className="type-display-large mt-6 text-on-surface">
-          {hero.tagline.map((line, i) => (
+          {text.map((line, i) => (
             <span
               key={line}
               ref={(el) => {
@@ -152,9 +155,15 @@ export function Hero() {
               className="block w-fit py-1"
             >
               {line}
+              {i === n - 1 && (
+                <span className="caret" aria-hidden="true">
+                  _
+                </span>
+              )}
             </span>
           ))}
         </h1>
+        <p className="type-body-large mt-8 max-w-[44ch] text-on-surface-variant">{hero.lede}</p>
       </div>
 
       {/* the arm */}
