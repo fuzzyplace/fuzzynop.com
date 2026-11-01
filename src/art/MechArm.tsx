@@ -164,9 +164,10 @@ export function MechArm({ l1, l2, t, tool = 'nozzle', toolLen = t * 3.4, rail, r
 
   const cw = Math.max(1, t * 0.1);
   return (
-    <g ref={(e) => void (el.root = e)} filter="url(#ink)">
+    <g ref={(e) => void (el.root = e)}>
+      {/* static rail: filtered on its own so its full-width strip doesn't inflate the moving arm's filter region */}
       {rail && (
-        <g>
+        <g filter="url(#ink)">
           <line ref={(e) => void (el.railLine = e)} x1={rail.x1} x2={rail.x2} className="stroke-ink" strokeWidth={t * 0.32} />
           {Array.from({ length: nuts + 1 }, (_, i) => (
             <polygon key={i} ref={(e) => void (el.nuts[i] = e)} className="fill-ink" />
@@ -174,45 +175,48 @@ export function MechArm({ l1, l2, t, tool = 'nozzle', toolLen = t * 3.4, rail, r
         </g>
       )}
 
-      {/* loose cables, base → wrist, sagging */}
-      <path ref={(e) => void (el.cableA = e)} className="stroke-ink" fill="none" strokeWidth={cw} />
-      <path ref={(e) => void (el.cableB = e)} className="stroke-ink" fill="none" strokeWidth={cw * 0.8} />
+      {/* moving parts: own filter region (the arm's bbox, not the full-width rail) */}
+      <g filter="url(#ink)">
+        {/* loose cables, base → wrist, sagging */}
+        <path ref={(e) => void (el.cableA = e)} className="stroke-ink" fill="none" strokeWidth={cw} />
+        <path ref={(e) => void (el.cableB = e)} className="stroke-ink" fill="none" strokeWidth={cw * 0.8} />
 
-      {/* carriage */}
-      <rect ref={(e) => void (el.carriage = e)} width={t * 2.4} height={t * 1.6} rx={t * 0.2} className="fill-ink" />
-      <g ref={(e) => void (el.seg1 = e)}>
-        <SegmentShape len={l1} t={t} barbs={Math.max(2, Math.round(l1 / (t * 3)))} />
+        {/* carriage */}
+        <rect ref={(e) => void (el.carriage = e)} width={t * 2.4} height={t * 1.6} rx={t * 0.2} className="fill-ink" />
+        <g ref={(e) => void (el.seg1 = e)}>
+          <SegmentShape len={l1} t={t} barbs={Math.max(2, Math.round(l1 / (t * 3)))} />
+        </g>
+        <g ref={(e) => void (el.seg2 = e)}>
+          <SegmentShape len={l2} t={t * 0.78} barbs={Math.max(2, Math.round(l2 / (t * 3)))} />
+        </g>
+        <Joint r={t * 1.05} els={el.joints[0]} />
+        <Joint r={t * 0.85} els={el.joints[1]} />
+        <Joint r={t * 0.62} els={el.joints[2]} />
+
+        {tool === 'nozzle' ? (
+          <g>
+            <rect ref={(e) => void (el.stem = e)} width={t * 0.72} height={toolLen * 0.5} className="fill-ink" />
+            <polygon ref={(e) => void (el.collet = e)} className="fill-ink" />
+            <polygon ref={(e) => void (el.cone = e)} className="fill-ink" />
+            {/* fine mandibles flanking the nozzle */}
+            <path ref={(e) => void (el.mandL = e)} className="stroke-ink" fill="none" strokeWidth={cw} />
+            <path ref={(e) => void (el.mandR = e)} className="stroke-ink" fill="none" strokeWidth={cw} />
+          </g>
+        ) : (
+          <g>
+            {[0, 1].map((i) => (
+              <path key={i} ref={(e) => void (el.claw[i] = e)} className="fill-ink" />
+            ))}
+          </g>
+        )}
+
+        {tool === 'nozzle' && (
+          <g ref={(e) => void (el.glow = e)} style={{ filter: 'none' }}>
+            <circle ref={(e) => void (el.halo = e)} r={t * 0.7} className="fill-accent" filter="url(#glow)" />
+            <circle ref={(e) => void (el.spark = e)} r={Math.max(1.5, t * 0.1)} className="fill-accent" />
+          </g>
+        )}
       </g>
-      <g ref={(e) => void (el.seg2 = e)}>
-        <SegmentShape len={l2} t={t * 0.78} barbs={Math.max(2, Math.round(l2 / (t * 3)))} />
-      </g>
-      <Joint r={t * 1.05} els={el.joints[0]} />
-      <Joint r={t * 0.85} els={el.joints[1]} />
-      <Joint r={t * 0.62} els={el.joints[2]} />
-
-      {tool === 'nozzle' ? (
-        <g>
-          <rect ref={(e) => void (el.stem = e)} width={t * 0.72} height={toolLen * 0.5} className="fill-ink" />
-          <polygon ref={(e) => void (el.collet = e)} className="fill-ink" />
-          <polygon ref={(e) => void (el.cone = e)} className="fill-ink" />
-          {/* fine mandibles flanking the nozzle */}
-          <path ref={(e) => void (el.mandL = e)} className="stroke-ink" fill="none" strokeWidth={cw} />
-          <path ref={(e) => void (el.mandR = e)} className="stroke-ink" fill="none" strokeWidth={cw} />
-        </g>
-      ) : (
-        <g>
-          {[0, 1].map((i) => (
-            <path key={i} ref={(e) => void (el.claw[i] = e)} className="fill-ink" />
-          ))}
-        </g>
-      )}
-
-      {tool === 'nozzle' && (
-        <g ref={(e) => void (el.glow = e)} style={{ filter: 'none' }}>
-          <circle ref={(e) => void (el.halo = e)} r={t * 0.7} className="fill-accent" filter="url(#glow)" />
-          <circle ref={(e) => void (el.spark = e)} r={Math.max(1.5, t * 0.1)} className="fill-accent" />
-        </g>
-      )}
     </g>
   );
 }

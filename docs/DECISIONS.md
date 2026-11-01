@@ -1,6 +1,11 @@
 # Decisions & open assumptions
 
 ## Decisions
+**2026-10-31 — v2.3: arm ink filter split (Claude)**
+1. `MechArm` filters the static rail and the moving arm as two separate `#ink` groups. Desktop idle 33 → 60 fps, scroll 57 → 59 (see `docs/PERF.md`). No change to the filter itself.
+2. Chosen over baking roughness into geometry or dropping octaves because it keeps the approved look pixel-for-pixel in practice (edge-only sub-pixel diffs) and keeps the moving "boil".
+3. Next lever if needed: split PrintedPlate's gantry posts into their own filtered groups.
+
 **2026-10-31 — v2.3 phase 1: ticker + refs (Claude)**
 1. **One shared rAF ticker** (`src/art/ticker.ts`). Loops return `false` to sleep; scroll, layout (body ResizeObserver + `notifyLayout()`), and `data-printed` mutations wake them. A throwing loop drops out without freezing the stage.
 2. **Ref-based rendering:** `MechArm` / `Character` render once and are posed via `ref.current.set(...)`; attribute writes go through a change-skipping `setAttr`. No React render per frame anywhere.
@@ -38,7 +43,7 @@
 4. **v1 preserved** in `legacy/v1/` as reference; not built or deployed.
 
 ## Open assumptions — Z to confirm
-- [ ] Phase 1 kept the `#ink` rough edge on the moving hero arm even though it costs ~half the frame rate on desktop. OK to swap in a cheaper edge on moving arms (subtle visual change) in a later phase?
+- [x] ~~Phase 1 kept the `#ink` rough edge on the moving hero arm even though it costs ~half the frame rate on desktop. OK to swap in a cheaper edge on moving arms?~~ Resolved without a visual change: rail split onto its own filter layer → 60 fps with the same edge (2026-10-31).
 - [ ] Character likeness — quiff/glasses/beard read right? Beanie variant as an easter egg?
 - [ ] Want the character to *do* anything at the contact plate (wave, sit)?
 - [ ] Contact links: LinkedIn + SoundCloud labeled "Sound". Add/remove?
