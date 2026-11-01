@@ -1,14 +1,24 @@
 import { useReducedMotion } from '../art/reducedMotion';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { hero } from '../content/site';
 import { tie } from '../content/typeset';
 import { Depth, Ground, HexLattice, Ledge, SpiderLeg, Splatter } from '../art/Decor';
 import { MechArm, type ArmHandle } from '../art/MechArm';
 import { clamp, easeInOut, lerp, type Pt } from '../art/geometry';
-import { measure, notifyLayout, peekView, ticker, view } from '../art/ticker';
+import { splitLine } from '../art/glyphs';
+import { measure, notifyLayout, peekView, setAttr, ticker, view } from '../art/ticker';
 import { useSize } from '../art/useSize';
 
-/** The arm writes the tagline line by line, then withdraws and idles. */
+/**
+ * The arm writes the tagline line by line, then withdraws and idles.
+ *
+ * Character contract (docs/DESIGN_SYSTEM.md, "Character contracts"): the h1 carries the full tagline
+ * as its accessible name; the visible letters are aria-hidden spans (`data-glyph="line:index"`,
+ * rendered from the first paint; plain inline at rest, so the setting and find in page are as
+ * before) that the character can make sag, tilt and swing (src/art/targets.ts). Once the arm has written and
+ * withdrawn, the h1 gets `data-written="1"` and the line reveal clips are removed (a swinging letter
+ * is never clipped).
+ */
 const DELAY = 0.6;
 const PER_LINE = 1.15;
 const TRAVEL = 0.22; // share of each line spent moving to its start
@@ -16,6 +26,9 @@ const RETRACT = 0.9;
 
 
 type Box = { x: number; y: number; w: number; h: number };
+/** a letter's kerning, applied only while it's an inline-block (global.css `.glyph[data-glyph-block]`) */
+const kernVars = (after: number, before: number) =>
+  after || before ? ({ ...(after ? { '--ka': `${after}em` } : {}), ...(before ? { '--kb': `${before}em` } : {}) } as CSSProperties) : undefined;
 
 export function Hero() {
   const ref = useRef<HTMLElement>(null);
@@ -27,6 +40,8 @@ export function Hero() {
   const text = hero.tagline;
   const n = text.length;
   const writeEnd = DELAY + n * PER_LINE;
+  const title = useRef<HTMLHeadingElement>(null);
+  const clips = useRef<string[]>([]);
 
   // the tagline's line boxes, read in the next frame's read phase (not during the commit: no forced layout)
   useLayoutEffect(() => {
@@ -55,10 +70,13 @@ export function Hero() {
     const scrollY = reduce ? 0 : v.sy;
     // reveal fraction per line
     const q = text.map((_, i) => (reduce ? 1 : clamp((time - DELAY - i * PER_LINE - PER_LINE * TRAVEL) / (PER_LINE * (1 - TRAVEL)))));
+    const done = reduce || time >= writeEnd + RETRACT; // written and the arm withdrawn
     q.forEach((v, i) => {
       const el = lines.current[i];
-      if (el) el.style.clipPath = `inset(-10% ${((1 - v) * 100).toFixed(2)}% -10% 0)`;
+      const c = done ? '' : `inset(-10% ${((1 - v) * 100).toFixed(2)}% -10% 0)`;
+      if (el && clips.current[i] !== c) el.style.clipPath = clips.current[i] = c;
     });
+    setAttr(title.current, 'data-written', done ? '1' : null);
     if (!w) return;
 
     // arm geometry — the base rides the ceiling rail, trailing the tip, so reach stays modest
@@ -157,7 +175,7 @@ export function Hero() {
 
       <div className="shell relative z-10 pb-44 pt-40">
         <p className="type-label-medium text-gray-300">{hero.eyebrow}</p>
-        <h1 className="type-display-large mt-6 text-on-surface">
+        <h1 ref={title} aria-label={text.join(' ')} className="type-display-large mt-6 text-on-surface">
           {text.map((line, i) => (
             <span
               key={line}
@@ -165,8 +183,20 @@ export function Hero() {
                 lines.current[i] = el;
               }}
               className="block w-fit py-1"
+              aria-hidden="true"
             >
-              {line}
+              {splitLine(line).map((word, k) => (
+                <Fragment key={k}>
+                  {k > 0 && ' '}
+                  <span className="glyph-word">
+                    {word.map((c) => (
+                      <span key={c.i} className="glyph" data-glyph={`${i}:${c.i}`} style={kernVars(c.kern, c.kernBefore)}>
+                        {c.ch}
+                      </span>
+                    ))}
+                  </span>
+                </Fragment>
+              ))}
             </span>
           ))}
         </h1>

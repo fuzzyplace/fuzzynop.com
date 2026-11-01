@@ -117,6 +117,20 @@
 @media (prefers-reduced-motion: reduce) { .trust-line { animation: trust-line-still 8s steps(1, end) forwards; } }
 @media (prefers-reduced-motion: reduce) { .char-breathe, .char-armsway, .char-tremble, [data-swing] > svg { animation: none; } }
 
+/* ---- v2.5: the hero title's letters (Hero.tsx; driven by src/art/targets.ts) ----
+   At rest a letter is a plain inline span: the line shapes as one run (kerning, find in page).
+   While it moves it carries [data-glyph-block]: an inline-block (transforms need a box) with the
+   pair kerning it lost put back as margins (--kb / --ka, em, from glyphs.ts KERN). While the stage
+   drives it per frame it also carries [data-glyph-live] (no transition); resetGlyphs() drops that
+   and the letter springs home, then drops back to inline. */
+.glyph-word { white-space: nowrap; }
+.glyph[data-glyph-block] { display: inline-block; transform-origin: 50% 100%; margin-left: var(--kb, 0em); margin-right: var(--ka, 0em); }
+.glyph[data-glyph-block] + .glyph[data-glyph-block] { margin-left: 0; } /* the pair's kern is already on the first */
+@media (prefers-reduced-motion: no-preference) {
+  .glyph { transition: transform var(--md-sys-motion-duration-extra-long1) var(--md-sys-motion-easing-spring); }
+  .glyph[data-glyph-live] { transition: none; }
+}
+
 @layer base {
   /* typesetting: balanced headings, no orphans in running copy (plus tie() in src/content/typeset.ts) */
   h1, h2, h3 { text-wrap: balance; }
