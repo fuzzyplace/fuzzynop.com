@@ -1,0 +1,23 @@
+/*
+ * The character's own CSS (loaded with the lazy stage chunk, never the main bundle).
+ * Shaken: a readable tremor, uneven, pivoting on his feet. Stepped (~13 repaints/s while it
+ * lasts) so the stage loop can still sleep. Units are the character's own (he's scaled ~1.3–1.85×).
+ */
+@keyframes char-shiver {
+  0%, 100% { translate: 0 0; rotate: 0deg; }
+  12% { translate: 0.7px 0; rotate: 0.7deg; }
+  25% { translate: -0.5px 0.2px; rotate: -0.5deg; }
+  37% { translate: 0.55px -0.15px; rotate: 0.4deg; }
+  50% { translate: -0.7px 0; rotate: -0.8deg; }
+  62% { translate: 0.3px 0.2px; rotate: 0.3deg; }
+  75% { translate: -0.45px -0.1px; rotate: -0.4deg; }
+  87% { translate: 0.6px 0.1px; rotate: 0.6deg; }
+}
+.char-shiver {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: char-shiver 0.62s steps(8) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .char-shiver { animation: none; }
+}

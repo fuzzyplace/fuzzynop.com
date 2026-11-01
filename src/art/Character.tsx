@@ -1,9 +1,10 @@
 import { useImperativeHandle, useLayoutEffect, useRef, type Ref } from 'react';
 import { lerp } from './geometry';
-import { FOOT_Y, HIP_L, HIP_R, NECK, SH_L, SH_R, actPose, base, turnPose, type Action, type LegPts, type P2 } from './poses';
+import { FOOT_Y, HIP_L, HIP_R, NECK, SH_L, SH_R, actPose, applyMood, base, turnPose, type Action, type LegPts, type Mood, type P2 } from './poses';
 import type { RagPose } from './ragdoll';
 import { setAttr } from './ticker';
 import { gait } from './walk';
+import './character.css';
 
 /**
  * The hero character: an original ink silhouette of Z — short sides, textured quiff,
@@ -19,7 +20,7 @@ import { gait } from './walk';
  * `action` + `actionK` (0..1 progress) layer a body pose from poses.ts (swat / jump / climb / fall,
  * fidgets, sitting, reactions) on top of the gait. `turn` plays the about-face: an instant flip of
  * `facing`, sold by a short pivot (head leads, weight shift, front foot steps across), never a squash
- * below 0.9. `rag` (from ragdoll.ts) bends head, arms and legs about their joints while he's held or
+ * below 0.9. `mood` is his posture (poses.ts `applyMood`): hunched when wary, open when warm. `rag` (from ragdoll.ts) bends head, arms and legs about their joints while he's held or
  * falling; its angles are screen-space, so they're mirrored here when he faces -x.
  */
 export type { Action } from './poses';
@@ -37,7 +38,8 @@ export type Pose = {
   kick?: number; // sitting: -1..1 swing of the dangling shins
   amp?: number; // tap: hop height scale
   turn?: { k: number; hop: boolean }; // mid about-face, k 0..1 (facing already flipped once k ≥ FLIP)
-  tremble?: boolean; // shaken: a fine stepped CSS tremor (`char-tremble`), so the stage loop can still sleep
+  tremble?: boolean; // shaken: a stepped CSS tremor (`char-shiver`, character.css), so the stage loop can still sleep
+  mood?: Mood; // how he holds himself (wary hunch, warm and open, pushing up into a pat): under every action
 };
 export type CharacterHandle = { set: (x: number, y: number, scale: number, pose: Pose) => void };
 
@@ -83,13 +85,13 @@ export function Character({ ref }: { ref?: Ref<CharacterHandle> }) {
   useImperativeHandle(
     ref,
     () => ({
-      set(x, y, scale, { swing, dangle, facing, squash, phase = 0, walk = 0, tilt = 0, rag, action, actionK = 0, kick = 0, amp = 1, turn, tremble = false }) {
-        setAttr(el.shake, 'class', tremble ? 'char-tremble' : null);
+      set(x, y, scale, { swing, dangle, facing, squash, phase = 0, walk = 0, tilt = 0, rag, action, actionK = 0, kick = 0, amp = 1, turn, tremble = false, mood }) {
+        setAttr(el.shake, 'class', tremble ? 'char-shiver' : null);
         const legA = dangle * 0.35; // legs drift apart while carried
         const g = gait(phase, walk, STRIDE);
         const bob = g.bob;
         // standing body from the gait, then the action, then the turn, then the ragdoll
-        const o = actPose(action, actionK, base({ x: g.footL.x - legA * 10, lift: g.footL.lift }, { x: g.footR.x + legA * 9, lift: g.footR.lift }, g.arm, dangle, tilt), kick, amp);
+        const o = applyMood(actPose(action, actionK, base({ x: g.footL.x - legA * 10, lift: g.footL.lift }, { x: g.footR.x + legA * 9, lift: g.footR.lift }, g.arm, dangle, tilt), kick, amp), mood, action, actionK);
         let sx = 1;
         let headBack = o.headBack;
         if (turn) {

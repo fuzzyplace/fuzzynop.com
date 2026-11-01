@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { rng } from './geometry';
-import { FIDGETS, QUIET, REST_AFTER, decideIdle, idleDelay, kickAt, pickFidget } from './idle';
+import { FIDGETS, QUIET, REST_AFTER, decideIdle, idleDelay, kickAt, pickFidget, type Fidget } from './idle';
+import { noteRecent } from './moodVariety';
 
 describe('idle', () => {
   it('with the pointer around he only fidgets (never wanders off)', () => {
@@ -38,6 +39,38 @@ describe('idle', () => {
       last = f;
     }
     expect(seen.size).toBe(FIDGETS.length);
+  });
+
+  it('with a memory: none of the last two again, in any mood; shaken never twice running', () => {
+    const r = rng(12);
+    for (const feel of ['wary', 'tolerant', 'warm'] as const) {
+      let recent: Fidget[] = [];
+      for (let i = 0; i < 300; i++) {
+        const f = pickFidget(r, recent, feel);
+        expect(recent.slice(0, 2)).not.toContain(f);
+        recent = noteRecent(recent, f);
+      }
+    }
+    let recent: Fidget[] = [];
+    for (let i = 0; i < 200; i++) {
+      const f = pickFidget(r, recent, 'shaken');
+      expect(f).not.toBe(recent[0]);
+      recent = noteRecent(recent, f);
+    }
+  });
+
+  it('moods change what he does: tolerant tilts his head and steps closer, warm waves, wary never steps in', () => {
+    const r = rng(13);
+    const count = (feel: 'wary' | 'tolerant' | 'warm', f: Fidget) => {
+      let n = 0;
+      for (let i = 0; i < 600; i++) if (pickFidget(r, undefined, feel) === f) n++;
+      return n;
+    };
+    expect(count('tolerant', 'tilt')).toBeGreaterThan(count('wary', 'tilt') * 3);
+    expect(count('warm', 'wave')).toBeGreaterThan(60);
+    expect(count('tolerant', 'wave')).toBe(0);
+    expect(count('wary', 'step')).toBe(0);
+    expect(count('tolerant', 'step')).toBeGreaterThan(30);
   });
 
   it('delays are a few seconds, shorter once he is on his own', () => {

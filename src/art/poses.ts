@@ -47,7 +47,15 @@ export type Action =
   | 'duck' // something passes close: drops, hands over his head
   | 'land' // follow-through after a jump / fall
   | 'cower' // shaken: hunched, arms wrapped round himself, a wary glance up
-  | 'sit'; // k: 0 standing → 1 sat on the edge, legs dangling
+  | 'sit' // k: 0 standing → 1 sat on the edge, legs dangling
+  // thinking tells and reactions to the visitor
+  | 'still' // stops dead for a beat: no pose change, just nothing (the Puppeteer holds him)
+  | 'tilt' // a curious head tilt: chin comes up, a slow lean in, holds, settles
+  | 'blink' // a tiny dip of the head, like a blink
+  | 'glance' // a quick look at where he's about to go
+  | 'wave' // chin up at the pointer, a proper wave
+  | 'hop' // a small hop on the spot, arms lifting (a greeting)
+  | 'flinch'; // a quick recoil: leans back, hands up, a half step back, then eases
 
 export const SH_L: P2 = [-7, -7];
 export const SH_R: P2 = [7, -7];
@@ -89,6 +97,13 @@ export const ACT_DUR: Record<Action, number> = {
   land: 0.34,
   cower: 3.4,
   sit: 0.65,
+  still: 0.4,
+  tilt: 1.1,
+  blink: 0.32,
+  glance: 0.55,
+  wave: 1.7,
+  hop: 0.6,
+  flinch: 0.6,
 };
 /** Tap: when the hand reaches the top of the hop (what he taps reacts then). */
 export const TAP_AT = 0.45;
@@ -347,6 +362,109 @@ export function actPose(action: Action | undefined, k: number, b: Body, kick = 0
       o.head += 0.06 * w;
       break;
     }
+    case 'still':
+      break;
+    case 'tilt': {
+      // chin comes up a little past level, he leans in, holds it (a slow drift, not a snap), settles
+      const w = envelope(k, 0.22, 0.3);
+      const drift = Math.sin(k * Math.PI) * 0.05;
+      o.head += -(0.3 + drift) * w;
+      o.dx = 1.3 * w;
+      o.dy = -0.6 * w;
+      o.kneeR += 0.6 * w;
+      break;
+    }
+    case 'blink': {
+      const w = bump(k, 0.35);
+      o.head += 0.09 * w;
+      o.dy = 0.35 * w;
+      break;
+    }
+    case 'glance': {
+      // a quick look ahead (the Puppeteer aims the head at where he's going), weight forward a touch
+      const w = envelope(k, 0.25, 0.35);
+      o.head += -0.05 * w;
+      o.dx = 0.7 * w;
+      break;
+    }
+    case 'wave': {
+      // chin up at the pointer; front arm up, hand waving from the elbow
+      const w = envelope(k, 0.18, 0.22);
+      o.head += -0.32 * w;
+      o.dx = -0.4 * w;
+      const elbow: P2 = [12, -14];
+      const a = Math.sin(k * Math.PI * 7) * 0.45;
+      o.elbowR = toward([9, 1], elbow, w);
+      o.handR = toward(b.handR, [elbow[0] + Math.sin(-0.2 + a) * 10, elbow[1] - Math.cos(-0.2 + a) * 10], w);
+      break;
+    }
+    case 'hop': {
+      // a little crouch, a small hop with both arms lifting, land soft
+      const crouch = k < 0.22 ? bump(k / 0.22, 0.6) : k > 0.8 ? bump((k - 0.8) / 0.2, 0.3) * 0.6 : 0;
+      const air = k > 0.22 && k < 0.8 ? Math.sin(((k - 0.22) / 0.58) * Math.PI) : 0;
+      o.dy = 3 * crouch;
+      o.lift = 5 * air;
+      o.kneeL = b.kneeL + 2.5 * crouch + 1.5 * air;
+      o.kneeR = b.kneeR + 2.5 * crouch + 1.5 * air;
+      o.L = { x: b.L.x, lift: 1.5 * air };
+      o.R = { x: b.R.x, lift: 1.5 * air };
+      o.handL = toward(b.handL, hang(SH_L, 15, 1.2), air);
+      o.handR = toward(b.handR, hang(SH_R, 15, -1.3), air);
+      o.head += -0.18 * air;
+      break;
+    }
+    case 'flinch': {
+      // fast recoil (first ~12%), slow ease back: leans back, head pulls up and away, hands up in front
+      const w = k < 0.12 ? s01(k / 0.12) : s01((1 - k) / 0.88);
+      o.dx = -3.2 * w;
+      o.dy = 1.2 * w;
+      o.head += -0.22 * w;
+      o.L = { x: b.L.x - 2.2 * w, lift: b.L.lift };
+      o.R = { x: b.R.x - 1.2 * w, lift: b.R.lift + 0.8 * w };
+      o.elbowR = toward([9, 1], [12, -2], w);
+      o.handR = toward(b.handR, [13, -12], w);
+      o.handL = toward(b.handL, [3, -6], w);
+      o.kneeL += 1.5 * w;
+      break;
+    }
+  }
+  return o;
+}
+
+// ---------- mood: how he holds himself ----------
+
+/**
+ * A standing posture layered under everything else, blended by the Puppeteer (all 0..1-ish):
+ * - hunch: wary / shaken. Head and shoulders lower, weight back, hands drawn in to the chest,
+ *   knees soft. Looks out from under his brow (the head still tracks the pointer).
+ * - open: tolerant / warm. Taller, chin level, arms a little looser.
+ * - pat: pushing up into a hand resting over his head. Stretches up, chin lifts toward it.
+ */
+export type Mood = { hunch: number; open: number; pat: number };
+export const CALM_MOOD: Mood = { hunch: 0, open: 0, pat: 0 };
+/** Actions that drive the whole body (the posture rides along fully); the rest blend it down while they play. */
+const ROUTE: ReadonlySet<Action> = new Set(['jump', 'climb', 'fall', 'swat', 'land']);
+
+export function applyMood(b: Body, m: Mood | undefined, action?: Action, k = 0): Body {
+  if (!m || (!m.hunch && !m.open && !m.pat)) return b;
+  // an on-the-spot action owns the pose while it plays: the posture eases off under it, never pops
+  let w = !action || ROUTE.has(action) ? 1 : 1 - 0.7 * envelope(clamp(k), 0.2, 0.2);
+  if (b.legs) w *= 1 - b.legs.w; // sat: no hunch through the surface
+  if (w <= 0) return b;
+  const h = m.hunch * w;
+  const op = m.open * w;
+  const p = m.pat * w;
+  const o: Body = { ...b };
+  o.dy += 3.2 * h - 0.8 * op - 2.2 * p;
+  o.dx += -0.7 * h + 0.5 * p;
+  o.head += 0.26 * h - 0.04 * op - 0.5 * p;
+  o.handL = [o.handL[0] + 3.2 * h - 0.7 * op - 0.8 * p, o.handL[1] - 3.4 * h];
+  o.handR = [o.handR[0] - 3.8 * h + 0.7 * op - 0.6 * p, o.handR[1] - 3.8 * h];
+  o.kneeL += 1.4 * h;
+  o.kneeR += 1.4 * h;
+  if (p) {
+    o.L = { ...o.L, lift: o.L.lift + 0.9 * p }; // up on his toes
+    o.R = { ...o.R, lift: o.R.lift + 0.9 * p };
   }
   return o;
 }
