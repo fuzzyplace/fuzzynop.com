@@ -24,15 +24,26 @@ type Env = {
 
 export function createTicker(env: Env) {
   const awake = new Set<Step>();
+  const reads = new Set<() => void>(); // one-off layout reads queued for the next frame's read phase
   let id = 0;
   let last = 0;
+  let inFrame = false; // wakes during a frame are scheduled once, when it ends
 
   const frame = (now: number) => {
     id = 0;
+    inFrame = true;
     const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
     last = now;
     env.read?.();
     env.inFrame?.(true);
+    for (const read of [...reads]) {
+      reads.delete(read);
+      try {
+        read();
+      } catch (err) {
+        console.error(err);
+      }
+    }
     for (const step of [...awake]) {
       let keep = false;
       try {
@@ -43,10 +54,11 @@ export function createTicker(env: Env) {
       if (!keep) awake.delete(step);
     }
     env.inFrame?.(false);
+    inFrame = false;
     schedule();
   };
   const schedule = () => {
-    if (id || !awake.size || env.hidden()) return;
+    if (id || inFrame || (!awake.size && !reads.size) || env.hidden()) return;
     id = env.raf(frame);
   };
   let listening = false;
@@ -60,13 +72,27 @@ export function createTicker(env: Env) {
     }
   };
 
+  const listen = () => {
+    if (listening) return;
+    listening = true;
+    env.onVisibility(onVisibility);
+  };
+  /**
+   * Queue a layout read for the next frame's read phase (after the frame-start read, before any
+   * step writes): measuring there never forces an extra synchronous layout. It may wake loops,
+   * which then run in that same frame.
+   */
+  function measure(read: () => void) {
+    listen();
+    if (!awake.size && !id) last = env.now();
+    reads.add(read);
+    schedule();
+  }
+
   function loop(step: Step): Loop {
     return {
       wake() {
-        if (!listening) {
-          listening = true;
-          env.onVisibility(onVisibility);
-        }
+        listen();
         if (!awake.has(step)) {
           if (!awake.size && !id) last = env.now();
           awake.add(step);
@@ -79,7 +105,7 @@ export function createTicker(env: Env) {
     };
   }
 
-  return { loop, get running() { return id !== 0; }, get size() { return awake.size; } };
+  return { loop, measure, get running() { return id !== 0; }, get size() { return awake.size; } };
 }
 
 /** Scroll + viewport metrics. Inside a ticker frame: the values read at the frame's start. */
@@ -101,6 +127,11 @@ export function view(): Readonly<View> {
   if (!framing) readView();
   return cur;
 }
+/**
+ * The last values read (no read now: may be a frame stale). For drawing during a React commit,
+ * where a live read would force layout; a queued `measure` / loop wake corrects it before paint.
+ */
+export const peekView = (): Readonly<View> => cur;
 
 export const ticker = createTicker({
   raf: (cb) => requestAnimationFrame(cb),
@@ -111,6 +142,48 @@ export const ticker = createTicker({
   read: readView,
   inFrame: (on) => void (framing = on),
 });
+
+/**
+ * Deferred work, one callback per idle period, starting after the first frame has painted
+ * (requestIdleCallback with a timeout, so it also runs on a main thread that's never quite idle).
+ * Returns a cancel function.
+ */
+type IdleFn = (cb: () => void, opts?: { timeout: number }) => number;
+const idleQueue: (() => void)[] = [];
+let idleBusy = false;
+let painted = false;
+const pumpIdle = () => {
+  if (idleBusy || !idleQueue.length) return;
+  idleBusy = true;
+  const ric: IdleFn = window.requestIdleCallback ?? ((cb) => window.setTimeout(cb, 120));
+  const run = () =>
+    ric(
+      () => {
+        idleBusy = false;
+        idleQueue.shift()?.();
+        pumpIdle();
+      },
+      { timeout: 1500 },
+    );
+  if (painted) run();
+  else
+    requestAnimationFrame(() => {
+      painted = true;
+      run();
+    });
+};
+export function whenIdle(fn: () => void, first = false) {
+  if (first) idleQueue.unshift(fn);
+  else idleQueue.push(fn);
+  pumpIdle();
+  return () => {
+    const i = idleQueue.indexOf(fn);
+    if (i >= 0) idleQueue.splice(i, 1);
+  };
+}
+
+/** Queue a layout read for the next frame's read phase (see createTicker's `measure`). */
+export const measure = (read: () => void) => ticker.measure(read);
 
 /** Skip DOM writes when the value hasn't changed (keeps settled frames free of style work). */
 const written = new WeakMap<Element, Record<string, string | null>>();

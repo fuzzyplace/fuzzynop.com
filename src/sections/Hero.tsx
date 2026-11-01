@@ -4,7 +4,7 @@ import { hero } from '../content/site';
 import { Depth, Ground, HexLattice, Ledge, SpiderLeg, Splatter } from '../art/Decor';
 import { MechArm, type ArmHandle } from '../art/MechArm';
 import { clamp, easeInOut, lerp, type Pt } from '../art/geometry';
-import { notifyLayout, ticker, view } from '../art/ticker';
+import { measure, notifyLayout, peekView, ticker, view } from '../art/ticker';
 import { useSize } from '../art/useSize';
 
 /** The arm writes the tagline line by line, then withdraws and idles. */
@@ -27,23 +27,31 @@ export function Hero() {
   const n = text.length;
   const writeEnd = DELAY + n * PER_LINE;
 
+  // the tagline's line boxes, read in the next frame's read phase (not during the commit: no forced layout)
   useLayoutEffect(() => {
-    const host = ref.current?.getBoundingClientRect();
-    if (!host) return;
-    lines.current.length = n;
-    setBoxes(
-      lines.current.map((el) => {
-        const r = el!.getBoundingClientRect();
-        return { x: r.left - host.left, y: r.top - host.top, w: r.width, h: r.height };
-      }),
-    );
-    notifyLayout(); // the ground perch moves with w (groundH) without resizing the body
+    let live = true;
+    measure(() => {
+      const host = ref.current?.getBoundingClientRect();
+      if (!live || !host) return;
+      lines.current.length = n;
+      setBoxes(
+        lines.current.map((el) => {
+          const r = el!.getBoundingClientRect();
+          return { x: r.left - host.left, y: r.top - host.top, w: r.width, h: r.height };
+        }),
+      );
+      notifyLayout(); // the ground perch moves with w (groundH) without resizing the body
+    });
+    return () => {
+      live = false;
+    };
   }, [w, h]);
 
   // Draw one frame of the hero at `time` (s since load) — tagline reveal + arm pose. DOM writes only.
-  const draw = useRef<(time: number) => void>(() => {});
-  draw.current = (time: number) => {
-    const scrollY = reduce ? 0 : view().sy; // the frame's read phase: no forced layout after other loops' writes
+  // `v`: in a ticker frame, its read phase; during a commit, the last read (no forced layout)
+  const draw = useRef<(time: number, v?: { sy: number }) => void>(() => {});
+  draw.current = (time: number, v = view()) => {
+    const scrollY = reduce ? 0 : v.sy;
     // reveal fraction per line
     const q = text.map((_, i) => (reduce ? 1 : clamp((time - DELAY - i * PER_LINE - PER_LINE * TRAVEL) / (PER_LINE * (1 - TRAVEL)))));
     q.forEach((v, i) => {
@@ -92,7 +100,7 @@ export function Hero() {
     start.current = performance.now();
   }, []);
   useLayoutEffect(() => {
-    draw.current(reduce ? writeEnd + RETRACT : time.current);
+    draw.current(reduce ? writeEnd + RETRACT : time.current, peekView());
   });
   useEffect(() => {
     if (reduce) return;

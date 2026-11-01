@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { clamp, hexPoints, rng } from './geometry';
 import { useReducedMotion } from './reducedMotion';
-import { docTop, onLayout, ticker, view } from './ticker';
+import { docTop, measure, onLayout, ticker, view } from './ticker';
 
 /** Tone = depth. far: gray + blur (fog swallows it). mid: near-black. near: pure ink, rough edge. */
 type Tone = 'far' | 'mid' | 'near';
@@ -10,9 +10,10 @@ const toneFilter: Record<Tone, string> = { far: 'url(#far)', mid: 'url(#ink)', n
 
 /**
  * Parallax: every <Depth> on the page, moved by one ticker step per scroll frame.
- * Geometry is cached (measured on layout changes only); the step reads the frame's scroll
- * position from `view()` and writes a transform only when it changes, so off-screen layers
- * (progress pinned at 0 or 1) cost nothing.
+ * Geometry is cached and measured only in a frame's read phase (mount, layout changes), never
+ * during a React commit, so mounting the page doesn't force a synchronous layout. The step
+ * takes the frame's scroll position from `view()` and writes a transform only when it changes,
+ * so off-screen layers (progress pinned at 0 or 1) cost nothing.
  */
 type Layer = { el: HTMLDivElement; depth: number; top: number; height: number; vh: number; y: string };
 const layers = new Set<Layer>();
@@ -21,10 +22,6 @@ const shift = (ly: Layer, sy: number) => {
   const p = clamp((sy - (ly.top - ly.vh)) / Math.max(1, ly.height + ly.vh));
   return ly.depth * 140 * (1 - 2 * p);
 };
-const place = (ly: Layer, sy: number) => {
-  const y = `translateY(${shift(ly, sy).toFixed(3)}px)`;
-  if (y !== ly.y) ly.el.style.transform = ly.y = y;
-};
 const measureLayer = (ly: Layer) => {
   ly.top = docTop(ly.el);
   ly.height = ly.el.clientHeight;
@@ -32,7 +29,11 @@ const measureLayer = (ly: Layer) => {
 };
 const parallax = ticker.loop(() => {
   const { sy } = view();
-  layers.forEach((ly) => place(ly, sy));
+  layers.forEach((ly) => {
+    if (Number.isNaN(ly.top)) return; // not measured yet
+    const y = `translateY(${shift(ly, sy).toFixed(3)}px)`;
+    if (y !== ly.y) ly.el.style.transform = ly.y = y;
+  });
   return false; // one frame per scroll / layout wake
 });
 let parallaxOn = false;
@@ -57,11 +58,14 @@ export function Depth({ depth, className = '', children }: { depth: number; clas
       el.style.transform = 'none';
       return;
     }
-    const ly: Layer = { el, depth, top: 0, height: 0, vh: 0, y: '' };
-    measureLayer(ly);
-    place(ly, view().sy);
+    const ly: Layer = { el, depth, top: NaN, height: 0, vh: 0, y: '' };
     layers.add(ly);
     startParallax();
+    measure(() => {
+      if (!layers.has(ly)) return;
+      measureLayer(ly);
+      parallax.wake(); // placed in this same frame, before it paints
+    });
     return () => {
       layers.delete(ly);
     };
