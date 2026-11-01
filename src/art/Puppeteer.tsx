@@ -407,8 +407,10 @@ export function Puppeteer() {
       else if (p) {
         if (Math.abs(p.x - s.char.x) > 28) s.facing = p.x > s.char.x ? 1 : -1;
       } else s.facing = s.char.x < vp.w / 2 ? 1 : -1;
-      const turnStep = dt * 9; // ~0.2 s for a full about-face, edge-on halfway like a paper cut-out
-      s.turn = reduce ? s.facing : s.turn + clamp(s.facing - s.turn, -turnStep, turnStep);
+      const turnStep = dt * 4.5; // ~0.45 s for a full about-face, edge-on halfway like a paper cut-out
+      // rate-capped and eased into the end so the about-face settles rather than snaps
+      const dTurn = s.facing - s.turn;
+      s.turn = reduce || Math.abs(dTurn) < 0.004 ? s.facing : s.turn + clamp(dTurn * dt * 8, -turnStep, turnStep);
 
       // gait amplitude follows speed; eases out when he stops. Dragged: a weak stumble, feet scraping.
       const amtGoal = free(s.m.mode) ? clamp(Math.abs(s.walk.v) / (cfg.vmax * 0.35)) : s.m.mode === 'dragged' ? 0.35 : 0;

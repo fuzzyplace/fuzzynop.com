@@ -23,7 +23,7 @@ export type WalkCfg = {
   cycle: number; // px walked per full gait cycle (two steps)
 };
 
-export const WALK: WalkCfg = { vmax: 60, accel: 110, arrive: 20, restart: 34, cycle: 52 };
+export const WALK: WalkCfg = { vmax: 40, accel: 50, arrive: 18, restart: 30, cycle: 52 };
 
 /** Walkable offsets on a perch of `width` px: a margin each side, optionally a centred span. */
 export function perchExtent(width: number, margin: number, span?: { center: number; half: number }): Extent {
