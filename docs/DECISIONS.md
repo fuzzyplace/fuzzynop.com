@@ -57,7 +57,6 @@
 - [ ] Phase 2 walk: 60 px/s and the stride length feel right? He follows the cursor constantly (no "interest" threshold or delay) — OK, or should he only follow after the pointer rests?
 - [ ] Hero: he only walks within the pool of light on desktop (±260 px). Alternative: move the pool with him (costs a large repaint per frame).
 - [ ] Idle claw trails behind him on a leash rather than following anywhere. OK until phase 3 redoes arm behaviour?
-- [ ] Phase 1 kept the `#ink` rough edge on the moving hero arm even though it costs ~half the frame rate on desktop. OK to swap in a cheaper edge on moving arms (subtle visual change) in a later phase?
 - [ ] Character likeness — quiff/glasses/beard read right? Beanie variant as an easter egg?
 - [ ] Want the character to *do* anything at the contact plate (wave, sit)?
 - [ ] Contact links: LinkedIn + SoundCloud labeled "Sound". Add/remove?
