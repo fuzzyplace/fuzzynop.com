@@ -6,6 +6,34 @@
 
 ---
 
+## Current state (v2.4 prototype) — 2026-11-01
+Branch `claude/v2.3-living-stage-x605vc`. `npm run check` passes (111 tests). Preview deploys from this branch via the Vercel project `fuzzynop-redesign-preview`; Vercel login required.
+
+**Done**
+- **Character:** shared ticker and ref-based rendering, walk, claw state machine, ragdoll pickup and drop, swatting, and his own routes (walk / jump / climb / fall). Three hung hex stepping-stones in the hero.
+- **Explorer:** a video-game turn (no paper-thin squash), idle fidgets, wandering to points of interest (stones, plate edges, splatters, printing arms, headings), sitting, and ducking.
+- **Trust** (`src/art/trust.ts`): starts wary, a calm pointer earns trust, a grab leaves him shaken. A hidden line appears once per session at full trust.
+- **Experiment log:** EXP. 01–04 replace Before / Practice / Now (`src/components/Experiment.tsx`, copy in `src/content/site.ts`). Links and Contact badges are now "↗" and "@".
+- **Hero variants:** the default is the open question "What would / happen if_". `?hero=rotate` cycles three questions, `?hero=classic` shows the v2.3 tagline, and `?interlude=fold` moves the interlude into EXP. 04 (`src/content/variants.ts`).
+- **Circuit tree:** replaces the hex link hub. Data lives in `src/content/links.ts`; adding or retiring a link is one line there.
+
+**Unfinished / not verified**
+- **Trust:** never seen in a browser. Not checked: how the tremble and cower look, whether sitting beside the pointer mid-plate covers text, where the hidden line lands near the top of the screen and at 375 px, the timer that wakes the stage, and the touch path. Grab/drop and a full scroll were smoke-tested with no runtime errors.
+- **Header overlap:** the claw can still set him on a plate whose top is near the viewport top, so his head goes under the fixed header.
+- **Duck:** the logic is in place but was never seen to trigger. Watching the printer only happens when a plate is left half-printed.
+- **Circuit tree:** link nodes carry `data-poi="node"`, but Puppeteer only reads `data-poi="splat"`, so he doesn't visit them yet. Not tested in Safari or Firefox (it relies on container queries), on real touch devices, or with Lighthouse.
+- **Small poses:** "read" and the weight shift are subtle at desktop scale.
+- **Mobile:** the claw passes over the tagline while grabbing him (in transit, not parked).
+- **Tuning:** all of it is a guess. Walk and explore pace, turn length, trust and fear rates, and how often the claw relocates him are logged in DECISIONS.
+
+**Waiting on Z**
+- **Hero:** fixed or rotate? Keep the interlude as its own plate or fold it into EXP. 04?
+- **Labels:** nav (Log / Now / Links / Contact), the Links plate header ("Links" / "Elsewhere."), and the "↗" / "@" badges.
+- **URLs:** Calendly, socials, art/projects, public email. They show as "soon" until supplied.
+- **Mixcloud:** it's shown live, but CONTENT.md says "not currently used".
+
+**Where decisions live:** `docs/NARRATIVE.md` (story, tone, approved v2.4 lines) and `docs/DECISIONS.md` (decision log and open assumptions).
+
 ## 0. Before anything
 1. `mv _claude .claude` (Claude config staged there; it couldn't be written remotely). Restart Claude Code so `/check`, `/new-section`, `/design-review`, `/content-audit`, `/ship` and the two subagents load.
 2. Delete `src/sections/.README.old` (stray file).
