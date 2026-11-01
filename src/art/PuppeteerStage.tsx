@@ -2,7 +2,8 @@ import { useReducedMotion } from './reducedMotion';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Character, STRIDE, type Action, type CharacterHandle, type Pose } from './Character';
 import { choosePoi, collectPois, remember, type Poi, type Scene, type SceneSurface } from './explore';
-import { KICK, SIT_FOR, decideIdle, idleDelay, kickAt, kickDelay, type Fidget } from './idle';
+import { KICK, QUIET, SIT_FOR, decideIdle, idleDelay, kickAt, kickDelay, type Fidget } from './idle';
+import { noteRecent, pickVaried } from './moodVariety';
 import { ACT_DUR, FLIP, TAP_AT, TAP_HOP, TURN } from './poses';
 import { holdSpot } from './hold';
 import { MechArm, type ArmHandle } from './MechArm';
@@ -12,7 +13,29 @@ import { afoot, free, held, initial, own, transition, type Ev, type Machine, typ
 import { createRagdoll, primeRagdoll, stepRagdoll, type RagPose, type Ragdoll } from './ragdoll';
 import { onLayout, setAttr, ticker, view as viewport } from './ticker';
 import { TrustLine, type TrustLineHandle } from './TrustLine';
-import { FAR, FULL, SWAT_COST, advance, band, classify, initTrust, keepGap, nextChange, nudge, observe, pesterDist, scare, tap, uneasy, type Band, type Cond, type Trust } from './trust';
+import {
+  FAR,
+  FULL,
+  RANK,
+  SWAT_COST,
+  advance,
+  band,
+  classify,
+  freeze,
+  initTrust,
+  keepGap,
+  nextChange,
+  nudge,
+  observe,
+  pesterDist,
+  scare,
+  tap,
+  thaw,
+  uneasy,
+  type Band,
+  type Cond,
+  type Trust,
+} from './trust';
 import { WALK, clampTo, lookAngle, perchExtent, settledWalk, stepWalk, type Extent, type WalkState } from './walk';
 
 /**
@@ -50,7 +73,16 @@ import { WALK, clampTo, lookAngle, perchExtent, settledWalk, stepWalk, type Exte
  *   costs a lot: he's shaken for a while (trembles, cowers, keeps away, startles early, doesn't wander).
  *   The first time he fully trusts you in a session the hidden line appears (TrustLine). Never explained.
  *   Trust is arithmetic over elapsed time, so it changes while the loop sleeps; a timer wakes the loop
- *   when it next crosses a band.
+ *   when it next crosses a band. It survives carries and perches, and a reload (sessionStorage).
+ * - Moods read at a glance (poses.ts `applyMood`): wary he hunches and his head follows the pointer;
+ *   tolerant he stands up straight, tilts his head, steps toward what he's looking at; warm he comes
+ *   to you, looks up, waves, sits beside a resting pointer; shaken he trembles and cowers.
+ * - Turning points: crossing into tolerant / warm he stops dead, a beat, tilts his head at the pointer,
+ *   then takes one deliberate step toward it. Losing trust (rough, chasing, a swat) makes him flinch.
+ * - A pat: the pointer resting / drifting just over his head and he pushes up into it. Wary, he ducks
+ *   away the first time and accepts the second. Set down somewhere new while he trusts you, he greets
+ *   you. Touch: gentle taps near him and staying on a section build trust. Thinking tells: a glance
+ *   at where he's going before he sets off, blink-like dips, nothing twice in a row (moodVariety.ts).
  *
  * Perch rects are cached in document space; a frame does no layout reads (choosing a point of
  * interest measures decor once, every few seconds at most). The loop sleeps once he's idle and
@@ -86,9 +118,40 @@ const SIT_BESIDE: [number, number] = [40, 70]; // s he stays sat by it if it doe
 const FACE_GAP = 0.7; // s after an about-face before he turns to the pointer again
 const NODE_LIT = 1.6; // s a circuit node's trace stays lit after he taps the edge above it
 const NODE_TAP = 0.45; // progress of his crouch at which his hand meets the edge
+// moods and reactions
+const TURN_GAP = 6; // s between turning points (trust hovering on a band edge doesn't repeat it)
+const TURN_WAIT = 4; // s a turning point waits for him to be free (busy, carried) before it's dropped
+const FLINCH_GAP = 2.5; // s between flinches
+const PAT_LO = 14; // px above the top of his head where a pat zone starts
+const PAT_HI = 85; // … and ends
+const PAT_HALF = 22; // character units either side of his head that count as "over him"
+const PAT_SPEED = 260; // px/s: slow enough to be a hand, not a swipe
+const DODGE_FOR = 1.4; // s after ducking a first pat (wary) before a second try is accepted
+const LINGER_AFTER = 2.5; // s without scrolling (touch) before staying on a section counts
+const SAVE_KEY = 'fz:trust';
+/** How he holds himself in each band (poses.ts `Mood`, less the pat). */
+const POSTURE: Record<Band, { hunch: number; open: number }> = {
+  shaken: { hunch: 1.5, open: 0 },
+  wary: { hunch: 1, open: 0 },
+  tolerant: { hunch: 0, open: 0.5 },
+  warm: { hunch: 0, open: 1 },
+};
+/** Greetings when he's set down somewhere new and trusts you (picked without repeats). */
+const GREET: Record<string, Action[]> = { wave: ['wave'], hop: ['hop', 'wave'], tilt: ['tilt', 'wave'], up: ['hop', 'lookUp'] };
+const GREET_W = { wave: 1.4, hop: 1, tilt: 0.8, up: 0.7 };
+/** What he does after the step at a turning point into warm. */
+const WARM_W = { wave: 1.4, lookUp: 1, hop: 0.6, blink: 0.5 };
 
 /** Something he does on the spot: a fidget, an activity at a point of interest, a reaction. */
-type Act = { kind: Action; at: number; dur: number; reverse?: boolean; block?: boolean };
+type Act = {
+  kind: Action;
+  at: number;
+  dur: number;
+  reverse?: boolean;
+  block?: boolean; // holds him where he is (no following) while it plays
+  look?: boolean; // his head aims at the pointer while it plays
+  then?: (now: number) => void; // what happens when it ends
+};
 
 type State = {
   m: Machine;
@@ -136,7 +199,7 @@ type State = {
   goal: Poi | null; // the point of interest he's on his way to / busy at
   recent: string[];
   explored: number;
-  lastFidget: Fidget | undefined;
+  fidgets: Fidget[]; // recent fidgets, most recent first
   look: Pt | null; // document px his head turns to while busy
   amp: number; // tap hop scale
   tapped: boolean;
@@ -153,6 +216,25 @@ type State = {
   sitWake: number; // pointer timestamp a sit-beside wake was set for
   tremble: boolean;
   faceAt: number; // ms his last about-face started
+  // moods
+  band: Band; // the band he last acted on (a change = a turning point or a flinch)
+  cond: Cond; // what the pointer was last classified as doing
+  hunch: number; // posture, eased toward POSTURE[band]
+  open: number;
+  patW: number; // 0..1 pushing up into a pat
+  patting: boolean;
+  patDodged: boolean; // wary: ducked the first pat already
+  dodgeUntil: number;
+  turnPtAt: number; // ms of the last turning point
+  turnPending: { band: Band; at: number } | null; // a turning point waiting for him to be free
+  flinchAt: number;
+  flinchSwat: boolean; // the swat episode that just started opens with a flinch
+  stepGoal: number | null; // a deliberate step: walk.x he's stepping to
+  afterStep: ((now: number) => void) | null;
+  slowUntil: number; // following at a careful pace until then
+  greetAt: number; // set down somewhere new: greet the visitor then (0 = no)
+  pending: { poi: Poi; route: Move[] } | null; // where he's going once he's had a look (a glance first)
+  reacts: string[]; // recent reactions (greetings, flourishes), for no repeats
 };
 /** A fall in document px: start, initial velocity, landing (char origin), duration. */
 type Fall = { x0: number; y0: number; vx: number; vy: number; x1: number; y1: number; T: number; to: number };
@@ -238,18 +320,53 @@ export function PuppeteerStage() {
       const s = st.current;
       if (!s || reduce) return;
       // the pointer resting by him (or still shaken): he's minding it, so fidgets come at the slower pace
+      // (shaken, though, he keeps cowering and glancing round: the quicker pace, so it reads)
       const minding = !!company(s, ptr.current) || uneasy(tr.current!, now);
-      const wait = idleDelay(what, minding ? 0 : (now - attnAt) / 1000, Math.random);
+      const quiet = feel(now) === 'shaken' ? QUIET * 2 : minding ? 0 : (now - attnAt) / 1000;
+      const wait = idleDelay(what, quiet, Math.random);
       s.idleAt = now + wait * 1000;
       wakeIn(wait);
     };
 
     // ---- trust ----
-    if (!tr.current) tr.current = initTrust(performance.now());
+    if (!tr.current) {
+      // a reload in the same session keeps how he feels about you (storage can throw: then he starts wary)
+      let saved: Trust | null = null;
+      try {
+        const raw = window.sessionStorage.getItem(SAVE_KEY);
+        saved = raw ? thaw(JSON.parse(raw), performance.now(), Date.now()) : null;
+      } catch {
+        saved = null;
+      }
+      tr.current = saved ?? initTrust(performance.now());
+    }
     const trustNow = (now: number, f: (t: Trust) => Trust = (t) => advance(t, now)) => (tr.current = f(tr.current!));
     const feel = (now: number): Band => band(tr.current!, now);
-    // what the pointer has been doing, for trust (mouse / pen; touch only taps)
-    const sense = { speed: 0, approach: 0, touch: false, gone: false, last: null as { x: number; y: number; t: number; d: number } | null };
+    let saved = { v: -1, band: '' as string, at: 0 };
+    const save = (now: number, force = false) => {
+      const t = advance(tr.current!, now);
+      const b = feel(now);
+      if (!force && Math.abs(t.v - saved.v) < 0.02 && b === saved.band) return;
+      if (!force && b === saved.band && now - saved.at < 800) return;
+      saved = { v: t.v, band: b, at: now };
+      try {
+        window.sessionStorage.setItem(SAVE_KEY, JSON.stringify(freeze(t, now, Date.now())));
+      } catch {
+        // no storage: trust lasts for this page load only
+      }
+    };
+    // what the pointer has been doing, for trust (mouse / pen; touch taps, and lingering on a section)
+    const coarse = window.matchMedia('(pointer: coarse)').matches && !window.matchMedia('(hover: hover)').matches;
+    const sense = { speed: 0, approach: 0, touch: coarse, gone: false, last: null as { x: number; y: number; t: number; d: number } | null };
+    let lastScroll = -Infinity; // ms the page last scrolled (touch: lingering = not scrolling)
+    let lingerTimer = 0;
+    const events: { k: string; t: number }[] = []; // dev: what he did and when (reactions, turning points)
+    const note = (k: string, now: number) => {
+      if (!import.meta.env.DEV) return;
+      events.push({ k, t: Math.round(now) });
+      if (events.length > 200) events.shift();
+      console.debug(`[puppet] ${k}`);
+    };
     let trustTimer = 0;
     /** The pointer if it's a mouse that's about and within reach of his attention (screen px), plus its distance. */
     const company = (s: State, p: Pointer | null) => {
@@ -263,8 +380,25 @@ export function PuppeteerStage() {
       if (next === s.m) return false;
       if (import.meta.env.DEV && next.mode !== s.m.mode) console.debug(`[puppet] ${s.m.mode} → ${next.mode}`, ev.type === 'take' ? ev.plan : ev.type);
       const prev = s.m.mode;
+      const prevPlan = s.m.plan;
       s.m = next;
       // entry actions
+      if (next.mode !== 'fidget') s.pending = null; // the glance before setting off was interrupted
+      if (next.mode !== 'idle' && next.mode !== 'walking') {
+        s.stepGoal = null;
+        s.afterStep = null;
+      }
+      if (next.mode === 'swatting' && now - s.flinchAt > FLINCH_GAP * 1000 && !reduce) {
+        // the swatting episode opens with a flinch: he recoils first, then bats at it
+        s.flinchSwat = true;
+        s.flinchAt = now;
+        note('flinch:swat', now);
+      }
+      if (next.mode === 'idle' && prev === 'landing' && prevPlan && prevPlan.why !== 'edge' && prevPlan.why !== 'press') {
+        // set down somewhere new: if he trusts you he greets you once he's found his feet
+        s.greetAt = now + rand(250, 600);
+        wakeIn((s.greetAt - now) / 1000);
+      }
       if (next.mode === 'carried' || next.mode === 'dragged') {
         const plan = next.plan!;
         s.from = { ...s.char };
@@ -381,14 +515,120 @@ export function PuppeteerStage() {
       s.act = { kind, at: now, dur: ACT_DUR[kind], ...extra };
       wakeIn(s.act.dur);
     };
+    /** Where the visitor is, as far as he knows (screen px): the mouse, or the last tap. Null = no idea. */
+    const visitor = (): Pt | null => {
+      const p = ptr.current;
+      if (!p || (sense.gone && !sense.touch)) return null;
+      return { x: p.x, y: p.y };
+    };
+    const faceTo = (s: State, x: number) => {
+      if (Math.abs(x - s.char.x) > 10) s.facing = x > s.char.x ? 1 : -1;
+    };
+    /** One deliberate step (walk.x offset `to`), at a careful pace; `then` when he's stopped. */
+    const startStep = (s: State, to: number, then: ((now: number) => void) | null = null) => {
+      if (s.idx < 0) return false;
+      const x = clampTo(to, cache[s.idx].ext);
+      if (Math.abs(x - s.walk.x) < 5) return false;
+      s.stepGoal = x;
+      s.afterStep = then;
+      return true;
+    };
+    /** px of a deliberate step toward `x` (screen), not closer than `gap` px to it. */
+    const stepToward = (s: State, x: number, gap: number) => {
+      const dir = x > s.char.x ? 1 : -1;
+      const room = Math.abs(x - s.char.x) - gap;
+      const len = Math.min(13 * scale, room);
+      return len >= 6 ? s.walk.x + dir * len : null;
+    };
+    /** Play a sequence of acts, one after another (`then` chains them). */
+    const chain = (s: State, now: number, acts: (Partial<Act> & { kind: Action })[], last?: (now: number) => void) => {
+      const run = (i: number, t: number) => {
+        if (i >= acts.length) return last?.(t);
+        const a = acts[i];
+        s.act = { at: t, dur: ACT_DUR[a.kind], ...a, then: (t2) => run(i + 1, t2) };
+        wakeIn(s.act.dur);
+      };
+      run(0, now);
+    };
+    const freeNow = (s: State) => (s.m.mode === 'idle' || s.m.mode === 'walking') && s.idx >= 0 && !reduce;
+    /**
+     * The turning point: he's just come to trust you more. He stops dead, a beat, tilts his head at
+     * the pointer, then takes one deliberate step toward it. Into warm, a flourish after the step.
+     */
+    const turningPoint = (s: State, to: Band, now: number) => {
+      const v = visitor();
+      s.turnPending = null;
+      s.turnPtAt = now;
+      s.walk = { ...s.walk, v: s.walk.v * 0.25 };
+      s.stepGoal = null;
+      if (v) faceTo(s, v.x);
+      note(`turn:${to}`, now);
+      chain(s, now, [
+        { kind: 'still', dur: rand(0.35, 0.5), block: true, look: true },
+        { kind: 'tilt', dur: rand(0.9, 1.15), block: true, look: true },
+      ], (t) => {
+        const vv = visitor();
+        const at = vv ? stepToward(s, vv.x, to === 'warm' ? 36 : 70) : null;
+        const flourish = (t2: number) => {
+          s.slowUntil = t2 + 1500; // the rest of the way, carefully
+          if (to !== 'warm' || !freeNow(s)) return;
+          const k = pickVaried(WARM_W, s.reacts, Math.random) ?? 'wave';
+          s.reacts = noteRecent(s.reacts, k, 4);
+          chain(s, t2, [{ kind: k as Action, look: true }]);
+        };
+        if (at === null || !startStep(s, at, flourish)) flourish(t);
+        else note('step', t);
+      });
+    };
+    /** Trust just dropped (rough, chased, swatted at): a quick recoil, leaning back. */
+    const flinch = (s: State, now: number) => {
+      if (reduce || now - s.flinchAt < FLINCH_GAP * 1000 || s.idx < 0) return;
+      if (s.m.mode === 'fidget') go(s, { type: 'done' }, now);
+      if (s.m.mode === 'swatting' || !freeNow(s)) return;
+      const v = visitor();
+      if (v) faceTo(s, v.x);
+      s.flinchAt = now;
+      s.stepGoal = null;
+      s.walk = { ...s.walk, v: 0 };
+      note('flinch', now);
+      chain(s, now, [{ kind: 'flinch', dur: ACT_DUR.flinch * rand(0.9, 1.15), block: true }]);
+    };
+    /** Set down somewhere new and he trusts you: he looks for you and says hello. */
+    const greet = (s: State, now: number) => {
+      s.greetAt = 0;
+      if (!freeNow(s) || s.act || RANK[feel(now)] < RANK.tolerant) return;
+      const v = visitor();
+      faceTo(s, v ? v.x : vp.w / 2);
+      const k = pickVaried(GREET_W, s.reacts, Math.random) ?? 'wave';
+      s.reacts = noteRecent(s.reacts, k, 4);
+      note(`greet:${k}`, now);
+      chain(s, now, GREET[k].map((kind) => ({ kind, look: true })));
+    };
+    /** Wary, a hand over his head the first time: he ducks out from under it. */
+    const dodge = (s: State, p: Pointer, now: number) => {
+      s.patDodged = true;
+      s.dodgeUntil = now + DODGE_FOR * 1000;
+      faceTo(s, p.x);
+      note('dodge', now);
+      const away = s.walk.x + (p.x > s.char.x ? -1 : 1) * 16 * scale;
+      chain(s, now, [{ kind: 'duck', block: true }], () => void startStep(s, away));
+    };
     const startFidget = (s: State, f: Fidget, now: number) => {
+      s.fidgets = noteRecent(s.fidgets, f, 3);
+      if (f === 'step') {
+        // a pace toward whatever he's facing (the pointer, usually), then a curious look
+        const v = visitor();
+        const at = v && Math.abs(v.x - s.char.x) > 12 ? stepToward(s, v.x, keepGap(tr.current!, now) - 20) : s.walk.x + s.facing * 11 * scale;
+        if (at !== null && startStep(s, at, (t) => freeNow(s) && !s.act && chain(s, t, [{ kind: 'tilt', look: !!v }]))) return note('fidget:step', now);
+        f = 'tilt';
+      }
       if (!go(s, { type: 'fidget' }, now)) return;
-      s.lastFidget = f;
+      note(`fidget:${f}`, now);
       s.goal = null;
       s.look = null;
-      const near = feel(now) === 'warm' ? company(s, ptr.current) : null;
+      // at ease with you (or curious about you: a head tilt, a wave): he turns to the pointer and looks at it
+      const near = feel(now) === 'warm' || f === 'tilt' || f === 'wave' ? company(s, ptr.current) : null;
       if (near) {
-        // at ease with you: he turns to the pointer, and looks at (or up at) it
         if (Math.abs(near.p.x - s.char.x) > 12) s.facing = near.p.x > s.char.x ? 1 : -1;
       } else if (f === 'lookUp' && Math.abs(s.hoverX - s.char.x) > 20) s.facing = s.hoverX > s.char.x ? 1 : -1; // toward the claw
       play(s, f, now);
@@ -501,12 +741,30 @@ export function PuppeteerStage() {
         arrive(s, now);
         return true;
       }
+      // a thinking tell: most times he stops and looks where he's going first, a beat, then sets off
+      if (!reduce && Math.random() < 0.75 && go(s, { type: 'fidget' }, now)) {
+        const to = poi.look ?? { x: route[route.length - 1].to.x, y: route[route.length - 1].to.y - 30 * scale };
+        const sx = viewport().sx;
+        faceTo(s, route[0].to.x - sx);
+        s.look = to;
+        s.goal = poi;
+        s.pending = { poi, route };
+        play(s, 'glance', now, { dur: rand(0.45, 0.95) });
+        note(`glance:${poi.id}`, now);
+        return true;
+      }
+      beginRoute(s, poi, route, now);
+      return true;
+    };
+    const beginRoute = (s: State, poi: Poi, route: Move[], now: number) => {
+      s.goal = poi;
+      goalNode = poi.kind === 'node' && poi.target !== undefined ? nodeEls[poi.target] : undefined;
       s.route = route;
       s.leg = 0;
       s.legAt = now;
+      s.ignoreBefore = now;
       go(s, { type: 'explore' }, now);
       s.idx = poi.s;
-      return true;
     };
     /** At the point of interest: face it and do the thing. */
     const arrive = (s: State, now: number) => {
@@ -657,7 +915,7 @@ export function PuppeteerStage() {
           goal: null,
           recent: [],
           explored: 0,
-          lastFidget: undefined,
+          fidgets: [],
           look: null,
           amp: 1,
           tapped: false,
@@ -674,6 +932,23 @@ export function PuppeteerStage() {
           sitWake: 0,
           tremble: false,
           faceAt: 0,
+          band: feel(now),
+          cond: 'alone',
+          ...POSTURE[feel(now)],
+          patW: 0,
+          patting: false,
+          patDodged: false,
+          dodgeUntil: 0,
+          turnPtAt: 0,
+          turnPending: null,
+          flinchAt: 0,
+          flinchSwat: false,
+          stepGoal: null,
+          afterStep: null,
+          slowUntil: 0,
+          greetAt: 0,
+          pending: null,
+          reacts: [],
         };
         armIdle(now);
       }
@@ -681,16 +956,36 @@ export function PuppeteerStage() {
       const mode = () => s.m.mode;
       const p = ptr.current;
       // ---- trust: what the pointer has been doing since the last frame / wake ----
+      const mouse = !!p && !sense.touch && !sense.gone;
+      // the pointer just over his head, roughly over him (a hand reaching out: a pat)
+      const headTop = s.char.y - (TALL - FEET) * scale;
+      const overHead = mouse && (free(mode()) || own(mode())) && s.idx >= 0 && Math.abs(p!.x - (s.char.x + 2 * scale * s.shown)) <= PAT_HALF * scale && headTop - p!.y >= 0 && headTop - p!.y <= PAT_HI + 60;
+      const gentleOver = overHead && headTop - p!.y >= PAT_LO && headTop - p!.y <= PAT_HI && (sense.speed <= PAT_SPEED || now - p!.t > 250);
       {
         const md = mode();
+        const before = feel(now);
+        // a hand over his head: tolerant or warm he pushes up into it; wary he ducks out once, then lets it
+        let pat = false;
+        if (gentleOver && before !== 'shaken') {
+          if (before === 'wary' && !s.patDodged) {
+            if (freeNow(s) && !s.act) dodge(s, p!, now);
+            else s.patDodged = !reduce ? s.patDodged : true;
+          } else pat = now >= s.dodgeUntil;
+        }
+        if (pat && !s.patting) note('pat', now);
+        s.patting = pat;
         let cond: Cond;
         if (s.m.plan?.kind === 'hand' || md === 'falling') cond = 'held';
         else if (!afoot(md) && md !== 'landing') cond = 'neutral'; // the claw has him: nothing earned or lost
         else {
-          const d = p && !sense.touch && !sense.gone ? Math.hypot(p.x - s.char.x, p.y - (s.char.y - 8 * scale)) : null;
-          cond = classify({ d, speed: sense.speed, approach: sense.approach, still: p ? (now - p.t) / 1000 : Infinity, touch: sense.touch });
+          const d = mouse ? Math.hypot(p!.x - s.char.x, p!.y - (s.char.y - 8 * scale)) : null;
+          const linger = sense.touch && now - lastScroll >= LINGER_AFTER * 1000 && s.idx >= 0 && !!lastSeen[s.idx]?.visible;
+          cond = classify({ d, speed: sense.speed, approach: sense.approach, still: p ? (now - p.t) / 1000 : Infinity, touch: sense.touch, pat, linger });
         }
+        if ((cond === 'rough' || cond === 'chase') && s.cond !== cond && RANK[before] >= RANK.wary) flinch(s, now); // that costs him
+        s.cond = cond;
         const t = trustNow(now, (t) => observe(t, now, cond));
+        save(now);
         if (t.full && !lineShown.current && afoot(md) && s.idx >= 0) {
           // the first time he fully trusts you: the hidden line, above him (once a session; TrustLine guards it)
           lineShown.current = true;
@@ -699,6 +994,23 @@ export function PuppeteerStage() {
       }
       const fl = feel(now);
       s.tremble = fl === 'shaken' && !reduce;
+      // ---- his mood changed: a turning point (he trusts you more) or a flinch (less) ----
+      if (fl !== s.band) {
+        const up = RANK[fl] > RANK[s.band];
+        if (up && RANK[fl] >= RANK.tolerant) s.turnPending = { band: fl, at: now };
+        else if (!up) {
+          s.turnPending = null;
+          if (fl !== 'shaken') flinch(s, now); // a grab is its own reaction (he's in the claw)
+        }
+        note(`band:${s.band}->${fl}`, now);
+        s.band = fl;
+      }
+      if (s.turnPending) {
+        // under a hand already (a pat): the moment is that; no separate turning point
+        if (now - s.turnPending.at > TURN_WAIT * 1000 || reduce || s.patting) s.turnPending = null;
+        else if (freeNow(s) && !s.act && now - s.turnPtAt > TURN_GAP * 1000) turningPoint(s, s.turnPending.band, now);
+      }
+      if (s.greetAt && now >= s.greetAt) greet(s, now);
       const heldPt = { ...holdAt(sx, sy) };
       heldPt.x += Math.sin(now / 1400) * 6;
       heldPt.y += Math.cos(now / 1100) * 4;
@@ -759,13 +1071,33 @@ export function PuppeteerStage() {
         if (p && !reduce) {
           const d = Math.hypot(p.x - s.char.x, p.y - (s.char.y - 8 * scale));
           const pd = pesterDist(tr.current!, now);
-          if (mode() !== 'swatting' && d < pd && now - p.t < 500) {
+          if (mode() !== 'swatting' && d < pd && now - p.t < 500 && !(overHead && fl !== 'shaken')) {
             if (go(s, { type: 'pester' }, now)) trustNow(now, (t) => nudge(t, now, -SWAT_COST));
           } else if (mode() === 'swatting' && (d > Math.max(pd, PESTER) * 1.8 || now - p.t > 900)) go(s, { type: 'clear' }, now);
         }
         const swatting = mode() === 'swatting';
-        const blocked = !!s.act?.block && now < s.act.at + s.act.dur * 1000; // standing up first
-        const follow = !!p && !reduce && !s.holdUntil && p.t > s.ignoreBefore && !blocked;
+        const blocked = !!s.act?.block && now < s.act.at + s.act.dur * 1000; // standing up first / a beat / a flinch
+        // a hand held over him: he doesn't back off sideways from it (he leans into it, or ducks it)
+        const handOver = overHead && fl !== 'shaken' && (sense.speed <= PAT_SPEED * 1.5 || now - p!.t > 250);
+        const stepping = s.stepGoal !== null && !blocked && !swatting;
+        const follow = !!p && !reduce && !s.holdUntil && p.t > s.ignoreBefore && !blocked && !handOver && !stepping;
+        if (stepping) {
+          // a deliberate step: slow, all the way (no arrival slack)
+          const x0 = s.walk.x;
+          const ph0 = s.walk.phase;
+          s.walk = stepWalk(s.walk, s.stepGoal!, dt, ext, { ...cfg, vmax: cfg.vmax * 0.5, arrive: 3, restart: 0 });
+          s.walk.phase = (((ph0 + ((s.walk.x - x0) * (s.facing || 1)) / cfg.cycle) % 1) + 1) % 1; // a step back is a step back
+          s.anchored = false;
+          if (!s.walk.walking) {
+            s.walk = { ...s.walk, v: 0 };
+            const then = s.afterStep;
+            s.stepGoal = null;
+            s.afterStep = null;
+            then?.(now);
+          }
+        } else if (!follow && !swatting && !settledWalk(s.walk)) {
+          s.walk = stepWalk(s.walk, s.walk.x, dt, ext, cfg); // held up mid-stride: ease to a stop where he is
+        }
         if (follow || swatting) {
           const prevX = s.walk.x;
           const prevPhase = s.walk.phase;
@@ -773,7 +1105,7 @@ export function PuppeteerStage() {
           if (Math.abs(s.walk.x - raw) > 8) s.side = s.walk.x > raw ? 1 : -1;
           const goal = swatting ? s.walk.x + (p!.x > s.char.x ? -70 : 70) : raw + s.side * keepGap(tr.current!, now);
           backing = !swatting && Math.sign(goal - s.walk.x) === s.side && Math.abs(goal - s.walk.x) > 4;
-          s.walk = stepWalk(s.walk, goal, dt, ext, swatting ? { ...cfg, vmax: cfg.vmax * 0.8 } : cfg);
+          s.walk = stepWalk(s.walk, goal, dt, ext, swatting ? { ...cfg, vmax: cfg.vmax * 0.8 } : now < s.slowUntil ? { ...cfg, vmax: cfg.vmax * 0.6 } : cfg);
           const moved = s.walk.x - prevX;
           if (moved) {
             s.anchored = false;
@@ -809,7 +1141,7 @@ export function PuppeteerStage() {
       if (byHand && mode() === 'carried' && !holding) go(s, { type: 'release' }, now);
 
       // ---- his own ideas: the pointer rests over another printed plate → find a way there ----
-      if (free(mode()) && mode() !== 'swatting' && s.idx >= 0 && !reduce && p && p.t > s.ignoreBefore && (fl === 'tolerant' || fl === 'warm')) {
+      if (free(mode()) && mode() !== 'swatting' && s.idx >= 0 && !reduce && p && p.t > s.ignoreBefore && (fl === 'tolerant' || fl === 'warm') && !overHead) {
         // ledges are small: a generous zone above them counts as resting over them
         const over = (q: (typeof ps)[number], i: number) =>
           cache[i].ledge
@@ -839,7 +1171,7 @@ export function PuppeteerStage() {
       // ---- left alone: fidget, explore, sit — or the claw has an idea ----
       const near = company(s, p);
       const still = p ? (now - p.t) / 1000 : 0;
-      if (mode() === 'idle' && s.idx >= 0 && !reduce && !s.walk.walking && !s.holdUntil && !s.act && near && fl === 'warm' && !uneasy(tr.current!, now)) {
+      if (mode() === 'idle' && s.idx >= 0 && !reduce && !s.walk.walking && !s.holdUntil && !s.act && !s.patting && s.stepGoal === null && near && fl === 'warm' && !uneasy(tr.current!, now)) {
         // fully at ease and the pointer resting right by him: he sits down beside it
         const by = Math.abs(near.p.x - s.char.x) < 110 && Math.abs(near.p.y - s.char.y) < 240;
         if (by && still >= SIT_REST) sitBeside(s, near.p, now);
@@ -848,11 +1180,11 @@ export function PuppeteerStage() {
           wakeIn(SIT_REST - still);
         }
       }
-      if (mode() === 'idle' && s.idx >= 0 && !reduce && now >= s.idleAt && !s.walk.walking && !s.holdUntil && !s.act) {
+      if (mode() === 'idle' && s.idx >= 0 && !reduce && now >= s.idleAt && !s.walk.walking && !s.holdUntil && !s.act && !s.patting && s.stepGoal === null && !s.turnPending) {
         const quiet = (now - attnAt) / 1000;
         // shaken, he won't wander off; with the pointer about he stays with it (and minds it)
         const stay = uneasy(tr.current!, now) || !!near;
-        const c = decideIdle({ quiet, explored: s.explored, last: s.lastFidget, rand: Math.random, feel: fl, stay });
+        const c = decideIdle({ quiet, explored: s.explored, recent: s.fidgets, rand: Math.random, feel: fl, stay });
         if (c.kind === 'fidget') startFidget(s, c.fidget, now);
         else if (c.kind === 'claw') clawRelocate(s, ps, now);
         else if (!startExplore(s, c.kind === 'rest' ? 'rest' : 'explore', ps, now) && !(c.kind === 'rest' && startExplore(s, 'explore', ps, now))) {
@@ -864,7 +1196,11 @@ export function PuppeteerStage() {
       }
 
       // ---- busy: the thing he's doing plays out; sitting has its own clock ----
-      if (mode() === 'fidget' && (!s.act || now >= s.act.at + s.act.dur * 1000)) go(s, { type: 'done' }, now);
+      if (mode() === 'fidget' && (!s.act || now >= s.act.at + s.act.dur * 1000)) {
+        const pend = s.pending; // had his look: now he goes
+        go(s, { type: 'done' }, now);
+        if (pend && mode() === 'idle') beginRoute(s, pend.poi, pend.route, now);
+      }
       if (mode() === 'sitting') {
         if (now >= s.sitUntil) {
           go(s, { type: 'attend' }, now); // had enough: gets up
@@ -908,9 +1244,16 @@ export function PuppeteerStage() {
       let ragdoll = false;
       s.action = undefined;
       if (m.mode === 'swatting') {
-        s.action = 'swat';
-        s.actionK = (((now - m.since) / 1000 / SWAT) % 1 + 1) % 1;
-      }
+        const t = (now - m.since) / 1000;
+        const fd = s.flinchSwat ? ACT_DUR.flinch * 0.75 : 0; // the recoil before the first swat
+        if (t < fd) {
+          s.action = 'flinch';
+          s.actionK = (t / fd) * 0.75; // ends three quarters back up, straight into the swat
+        } else {
+          s.action = 'swat';
+          s.actionK = ((((t - fd) / SWAT) % 1) + 1) % 1;
+        }
+      } else s.flinchSwat = false;
       // shuffling out to the edge as he sits / back as he stands
       if (s.act?.kind === 'sit') s.seat = lerp(s.seatFrom, s.seatTo, easeInOut(clamp((now - s.act.at) / 1000 / s.act.dur)));
       switch (m.mode) {
@@ -1071,8 +1414,16 @@ export function PuppeteerStage() {
         if (s.act && now >= s.act.at + s.act.dur * 1000) s.act = null;
       } else if (s.act) {
         const u = (now - s.act.at) / 1000 / s.act.dur;
-        if (u >= 1) s.act = null;
-        else if (!s.action && !ragdoll) {
+        if (u >= 1) {
+          const then = s.act.then;
+          s.act = null;
+          if (then && !ragdoll && (free(s.m.mode) || own(s.m.mode))) then(now); // the next beat of a sequence
+          if (s.act && !s.action) {
+            // it starts this frame: no blank frame between beats
+            s.action = (s.act as Act).kind;
+            s.actionK = 0;
+          }
+        } else if (!s.action && !ragdoll) {
           s.action = s.act.kind;
           s.actionK = s.act.reverse ? 1 - u : u;
           if (s.act.kind === 'crouch' && !s.tapped && u >= NODE_TAP && s.goal?.kind === 'node' && s.goal.target !== undefined) {
@@ -1129,6 +1480,8 @@ export function PuppeteerStage() {
         s.facing = p.x > s.char.x ? 1 : -1; // faces the pest while backing off
       } else if (handled || s.m.mode === 'falling') {
         if (Math.abs(vx) > 30) s.facing = vx > 0 ? 1 : -1;
+      } else if (s.stepGoal !== null) {
+        // a deliberate step (or a step back out from under a hand): he keeps facing the way he was
       } else if (backing && p) {
         if (Math.abs(p.x - s.char.x) > 12) s.facing = p.x > s.char.x ? 1 : -1; // edges away, keeping an eye on it
       } else if (Math.abs(s.walk.v) > 2) s.facing = s.walk.v > 0 ? 1 : -1;
@@ -1164,15 +1517,32 @@ export function PuppeteerStage() {
       const looking = free(s.m.mode) && !reduce && fresh && !s.walk.walking && (now - p!.t) / 1000 < LOOK;
       const headY = s.char.y - 28 * scale;
       const aim = own(s.m.mode) && s.m.mode !== 'exploring' && s.look ? { x: s.look.x - viewport().sx, y: s.look.y - viewport().sy } : null;
-      // at ease with you, he keeps an eye on the pointer when it rests by him (a steady aim: the loop still settles)
-      const gaze = !looking && !reduce && s.m.mode === 'idle' && fl === 'warm' && near && !s.walk.walking ? near.p : null;
-      const tiltGoal = looking
-        ? lookAngle(p!.x - s.char.x, p!.y - headY)
-        : aim
-          ? lookAngle(aim.x - s.char.x, aim.y - headY, 0.3)
-          : gaze
-            ? lookAngle(gaze.x - s.char.x, gaze.y - headY, 0.6)
-            : 0;
+      // at ease with you, he keeps an eye on the pointer when it rests by him (a steady aim: the loop still settles).
+      // Wary or shaken he never takes his eyes off it, even backing away.
+      const watchful = (fl === 'wary' || fl === 'shaken') && free(s.m.mode);
+      const gaze = !reduce && near && ((s.m.mode === 'idle' && fl === 'warm' && !s.walk.walking) || watchful) ? near.p : null;
+      // a beat of a reaction (turning point, greeting) looks at you; with no pointer, up and out
+      const v = s.act?.look && !reduce ? (visitor() ?? { x: s.char.x + s.facing * 160, y: s.char.y - 260 }) : null;
+      const tiltGoal = s.patW > 0.4
+        ? 0 // a pat: the posture lifts his chin into it
+        : v
+          ? lookAngle(v.x - s.char.x, v.y - headY, 0.4)
+          : gaze && watchful
+            ? lookAngle(gaze.x - s.char.x, gaze.y - headY, 0.45)
+            : looking
+              ? lookAngle(p!.x - s.char.x, p!.y - headY)
+              : aim
+                ? lookAngle(aim.x - s.char.x, aim.y - headY, 0.3)
+                : gaze
+                  ? lookAngle(gaze.x - s.char.x, gaze.y - headY, 0.6)
+                  : 0;
+      // ---- how he holds himself: eases toward his mood's posture (reduced motion: just is) ----
+      const standing = afoot(s.m.mode) || s.m.mode === 'landing';
+      const pg = POSTURE[fl];
+      const ease = (cur: number, goal: number, base: number) => (reduce || Math.abs(goal - cur) < 0.004 ? goal : lerp(cur, goal, 1 - Math.pow(base, dt)));
+      s.hunch = ease(s.hunch, standing ? pg.hunch : 0, 0.04);
+      s.open = ease(s.open, standing ? pg.open : 0, 0.08);
+      s.patW = ease(s.patW, s.patting && standing ? 1 : 0, s.patting ? 0.01 : 0.05);
       s.tilt = Math.abs(tiltGoal - s.tilt) < 0.002 ? tiltGoal : lerp(s.tilt, tiltGoal, 1 - Math.pow(0.004, dt));
 
       // the idle claw trails behind him on a leash around its resting spot (never at rest over his text);
@@ -1196,6 +1566,10 @@ export function PuppeteerStage() {
         !s.turnAt &&
         s.shown === s.facing &&
         s.tilt === tiltGoal &&
+        s.hunch === (standing ? pg.hunch : 0) &&
+        s.open === (standing ? pg.open : 0) &&
+        s.patW === (s.patting && standing ? 1 : 0) &&
+        s.stepGoal === null &&
         !looking &&
         s.hoverX === hoverGoal &&
         Math.abs(s.swing) < 1e-4 &&
@@ -1246,6 +1620,7 @@ export function PuppeteerStage() {
         amp: s.amp,
         turn,
         tremble: s.tremble,
+        mood: { hunch: s.hunch, open: s.open, pat: s.patW },
       };
       // character pivots on the collar while the claw has him
       const pivot = Math.abs(s.swing) > 1e-4;
@@ -1301,6 +1676,34 @@ export function PuppeteerStage() {
           },
           get feel() {
             return feel(performance.now());
+          },
+          /** what the pointer was last classified as doing (trust.ts Cond) */
+          get cond() {
+            return st.current?.cond;
+          },
+          get patting() {
+            return st.current?.patting;
+          },
+          get posture() {
+            const s = st.current;
+            return s && { hunch: s.hunch, open: s.open, pat: s.patW };
+          },
+          /** what he did and when: turning points, flinches, greetings, pats, fidgets */
+          events,
+          /** back to a wary stranger (also forgets the session copy) */
+          reset() {
+            try {
+              window.sessionStorage.removeItem(SAVE_KEY);
+            } catch {
+              // nothing stored
+            }
+            tr.current = initTrust(performance.now());
+            const s = st.current;
+            if (s) {
+              s.patDodged = false;
+              s.band = feel(performance.now());
+            }
+            loop.wake();
           },
         },
       });
@@ -1409,9 +1812,26 @@ export function PuppeteerStage() {
     };
     const onScroll = () => {
       attnAt = performance.now();
+      lastScroll = attnAt;
       armIdle(attnAt, 'attention');
+      if (sense.touch) {
+        // staying on a section starts to count once the scrolling stops (one timer, re-armed)
+        window.clearTimeout(lingerTimer);
+        lingerTimer = window.setTimeout(wake, LINGER_AFTER * 1000 + 20);
+      }
       wake();
     };
+    // a hidden page earns nothing (he isn't being looked at); a reload in this session keeps trust
+    const onVisibility = () => {
+      const now = performance.now();
+      if (document.hidden) {
+        trustNow(now, (t) => observe(t, now, 'neutral'));
+        save(now, true);
+      } else wake();
+    };
+    const onPageHide = () => save(performance.now(), true);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', onPageHide);
     window.addEventListener('pointermove', onMove, { passive: true });
     window.addEventListener('pointerdown', onDown);
     window.addEventListener('touchmove', onTouchMove, { passive: false });
@@ -1437,7 +1857,11 @@ export function PuppeteerStage() {
       window.removeEventListener('pointercancel', onCancel);
       window.removeEventListener('scroll', onScroll);
       document.removeEventListener('mouseout', onOut);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', onPageHide);
       window.clearTimeout(trustTimer);
+      window.clearTimeout(lingerTimer);
+      save(performance.now(), true);
       unlightNode();
     };
   }, [vp, reduce]);
