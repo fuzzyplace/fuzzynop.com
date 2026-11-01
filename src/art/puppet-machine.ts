@@ -32,7 +32,19 @@ export type Mode =
   | 'exploring'
   | 'fidget'
   | 'sitting';
-export type Why = 'scroll' | 'lost' | 'edge' | 'relocate' | 'press' | 'enter';
+export type Why = 'scroll' | 'lost' | 'edge' | 'relocate' | 'press' | 'enter' | ProbeWhy;
+
+// ---- probe ----
+/**
+ * A probe (probeDriver.ts) can ask the claw for him: set him down beside a target ("heist": `to: -1`,
+ * the claw holds him in the air next to it, then `dangling` while he works) or on a surface he can't
+ * walk to, and to bring him back after. It's one of the claw's own whims: it never outranks the page
+ * (scroll / perch lost) or the user, and the transitions are the ordinary carry ones.
+ */
+export type ProbeWhy = 'probe';
+/** The claw is handling him for a probe (on the way there, holding him beside a target, or back). */
+export const forProbe = (m: Machine) => m.plan?.why === 'probe';
+// ---- end probe ----
 export type Plan = {
   kind: 'carry' | 'tour' | 'drag' | 'hand'; // hand = the claw follows the pointer until release
   why: Why;

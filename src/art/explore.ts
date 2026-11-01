@@ -13,7 +13,7 @@ import { clamp, type Pt } from './geometry';
 import type { Action } from './poses';
 
 export type Activity = Extract<Action, 'look' | 'peek' | 'tap' | 'crouch' | 'watch' | 'read' | 'sit'>;
-export type PoiKind = 'perch' | 'ledge' | 'edge' | 'stone' | 'splat' | 'printer' | 'heading' | 'seat' | 'node';
+export type PoiKind = 'perch' | 'ledge' | 'edge' | 'stone' | 'splat' | 'printer' | 'heading' | 'seat' | 'node' | 'probe'; // probe: a spot probeDriver.ts walks him to (never collected here)
 export type Poi = {
   id: string; // stable across measurements, for "been there recently"
   kind: PoiKind;

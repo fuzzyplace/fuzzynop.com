@@ -79,3 +79,11 @@ it('prefers nearer targets', () => {
   const far = c.filter((x) => x!.target.id === 'footer').length;
   expect(near).toBeGreaterThan(far);
 });
+
+it('bias scales a target (0 rules it out)', () => {
+  const biased = T.map((t) => (t.id === 'badge' ? { ...t, bias: 0 } : t.id === 'corner' ? { ...t, bias: 4 } : t));
+  const c = many(biased, st({ band: 'tolerant' }), 2000);
+  expect(c.some((x) => x!.target.id === 'badge')).toBe(false);
+  const corner = c.filter((x) => x!.target.id === 'corner').length;
+  expect(corner / c.length).toBeGreaterThan(0.5);
+});

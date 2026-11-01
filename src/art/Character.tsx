@@ -1,6 +1,6 @@
 import { useImperativeHandle, useLayoutEffect, useRef, type Ref } from 'react';
 import { lerp } from './geometry';
-import { FOOT_Y, HIP_L, HIP_R, NECK, SH_L, SH_R, actPose, applyMood, base, turnPose, type Action, type LegPts, type Mood, type P2 } from './poses';
+import { FOOT_Y, HIP_L, HIP_R, NECK, SH_L, SH_R, actPose, applyMood, base, isProbeMove, probePose, turnPose, type AnyAction, type LegPts, type Mood, type P2 } from './poses';
 import { stuntPose, type StuntAct, type StuntOpts } from './poses'; // ---- stunt ----
 import type { RagPose } from './ragdoll';
 import { setAttr } from './ticker';
@@ -24,7 +24,7 @@ import './character.css';
  * below 0.9. `mood` is his posture (poses.ts `applyMood`): hunched when wary, open when warm. `rag` (from ragdoll.ts) bends head, arms and legs about their joints while he's held or
  * falling; its angles are screen-space, so they're mirrored here when he faces -x.
  */
-export type { Action } from './poses';
+export type { Action, AnyAction } from './poses';
 export type Pose = {
   swing: number;
   dangle: number;
@@ -34,8 +34,9 @@ export type Pose = {
   walk?: number; // 0..1 gait amplitude
   tilt?: number; // head tilt in radians, + = chin down
   rag?: RagPose; // limbs relative to the torso (torso itself is applied by the Puppeteer as a collar pivot)
-  action?: Action;
+  action?: AnyAction; // an Action, or a probe move (poses.ts "probe poses")
   actionK?: number; // 0..1 through the action
+  aim?: number; // probe moves: the front arm's reach angle (poses.ts probePose)
   kick?: number; // sitting: -1..1 swing of the dangling shins
   amp?: number; // tap: hop height scale
   turn?: { k: number; hop: boolean }; // mid about-face, k 0..1 (facing already flipped once k ≥ FLIP)
@@ -87,13 +88,17 @@ export function Character({ ref }: { ref?: Ref<CharacterHandle> }) {
   useImperativeHandle(
     ref,
     () => ({
-      set(x, y, scale, { swing, dangle, facing, squash, phase = 0, walk = 0, tilt = 0, rag, action, actionK = 0, kick = 0, amp = 1, turn, tremble = false, mood, stunt }) {
+      set(x, y, scale, { swing, dangle, facing, squash, phase = 0, walk = 0, tilt = 0, rag, action, actionK = 0, kick = 0, amp = 1, aim, turn, tremble = false, mood, stunt }) {
         setAttr(el.shake, 'class', tremble ? 'char-shiver' : null);
         const legA = dangle * 0.35; // legs drift apart while carried
         const g = gait(phase, walk, STRIDE);
         const bob = g.bob;
         // standing body from the gait, then the action, then the turn, then the ragdoll
-        const o = applyMood(actPose(action, actionK, base({ x: g.footL.x - legA * 10, lift: g.footL.lift }, { x: g.footR.x + legA * 9, lift: g.footR.lift }, g.arm, dangle, tilt), kick, amp), mood, action, actionK);
+        const stand = base({ x: g.footL.x - legA * 10, lift: g.footL.lift }, { x: g.footR.x + legA * 9, lift: g.footR.lift }, g.arm, dangle, tilt);
+        // a probe move owns the pose like any on-the-spot action (the posture eases off under it)
+        const o = isProbeMove(action)
+          ? applyMood(probePose(action, actionK, stand, aim), mood, 'still', actionK)
+          : applyMood(actPose(action, actionK, stand, kick, amp), mood, action, actionK);
         if (stunt) Object.assign(o, stuntPose(stunt.kind, stunt.k, o, stunt)); // ---- stunt ----
         let sx = 1;
         let headBack = o.headBack;

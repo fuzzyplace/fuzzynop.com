@@ -20,7 +20,8 @@ export type Band = 'shaken' | 'wary' | 'tolerant' | 'warm';
 /** look: he goes and inspects it, no touch. poke: a small touch. handsOn: grabs, rattles, lifts. */
 export type ProbeAction = 'look' | 'poke' | 'handsOn';
 
-export type ProbeTarget = { id: string; kind: ProbeKind; rect: Rect; reach: ProbeReach; winnable?: boolean; lastPoked?: number | null };
+/** `bias` (default 1) scales its appeal: the stage lowers it near the visitor's pointer, 0 rules it out. */
+export type ProbeTarget = { id: string; kind: ProbeKind; rect: Rect; reach: ProbeReach; winnable?: boolean; lastPoked?: number | null; bias?: number };
 export type ProbeState = {
   now: number; // s
   band: Band;
@@ -64,7 +65,7 @@ export function chooseProbe(targets: readonly ProbeTarget[], st: ProbeState, ran
     if (t.kind === 'rattle' && action !== 'look' && st.ctaProbes >= CTA_MAX) return [];
     if (action !== 'look' && recent.includes(t.kind)) return [];
     const d = st.from ? Math.hypot(centre(t.rect).x - st.from.x, centre(t.rect).y - st.from.y) : 0;
-    const weight = BASE[t.kind] * daring * (action === 'handsOn' ? 0.8 : 1) / (1 + d / 600);
+    const weight = (BASE[t.kind] * daring * (action === 'handsOn' ? 0.8 : 1) * Math.max(0, t.bias ?? 1)) / (1 + d / 600);
     return weight > 0 ? [{ t, action, weight }] : [];
   });
   if (!options.length) return null;
