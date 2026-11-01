@@ -7,7 +7,7 @@
 /* ---- M3 type roles as utilities: class="type-display-large" ---- */
 @utility type-display-large  { font-family: var(--font-display); font-size: clamp(3.5rem, 9vw, 7.5rem); line-height: .95; letter-spacing: -.02em; font-weight: 400; }
 @utility type-display-medium { font-family: var(--font-display); font-size: clamp(2.75rem, 6vw, 4.5rem); line-height: 1; letter-spacing: -.015em; font-weight: 400; }
-@utility type-display-small  { font-family: var(--font-display); font-size: clamp(2.25rem, 4.5vw, 3.25rem); line-height: 1.05; letter-spacing: -.01em; font-weight: 400; }
+@utility type-display-small  { font-family: var(--font-display); font-size: clamp(1.875rem, 4.5vw, 3.25rem); line-height: 1.05; letter-spacing: -.01em; font-weight: 400; }
 @utility type-headline-large { font-family: var(--font-display); font-size: 2rem; line-height: 1.15; font-weight: 400; }
 @utility type-headline-medium{ font-family: var(--font-display); font-size: 1.75rem; line-height: 1.2; font-weight: 400; }
 @utility type-headline-small { font-family: var(--font-sans); font-size: 1.5rem; line-height: 1.25; letter-spacing: -.01em; font-weight: 500; }
@@ -118,6 +118,11 @@
 @media (prefers-reduced-motion: reduce) { .char-breathe, .char-armsway, .char-tremble, [data-swing] > svg { animation: none; } }
 
 @layer base {
+  /* typesetting: balanced headings, no orphans in running copy (plus tie() in src/content/typeset.ts) */
+  h1, h2, h3 { text-wrap: balance; }
+  p, li, dd, blockquote { text-wrap: pretty; }
+  /* card copy is short (≤ 6 lines): balance every line so nothing is stranded */
+  .plate-paper p, .plate-ink p, .plate-paper li, .plate-ink li { text-wrap: balance; }
   html { overflow-x: clip; scroll-behavior: smooth; scroll-padding-top: 72px; -webkit-text-size-adjust: 100%; }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
   body {

@@ -6,7 +6,8 @@ import { Puppeteer } from './art/Puppeteer';
 import { CircuitTree } from './components/CircuitTree';
 import { Chapter } from './components/Chapter';
 import { Cta } from './components/ui';
-import { contact, elsewhere, future, interlude, nav, past, present, site, ui } from './content/site';
+import { contact, elsewhere, future, nav, past, present, site, ui, vibe } from './content/site';
+import { tie, tieTitle } from './content/typeset';
 import { Hero } from './sections/Hero';
 
 /*
@@ -64,20 +65,32 @@ export default function App() {
             <Depth depth={0.4} className="-top-72 left-[8%] hidden md:block">
               <SpiderLeg length={620} t={18} tone="mid" delay={2} />
             </Depth>
-            <PrintedPlate id={present.id} side="left" className="mx-6 lg:col-span-7 lg:col-start-6 lg:mx-0">
+            <PrintedPlate id={present.id} side="left" tone="ink" className="mx-6 lg:col-span-7 lg:col-start-6 lg:mx-0">
               <Chapter ch={present} />
             </PrintedPlate>
           </div>
 
-          {/* ---- The question: the through-line ---- */}
+          {/* ---- Pop-out: setting the vibe (white card between two black ones) ---- */}
           <div className="plate-slot relative">
             <Depth depth={-0.2} className="-left-6 -top-24">
               <Splatter size={240} seed={44} />
             </Depth>
-            <PrintedPlate side="right" tone="ink" perch={0.12} className="mx-6 lg:mx-0">
-              <p className="type-body-large text-on-surface-variant">{interlude.lead}</p>
-              <p className="type-display-medium mt-6 max-w-[18ch] text-on-surface">{interlude.question}</p>
-              <p className="type-headline-medium mt-6 text-on-surface-variant">{interlude.followUp}</p>
+            <PrintedPlate side="right" perch={0.12} className="mx-6 lg:mx-0">
+              <p className="type-display-medium max-w-[16ch] text-on-paper">{tieTitle(vibe.statement)}</p>
+              <p className="type-body-large mt-8 max-w-[52ch] text-on-paper-variant">{tie(vibe.body)}</p>
+              <p className="mt-6">
+                {vibe.link.href ? (
+                  <a href={vibe.link.href} target="_blank" rel="noopener noreferrer" className="type-label-large inline-flex min-h-11 items-center gap-2 text-on-paper underline decoration-accent decoration-1 underline-offset-8">
+                    {vibe.link.label}
+                    <span aria-hidden="true">↗</span>
+                  </a>
+                ) : (
+                  <span className="type-label-large inline-flex min-h-11 items-center gap-3 text-on-paper-variant">
+                    {vibe.link.label}
+                    <span className="type-label-small border border-dashed border-gray-500 px-2 py-1">{vibe.link.soon}</span>
+                  </span>
+                )}
+              </p>
             </PrintedPlate>
           </div>
 
@@ -89,7 +102,7 @@ export default function App() {
             <Depth depth={0.3} className="-top-80 right-[12%] hidden md:block">
               <SpiderLeg length={540} t={15} tone="near" flip delay={3.5} />
             </Depth>
-            <PrintedPlate id={future.id} side="right" className="mx-6 lg:col-span-7 lg:col-start-2 lg:mx-0">
+            <PrintedPlate id={future.id} side="right" tone="ink" className="mx-6 lg:col-span-7 lg:col-start-2 lg:mx-0">
               <Chapter ch={future} />
             </PrintedPlate>
           </div>

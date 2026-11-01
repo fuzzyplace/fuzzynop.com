@@ -42,7 +42,7 @@ export const hero = {
  * Z's voice: plain, direct, first person. Written by hand, not generated.
  * Hard rules: no em or en dashes anywhere on the page; no stock phrasing (see docs/CONTENT.md).
  */
-export type Chapter = { n: string; id: string; eyebrow: string; title: string; body: string[]; lede?: string; list?: string[]; listLabel?: string; coda?: string };
+export type Chapter = { n: string; id: string; eyebrow: string; title: string; tone?: 'paper' | 'ink'; body: string[]; lede?: string; list?: string[]; listLabel?: string; coda?: string };
 
 export const past: Chapter = {
   n: '01',
@@ -59,28 +59,34 @@ export const present: Chapter = {
   n: '02',
   id: 'present',
   eyebrow: 'Present',
+  tone: 'ink',
   title: 'The human side',
   body: [
-    'Lately I’m working on how hackers take care of their own heads, what AI safety looks like from the human side, and what happens to our minds as machines start to seem more human.',
+    'Lately I’m working on how hackers take care of their own heads, what AI safety looks like from the human side, and what happens to our minds as machines and humans become indistinguishable.',
   ],
 };
 
-export const interlude = {
-  lead: 'The through-line of my whole career has been the same question:',
-  question: 'What happens when humans and machines meet?',
-  followUp: 'And how do we stay human in the process?',
+/**
+ * The pop-out between Present and Future (Z, 2026-11-02): replaces the through-line question.
+ * href: Z's event production showcase on The Fuzzy Place. Placeholder until he sends the URL.
+ */
+export const vibe = {
+  statement: 'Setting the vibe has never been more important.',
+  body: 'I also produce events and spaces with The\u00a0Fuzzy\u00a0Place.', // the name never breaks across lines
+  link: { label: 'See the events', href: null as string | null, soon: 'link soon' },
 };
 
 export const future: Chapter = {
   n: '03',
   id: 'future',
   eyebrow: 'Future',
+  tone: 'ink',
   title: 'What I’m looking for',
   body: [],
-  lede: 'The chance to make a real impact, either building a team or guiding a project in:',
+  lede: 'To make a real impact, building a team, a function or a project around:',
   listLabel: 'Areas',
-  list: ['Red teaming', 'AI safety', 'Consciousness exploration', 'Wellness for security professionals and hackers'],
-  coda: 'Or anything at the forefront of cyborg psychology.',
+  list: ['Red teaming', 'AI safety', 'Consciousness and human flourishing', 'Mental health and wellness'],
+  coda: 'Also available for a full\u2011body robot transplant.', // non-breaking hyphen
 };
 
 export const contact: Chapter = {

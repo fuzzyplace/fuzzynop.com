@@ -1,6 +1,7 @@
 import { useReducedMotion } from '../art/reducedMotion';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { hero } from '../content/site';
+import { tie } from '../content/typeset';
 import { Depth, Ground, HexLattice, Ledge, SpiderLeg, Splatter } from '../art/Decor';
 import { MechArm, type ArmHandle } from '../art/MechArm';
 import { clamp, easeInOut, lerp, type Pt } from '../art/geometry';
@@ -169,7 +170,7 @@ export function Hero() {
             </span>
           ))}
         </h1>
-        <p className="type-body-large mt-8 max-w-[44ch] text-on-surface-variant">{hero.lede}</p>
+        <p className="type-body-large mt-8 max-w-[44ch] text-on-surface-variant">{tie(hero.lede)}</p>
       </div>
 
       {/* the arm */}

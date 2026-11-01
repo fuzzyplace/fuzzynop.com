@@ -16,6 +16,8 @@ Copy lives in `src/content/site.ts`. Only publish what's in "Approved copy" belo
 > The through-line of my whole career has been the same question: what happens when humans and machines meet, and how do we stay human in the process?
 
 ## Copy rules (Z, 2026-11-02)
+- Typeset like a designer: no orphans or dangling words. Headings balance; running copy uses `tie()` / `tieTitle()` (`src/content/typeset.ts`) plus `text-wrap: pretty`.
+- Cards alternate white / black down the page: Past (white), Present (black), the vibe pop-out (white), Future (black), Contact (white).
 - Z's voice: plain, direct, first person. Professional, human, a little dry. Never AI-sounding.
 - **No em or en dashes anywhere on the page, share card or meta.** Use a period, comma, colon or slash. Enforced by `src/content/copy.test.ts`.
 - No stock phrasing ("journey", "passionate", "leverage", "unlock", "where X meets Y"), no exclamation marks, no emoji.
@@ -26,9 +28,9 @@ Copy lives in `src/content/site.ts`. Only publish what's in "Approved copy" belo
 | Identity / title | Josh Schwartz / FuzzyNop | Z |
 | Hero | "Team Builder, / Red Teamer, / Professional Bogeyman" + "Finding creative, empathetic security solutions for cyborgs." | Z |
 | 01 Past | **Hacker / Executive.** "I started out tracking bad guys. Then I switched sides and played the adversary for a living." "Over time that grew into building teams and leading in the security space." | Z (shaped) |
-| 02 Present | **The human side.** "Lately I’m working on how hackers take care of their own heads, what AI safety looks like from the human side, and what happens to our minds as machines start to seem more human." | Z (title from his words) |
-| The question | "The through-line of my whole career has been the same question:" "What happens when humans and machines meet?" "And how do we stay human in the process?" | Z |
-| 03 Future | **What I’m looking for.** "The chance to make a real impact, either building a team or guiding a project in:" Red teaming · AI safety · Consciousness exploration · Wellness for security professionals and hackers. "Or anything at the forefront of cyborg psychology." | Z (shaped) |
+| 02 Present | **The human side.** "Lately I’m working on how hackers take care of their own heads, what AI safety looks like from the human side, and what happens to our minds as machines and humans become indistinguishable." | Z (title from his words) |
+| Pop-out (white card) | "Setting the vibe has never been more important." "I also produce events and spaces with The Fuzzy Place." Link "See the events" (placeholder, URL from Z) | Z 2026-11-02 (body line drafted) |
+| 03 Future | **What I’m looking for.** "To make a real impact, building a team, a function or a project around:" Red teaming · AI safety · Consciousness and human flourishing · Mental health and wellness. "Also available for a full-body robot transplant." | Z 2026-11-02 |
 | 04 Contact | **Say hello.** "If you’re working on any of this, or think I could help, get in touch." CTA "Message me · LinkedIn" | drafted, Z to confirm |
 | Elsewhere | Circuit tree: Work (LinkedIn), Make (SoundCloud, Spotify, Mixcloud) | Z |
 | Hidden trust line | "Nothing here is secure." "He feels safe anyway." | Z |
