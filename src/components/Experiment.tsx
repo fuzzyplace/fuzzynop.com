@@ -7,10 +7,19 @@ import { PlateHeader } from './ui';
  * and a result line. `hypothesis` (interlude folded in) replaces the fragments on EXP. 04.
  */
 export function Experiment({ exp, hypothesis }: { exp: Exp; hypothesis?: string[] }) {
-  const pending = exp.result.length === 1 && exp.result[0] === 'Pending';
+  const pending = !!exp.pending;
   return (
     <>
-      <PlateHeader n={exp.n} eyebrow={`${log.eyebrow} ${exp.n}`} title={exp.title} />
+      <PlateHeader n={exp.n} eyebrow={log.eyebrow} title={
+          exp.pending && exp.title === '?' ? (
+            <>
+              <span aria-hidden="true">?</span>
+              <span className="sr-only">{log.untitled}</span>
+            </>
+          ) : (
+            exp.title
+          )
+        } />
       {hypothesis ? (
         <div className="max-w-[28ch] space-y-3">
           {hypothesis.map((l) => (
@@ -42,7 +51,7 @@ export function Experiment({ exp, hypothesis }: { exp: Exp; hypothesis?: string[
           ))}
         </ul>
       )}
-      <dl className="mt-10 flex gap-6 border-t border-ink/20 pt-5">
+      <dl className={`flex gap-6 pt-5 ${exp.areas ? '' : 'mt-10 border-t border-ink/20'}`}>
         <dt className="type-label-medium pt-1 text-on-paper-variant">{log.resultLabel}</dt>
         <dd className="type-title-large text-on-paper">
           {exp.result.map((r, i) => (

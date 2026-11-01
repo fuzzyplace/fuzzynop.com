@@ -23,37 +23,6 @@
 /* layout container */
 @utility shell { width: 100%; max-width: var(--layout-max); margin-inline: auto; padding-inline: var(--gutter); }
 
-/* hairline machine grid backdrop */
-@utility grid-hairline {
-  background-image:
-    linear-gradient(to right, color-mix(in srgb, var(--md-sys-color-on-surface) 5%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in srgb, var(--md-sys-color-on-surface) 5%, transparent) 1px, transparent 1px);
-  background-size: 64px 64px;
-}
-
-/* hairline rule with a short orange segment — the accent as a whisper */
-@utility rule-accent {
-  height: 1px;
-  background:
-    linear-gradient(to right, var(--md-sys-color-accent) 0 48px, transparent 48px),
-    var(--md-sys-color-outline-variant);
-}
-
-/* small orange dot — status / "you are here" marker */
-@utility dot-accent {
-  display: inline-block; width: 6px; height: 6px; border-radius: 9999px;
-  background: var(--md-sys-color-accent); flex: none;
-}
-
-/* M3 state layer for interactive surfaces */
-@utility state-layer {
-  position: relative; isolation: isolate;
-  &::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: currentColor; opacity: 0; pointer-events: none;
-    transition: opacity var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard); }
-  &:hover::after { opacity: var(--md-sys-state-hover); }
-  &:focus-visible::after, &:active::after { opacity: var(--md-sys-state-focus); }
-}
-
 /* ---- art direction: fog, grain, paper-cut plates ---- */
 @utility fog {
   position: fixed; inset: 0; z-index: -10; pointer-events: none;
@@ -109,13 +78,9 @@
 @media (prefers-reduced-motion: reduce) {
   .plate-alive, [data-printed='0'] > .plate-alive { transition: none; rotate: var(--plate-rot, 0deg); translate: 0 0; }
 }
-/* hexagon cell (flat-top) */
-@utility hex-cell {
-  width: 168px; height: 146px; clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
-  display: grid; place-items: center; text-align: center; padding-inline: 30px;
-}
 @utility plate-slot { margin-top: 220px; @media (min-width: 840px) { margin-top: 280px; } }
-@utility header-fade { background: linear-gradient(to bottom, rgba(0,0,0,.85), rgba(0,0,0,0)); }
+/* a near-solid strip behind the nav (it must stay readable over paper plates), fading out below */
+@utility header-fade { background: linear-gradient(to bottom, rgba(0,0,0,.92) 0, rgba(0,0,0,.92) 64px, rgba(0,0,0,0) 100%); }
 @keyframes sway { 0%, 100% { transform: rotate(-2.2deg); } 50% { transform: rotate(2.2deg); } }
 .sway { transform-box: fill-box; transform-origin: 50% 0; animation: sway 9s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .sway { animation: none; } }
@@ -165,81 +130,10 @@
   }
   ::selection { background: var(--md-ref-gray-700); color: var(--md-ref-gray-100); }
   :focus-visible { outline: 2px solid var(--md-sys-color-accent); outline-offset: 3px; border-radius: var(--md-sys-shape-corner-extra-small); }
+  /* on paper the orange alone is ~2.4:1: an ink ring carries the contrast, orange stays a thin outer edge */
+  .plate-paper :focus-visible { outline-color: var(--md-sys-color-ink); box-shadow: 0 0 0 5px var(--md-sys-color-accent); }
   a { color: inherit; text-underline-offset: .2em; text-decoration-thickness: 1px; }
   img, svg, video { display: block; max-width: 100%; }
-}
-
-/* ---- v2.3 p5: pieced-together hexes (src/components/HexShards.tsx) ---- */
-.honeycomb {
-  --w: 136px; --h: 118px;
-  position: relative; list-style: none; padding: 0;
-  width: calc(var(--cw-s) * var(--w)); height: calc(var(--ch-s) * var(--h));
-  margin-inline: auto;
-}
-@media (min-width: 840px) {
-  .honeycomb { --w: 168px; --h: 146px; width: calc(var(--cw) * var(--w)); height: calc(var(--ch) * var(--h)); margin-inline: 0; }
-}
-.hex-cell2 {
-  position: absolute; width: var(--w); height: var(--h);
-  left: calc(var(--x-s) * var(--w)); top: calc(var(--y-s) * var(--h));
-}
-@media (min-width: 840px) {
-  .hex-cell2 { left: calc(var(--x) * var(--w)); top: calc(var(--y) * var(--h)); }
-}
-.hex-link, .hex-static { position: relative; display: block; width: 100%; height: 100%; pointer-events: none; text-decoration: none; }
-.hex-link:focus-visible { outline: none; }
-.hex-face {
-  position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; overflow: visible;
-  transition: transform var(--md-sys-motion-duration-medium4) var(--md-sys-motion-easing-emphasized-decelerate),
-              filter var(--md-sys-motion-duration-medium4) var(--md-sys-motion-easing-standard);
-}
-.hex-hit { fill: transparent; stroke: none; pointer-events: all; }
-.hex-link--placeholder .hex-hit, .hex-static .hex-hit { pointer-events: none; }
-.hex-shard {
-  transform-box: fill-box; transform-origin: center;
-  transform: translate(var(--dx), var(--dy)) rotate(var(--rot)) scale(.6);
-  opacity: 0;
-  transition: transform var(--md-sys-motion-duration-extra-long1) var(--md-sys-motion-easing-emphasized-decelerate),
-              opacity var(--md-sys-motion-duration-long2) var(--md-sys-motion-easing-standard);
-  transition-delay: calc(var(--i) * 90ms + var(--j) * 70ms);
-  pointer-events: none;
-}
-/* ink shards; paper-coloured seams read as cut pieces fitted together */
-.hex-shard--ink { fill: var(--md-sys-color-ink); stroke: var(--md-ref-gray-700); stroke-width: 1; stroke-linejoin: round; }
-/* placeholder: hollow, faint pieces + dashed rim */
-.hex-shard--hollow { fill: var(--md-sys-color-ink); fill-opacity: .05; stroke: var(--md-ref-gray-500); stroke-width: 1; stroke-dasharray: 3 5; }
-.hex-dash {
-  fill: none; stroke: var(--md-ref-gray-700); stroke-width: 1.5; stroke-dasharray: 7 6; vector-effect: non-scaling-stroke; opacity: 0;
-  transition: opacity var(--md-sys-motion-duration-long2) var(--md-sys-motion-easing-standard);
-  transition-delay: calc(var(--i) * 90ms + 420ms);
-}
-.hex-edge { fill: none; stroke: var(--md-sys-color-accent); stroke-width: 1; vector-effect: non-scaling-stroke; opacity: 0; }
-.hex-label {
-  position: absolute; inset: 0; display: grid; place-content: center; text-align: center;
-  padding-inline: 12%; opacity: 0; pointer-events: none;
-  transition: opacity var(--md-sys-motion-duration-long2) var(--md-sys-motion-easing-standard),
-              letter-spacing var(--md-sys-motion-duration-medium4) var(--md-sys-motion-easing-standard),
-              transform var(--md-sys-motion-duration-medium4) var(--md-sys-motion-easing-emphasized-decelerate);
-  transition-delay: calc(var(--i) * 90ms + 480ms), 0ms, 0ms;
-}
-[data-assembled="1"] .hex-shard { transform: none; opacity: 1; }
-[data-assembled="1"] .hex-dash { opacity: 1; }
-[data-assembled="1"] .hex-label { opacity: 1; }
-/* link hexes: at rest slightly soft; hover/focus lifts, turns 30°, sharpens the label */
-[data-assembled="1"] .hex-link:not(.hex-link--placeholder) .hex-label { opacity: .86; }
-@media (hover: hover) {
-  .hex-link:not(.hex-link--placeholder) { cursor: pointer; }
-  .hex-link:not(.hex-link--placeholder):hover .hex-face { transform: translateY(-8px) rotate(30deg); filter: drop-shadow(6px 10px 0 rgba(0,0,0,.35)); }
-  [data-assembled="1"] .hex-link:not(.hex-link--placeholder):hover .hex-label { opacity: 1; letter-spacing: .03em; transform: translateY(-8px); transition-delay: 0ms; }
-}
-.hex-link:focus-visible .hex-face { transform: translateY(-8px) rotate(30deg); filter: drop-shadow(6px 10px 0 rgba(0,0,0,.35)); }
-.hex-link:focus-visible .hex-edge { opacity: 1; }
-[data-assembled="1"] .hex-link:focus-visible .hex-label { opacity: 1; letter-spacing: .03em; transform: translateY(-8px); transition-delay: 0ms; }
-.hex-cell2:has(.hex-link:hover), .hex-cell2:has(.hex-link:focus-visible) { z-index: 1; }
-@media (prefers-reduced-motion: reduce) {
-  .hex-shard, .hex-dash, .hex-label, .hex-face { transition: none; }
-  .hex-shard { transform: none; opacity: 1; }
-  .hex-dash, .hex-label, [data-assembled="1"] .hex-link:not(.hex-link--placeholder) .hex-label { opacity: 1; }
 }
 
 /* ---- v2.3 p6: the one CTA — the only filled control on the page ---- */

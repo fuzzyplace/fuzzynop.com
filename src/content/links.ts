@@ -21,7 +21,7 @@ export type CircuitLink = {
 export type CircuitData = {
   root: { label: string };
   branches: Record<Exclude<Branch, 'root'>, { label: string; order: number }>;
-  statusLabel: { soon: string };
+  statusLabel: { soon: string; soonSr: string };
   links: CircuitLink[];
 };
 
@@ -32,7 +32,7 @@ export const circuit: CircuitData = {
     work: { label: 'Work', order: 1 },
     make: { label: 'Make', order: 2 },
   },
-  statusLabel: { soon: 'soon' },
+  statusLabel: { soon: 'soon', soonSr: ', not yet available' },
   links: [
     { id: 'socials', branch: 'root', label: 'Socials', href: null, status: 'soon', order: 1 },
     { id: 'email', branch: 'root', label: 'Email', href: null, status: 'soon', order: 2 },
