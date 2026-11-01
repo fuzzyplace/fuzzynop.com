@@ -20,15 +20,21 @@ Reference mood: *Limbo* (fog-lit grayscale, black paper-cut silhouettes, depth t
 
 **Machine arms (`MechArm`).** Spider-leg segments: tapered chitin shell, barbs, sinew line, gray rim light (the only 3D cue). Machined hex joints with bored centers. Sagging cables. Tools: `nozzle` (printer, mandibles either side) or `claw` (two talons).
 
-**Printing (`PrintedPlate`).** Each content plate is a paper-cut (`.plate-cut`, torn corners, offset drop shadow). A gantry beam rises with the print edge, the arm rides it and rasters the nozzle back and forth; the plate reveals bottom-up, tied to scroll. Then the beam lifts and the arm parks. Text is always in the DOM; only the visual is clipped.
+**Assembly (`PrintedPlate`, choreography in `assembly.ts`, v2.6).** Each content plate is a torn paper-cut (`cutout.ts`: face + two backing layers, offset drop shadow) that the arms put together as it comes into view. Nothing is clipped or wiped on.
+- *Arms:* claw-tipped `MechArm`s hanging from the ceiling rail above the plate; each shoulder rides a post just outside its side of the plate, so only the arm itself crosses the copy. Two arms on plates ≥ 480px wide (desktop, tablets), one on phones.
+- *The sheet:* the claws carry it in by its top corners (one corner on phones) from above on the arm side, tipped back and slightly turned, lifted (bigger, softer shadow via `--plate-lift`). It hovers a moment, drops, and flutters into its resting tilt (damped wobble, tiny bounce) while the backing layers fan out from under it with a little overshoot.
+- *The words:* content is split into placeable units marked with `data-asm` (`words` = title, a word each; `lines` = running copy, a line each, grouped at run time; `place` = carried whole: badge row, CTA, link; `unit` = placed whole: list items, circuit nodes; `data-asm-cluster` = the circuit tree, one unit on phones). A `carry` unit is fetched from beyond the plate edge and held nearly all the way to its slot (never across words already placed in its row); a `deal` unit leaves the claw just beside its slot as the claw runs down the margin. Each drops in with a 1–2px settle and a last small rock. Reading order is kept; the two arms share the work.
+- *Trigger and pace:* time-based, not scrubbed. Starts when the plate top reaches 88% of the viewport and plays ~1.6–2.5 s (phones ~1.7 s) on the plate's own clock, which runs up to 6× faster as the plate climbs past ~60% of the viewport, so it's together before you read it. A plate first seen above 45% of the viewport (60% when the page loads: deep links, reloads, scrolling back up) is shown assembled at once, as is one scrolled well off screen mid-run or focused by keyboard.
+- *Text:* always real DOM text. Words are inline spans at rest (`.asm-w`, one text run for wrapping, selection, find in page) and inline-blocks only while the plate is assembled (same layout, measured ≤ 0.2px). Only opacity and the `translate`/`rotate`/`scale` properties animate, from offsets to their own layout slot, so there is no layout shift; all inline state is cleared once assembled.
+- *Rest:* the plate-side arm parks above its top corner (off the text, the `twitch` target); the second arm lifts away and is removed. No orange anywhere in the assembly (claws, no hot tip).
 
 **The hero arm** writes the tagline line by line on load, then retracts and idles, riding a ceiling rail.
 
 **The character (`Character`, `Puppeteer`).** An original ink silhouette of Z: short sides, textured quiff, rectangular glasses (the only part that catches light, gray-300), short beard, blazer. A ceiling claw arm carries him by the collar between perches (`[data-perch]`, only once a plate is `[data-printed="1"]`). With no perch on screen he dangles from the claw. Swings like a pendulum while carried and squashes on landing. Left alone he's curious: fidgets (looks round, scratches his head, pushes his glasses up), wanders to things on the page (peeks over plate edges, taps the hung hex stones so they swing, crouches over ink, watches a print arm, stands beside headings — on the plate's edge, never over text) and sits on edges with his legs dangling. Turns are a quick pivot (head first, step across or a little hop), never a paper-thin squash. Pose math in `poses.ts`; choices in `explore.ts` / `idle.ts`.
 
-**Reduced motion.** Plates are pre-printed; arms are parked; no sway; the character perches without transit, doesn't wander or fidget, and turns instantly.
+**Reduced motion.** Plates are fully assembled at once; the plate arm is parked and nothing moves; no sway; the character perches without transit, doesn't wander or fidget, and turns instantly.
 
-**Performance.** Arms re-render on scroll (SVG + `#ink` filter). Keep arm count ≤ 1 per plate + hero + puppeteer. Lazy additions only.
+**Performance.** Arms (SVG + `#ink` filter) only move while a plate assembles; the shared ticker sleeps otherwise. At rest ≤ 1 visible arm per plate + hero + puppeteer (the second assembly arm is removed). Lazy additions only.
 
 ## Concept: organic × machine
 Every screen balances two voices:
@@ -66,9 +72,9 @@ Text on dark: use 100–500 only (600 and below fail AA for text — borders/dec
 | error | `#FF4D6D` | `text-error` | errors only |
 
 ### Orange rules (hard)
-- ✅ The printer nozzle's hot tip + soft glow **while printing only**. The 72px print-line segment under the nozzle. Focus ring (2px). Link-hover underline (1px).
+- ✅ The hero arm's nozzle hot tip + soft glow **while it writes the tagline only**. Focus ring (2px). Link-hover underline (1px). (v2.6: plates are assembled by claws with no orange; the old print line is gone.)
 - ❌ No orange fills behind text. No orange buttons, chips, cards, or bands. No orange body text, headlines, or eyebrows. No orange selection highlight.
-- Budget: ≤ ~1% of any viewport. At rest (nothing printing), the page has no orange at all.
+- Budget: ≤ ~1% of any viewport. At rest (nothing being written), the page has no orange at all.
 
 **Contrast (verified, `npm run tokens:contrast`):** on-surface 18.1:1 · on-surface-variant 8.1:1 · secondary 5.9:1 · on-secondary-container 10.1:1 · accent 6.9:1 (glyph/line use) · outline 3.9:1 (UI).
 
@@ -127,6 +133,7 @@ How the page lets the ink character play with it. The page side owns the markup 
 |---|---|---|
 | `data-glyph="<line>:<index>"` | each letter of the hero tagline (aria-hidden spans; the h1 has `aria-label` with the full tagline) | a letter the character can move. Plain inline at rest; `data-glyph-block` (inline-block, kerning restored from `glyphs.ts` KERN) while it moves, `data-glyph-live` while driven per frame |
 | `data-written="1"` | hero h1 | the arm has written the tagline and withdrawn; line clips are cleared. The stunt may start |
+| `data-printed="0\|1"`, `data-printing="1"`, `data-arm="bx by tx ty"`, `data-asm-state="wait\|run"` | PrintedPlate root | `1` only once the plate is assembled and its arms have left (a perch from then on). While arms place things: `data-printing`; while the plate arm moves (incl. its swing back to park): `data-arm` (base + claw tip, px from the plate top-left). `data-asm-state` is the assembly phase (gone once assembled) |
 | `data-poke="spin\|lift\|peek\|tug\|rattle\|twitch\|tap"` | hex badges (spin), plate top corners (lift), plate top edge (peek), parked print arm tip (twitch), circuit nodes (tug), CTA door (rattle), footer `0x90` (tap) | a probe target and the response it owns (CSS keyframes in `global.css`, transforms only) |
 | `data-poke-reach="top\|side\|dangle"` | every target | how he gets at it: from above, from beside, or hanging |
 | `data-poke-win` | hex badge (full turn), CTA (door swings open on its hinge, shuts) | it has a bigger "win" response (full trust only) |
