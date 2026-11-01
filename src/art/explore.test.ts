@@ -10,6 +10,7 @@ const scene = (over: Partial<Scene> = {}): Scene => ({
   splats: [],
   printers: [],
   headings: [],
+  nodes: [],
   view: { left: 0, right: 1440, top: 0, bottom: 900 },
   reach: 110,
   tapOut: 26,
@@ -59,6 +60,15 @@ describe('points of interest', () => {
     expect(h.x).toBe(450);
     expect(h.face).toBe(-1);
     expect(h.look!.y).toBeGreaterThan(300); // looks down at it; he stands on the edge above it
+  });
+
+  it('a circuit node: stands on its plate top above it (clamped to where he may walk), looks down, crouches', () => {
+    const n = collectPois(scene({ nodes: [{ s: 2, x: 690, y: 520 }] })).find((p) => p.kind === 'node')!;
+    expect(n.s).toBe(2);
+    expect(n.x).toBe(664);
+    expect(n.activity).toBe('crouch');
+    expect(n.target).toBe(0);
+    expect(n.look!.y).toBeGreaterThan(300);
   });
 
   it('a printing arm: watches from a nearby surface, clear of the arm', () => {

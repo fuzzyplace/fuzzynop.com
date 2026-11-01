@@ -80,6 +80,8 @@ const ATTEND = 6; // px of pointer travel that means the user is around (his own
 const EXPLORE_PACE = 0.72; // exploring walk speed vs. his usual
 const SIT_REST = 2.5; // s the pointer rests beside him (fully trusted) before he sits down by it
 const SIT_BESIDE: [number, number] = [40, 70]; // s he stays sat by it if it doesn't move
+const NODE_LIT = 1.6; // s a circuit node's trace stays lit after he taps the edge above it
+const NODE_TAP = 0.45; // progress of his crouch at which his hand meets the edge
 
 /** Something he does on the spot: a fidget, an activity at a point of interest, a reaction. */
 type Act = { kind: Action; at: number; dur: number; reverse?: boolean; block?: boolean };
@@ -281,7 +283,10 @@ export function Puppeteer() {
           s.walk = { x: next.plan!.x, v: 0, phase: s.walk.phase, walking: false };
           s.anchored = Math.abs(next.plan!.x - home(s.idx)) < 1;
         }
-        if (next.plan?.why === 'edge') s.holdUntil = now + FOLLOW_HOLD * 1000;
+        if (next.plan?.why === 'edge') {
+          s.holdUntil = now + FOLLOW_HOLD * 1000;
+          s.ignoreBefore = now; // a pointer parked past the end doesn't pull him straight back there: it has to move again
+        }
         else s.placedBest = next.plan?.why === 'scroll' || next.plan?.why === 'enter' ? s.idx : s.placedBest;
       }
       if (next.mode === 'carried' && next.plan?.kind === 'hand') {
@@ -418,6 +423,8 @@ export function Puppeteer() {
         .map((r) => ({ x: r.left + sx + r.width / 2, y: r.top + sy + r.height * 0.4, r: r.width / 2 }));
       const printers: Scene['printers'] = [];
       const headings: Scene['headings'] = [];
+      const nodes: Scene['nodes'] = [];
+      nodeEls = [];
       cache.forEach((c, i) => {
         const arm = c.el.dataset.printing === '1' ? c.el.dataset.arm?.split(' ').map(Number) : undefined;
         if (arm && arm.length === 4) printers.push({ s: i, tip: { x: c.left + arm[2], y: c.top + arm[3] } });
@@ -428,18 +435,46 @@ export function Puppeteer() {
           const r = range.getBoundingClientRect(); // the text itself, not the block
           if (r.width > 0 && r.top < vp.h) headings.push({ s: i, left: r.left + sx, right: r.right + sx, top: r.top + sy });
         });
+        // circuit-tree link nodes on this plate (the hex, not the label), on screen
+        c.el.querySelectorAll<HTMLElement>('[data-poi="node"]').forEach((el) => {
+          const r = (el.querySelector('svg') ?? el).getBoundingClientRect();
+          if (r.width === 0 || r.top > vp.h - 20 || r.bottom < 0) return;
+          nodes.push({ s: i, x: r.left + sx + r.width / 2, y: r.top + sy + r.height / 2 });
+          nodeEls.push(el);
+        });
       });
       // hand raised (≈48 units above his feet) plus the hop
-      return { surfaces, splats, printers, headings, view, reach: (44 + TAP_HOP * 1.5) * scale, tapOut: 13 * scale, pad: 40, sitOut: 7 * scale }; // sat, his knees reach ≈ 13 units ahead: just past the edge, shins clear of it
+      return { surfaces, splats, printers, headings, nodes, view, reach: (44 + TAP_HOP * 1.5) * scale, tapOut: 13 * scale, pad: 40, sitOut: 7 * scale }; // sat, his knees reach ≈ 13 units ahead: just past the edge, shins clear of it
+    };
+    let nodeEls: HTMLElement[] = []; // the elements behind Scene.nodes (last measured scene)
+    let goalNode: HTMLElement | undefined; // the node he's headed to / tapping above
+    let litNode: { el: HTMLElement; id: number } | null = null;
+    /**
+     * He taps the plate's edge above a circuit node: its trace lights for a moment, through the
+     * tree's own hover hook (a synthetic pointerover / pointerout; no focus, no click). Skipped while
+     * the visitor's pointer is on the tree, so he never fights a real hover.
+     */
+    const lightNode = (el: HTMLElement | undefined) => {
+      if (!el || !el.isConnected || el.closest('nav')?.matches(':hover')) return;
+      unlightNode();
+      el.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse' }));
+      litNode = { el, id: window.setTimeout(unlightNode, NODE_LIT * 1000) };
+    };
+    const unlightNode = () => {
+      if (!litNode) return;
+      window.clearTimeout(litNode.id);
+      const { el } = litNode;
+      litNode = null;
+      if (!el.matches(':hover')) el.dispatchEvent(new PointerEvent('pointerout', { bubbles: true, pointerType: 'mouse' }));
     };
     /** Pick a point of interest and set off for it. False = nowhere to go. */
-    const startExplore = (s: State, mood: 'explore' | 'rest', ps: Seen[], now: number) => {
+    const startExplore = (s: State, mood: 'explore' | 'rest', ps: Seen[], now: number, only?: (p: Poi) => boolean) => {
       const sc = scene(ps);
       const S: Surface[] = sc.surfaces.map((q) => q ?? { left: Infinity, right: -Infinity, y: Infinity });
       const from = { s: s.idx, x: cache[s.idx].left + s.walk.x };
       const routes = new Map<string, Move[]>();
       const onScreen = (r: Move[]) => r.every((m) => m.to.x >= sc.view.left + sc.pad && m.to.x <= sc.view.right - sc.pad);
-      const pois = collectPois(sc);
+      const pois = collectPois(sc).filter((q) => !only || only(q));
       const poi = choosePoi(pois, {
         from,
         recent: s.recent,
@@ -457,6 +492,7 @@ export function Puppeteer() {
       if (!poi) return false;
       const route = routes.get(poi.id)!;
       s.goal = poi;
+      goalNode = poi.kind === 'node' && poi.target !== undefined ? nodeEls[poi.target] : undefined;
       s.recent = remember(s.recent, poi.id);
       s.ignoreBefore = now;
       if (!route.length) {
@@ -536,6 +572,7 @@ export function Puppeteer() {
       return at;
     };
 
+    let lastSeen: Seen[] = []; // dev: the last frame's view of the perches
     let frames = 0; // dev: frames run (to check the loop sleeps when he's settled)
     const frame = (now: number, dt: number) => {
       if (import.meta.env.DEV) frames++;
@@ -556,6 +593,7 @@ export function Puppeteer() {
           bottom: top + p.height,
         };
       });
+      lastSeen = ps;
       if (!ps.length) return false; // layout / print-state changes wake us when perches appear
       const line = vp.h * 0.5;
       let best = -1;
@@ -841,7 +879,7 @@ export function Puppeteer() {
         const sy = window.scrollY;
         const head = { x: s.char.x + sx, y: s.char.y + sy - 14 * scale };
         cache.forEach((c, i) => {
-          const a = c.el.dataset.printing === '1' ? c.el.dataset.arm : undefined;
+          const a = c.el.dataset.arm; // printing, or swinging back up off the finished plate
           const was = s.arms[i];
           s.arms[i] = a ?? '';
           if (!a || !was || a === was || now <= s.duckUntil) return;
@@ -1036,7 +1074,11 @@ export function Puppeteer() {
         else if (!s.action && !ragdoll) {
           s.action = s.act.kind;
           s.actionK = s.act.reverse ? 1 - u : u;
-          if (s.act.kind === 'tap' && !s.tapped && u >= TAP_AT && s.goal?.target !== undefined) {
+          if (s.act.kind === 'crouch' && !s.tapped && u >= NODE_TAP && s.goal?.kind === 'node' && s.goal.target !== undefined) {
+            s.tapped = true;
+            lightNode(goalNode);
+          }
+          if (s.act.kind === 'tap' && !s.tapped && u >= TAP_AT && s.goal?.kind === 'stone' && s.goal.target !== undefined) {
             // the hand meets the stone: it swings on its wires
             s.tapped = true;
             const el = cache[s.goal.target]?.el;
@@ -1222,6 +1264,14 @@ export function Puppeteer() {
               loop.wake();
             }
           },
+          /** go and visit a point of interest whose id starts with `prefix` (e.g. 'node', 'printer') */
+          visit: (prefix: string) => {
+            const s = st.current;
+            if (!s || s.idx < 0 || s.m.mode !== 'idle') return false;
+            const ok = startExplore(s, 'explore', lastSeen, performance.now(), (q) => q.id.startsWith(prefix));
+            loop.wake();
+            return ok;
+          },
           get mode() {
             return st.current?.m.mode;
           },
@@ -1385,6 +1435,7 @@ export function Puppeteer() {
       window.removeEventListener('scroll', onScroll);
       document.removeEventListener('mouseout', onOut);
       window.clearTimeout(trustTimer);
+      unlightNode();
     };
   }, [vp, reduce]);
 

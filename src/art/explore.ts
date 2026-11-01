@@ -6,13 +6,14 @@
  * A point of interest (POI) is a spot on a walkable surface plus what he does when he gets there:
  * peek over a plate's edge, hop up and tap a hung hex stone's end, crouch over an ink splatter, watch a
  * printing arm, stand beside a heading (on the plate's top edge — never over its text), sit on a
- * ledge or a plate's end with his legs over the edge.
+ * ledge or a plate's end with his legs over the edge, or stand on a plate's top edge over one of its
+ * circuit-tree nodes, look down at it and tap the edge so its trace lights.
  */
 import { clamp, type Pt } from './geometry';
 import type { Action } from './poses';
 
 export type Activity = Extract<Action, 'look' | 'peek' | 'tap' | 'crouch' | 'watch' | 'read' | 'sit'>;
-export type PoiKind = 'perch' | 'ledge' | 'edge' | 'stone' | 'splat' | 'printer' | 'heading' | 'seat';
+export type PoiKind = 'perch' | 'ledge' | 'edge' | 'stone' | 'splat' | 'printer' | 'heading' | 'seat' | 'node';
 export type Poi = {
   id: string; // stable across measurements, for "been there recently"
   kind: PoiKind;
@@ -22,7 +23,7 @@ export type Poi = {
   look: Pt | null; // what his head turns to, document px
   activity: Activity;
   weight: number; // base appeal
-  target?: number; // stone: the ledge (surface index) he taps
+  target?: number; // stone: the ledge (surface index) he taps; node: index into Scene.nodes
 };
 
 /** A walkable surface as the scene sees it (document px). left/right = where he may stand. */
@@ -32,6 +33,7 @@ export type Scene = {
   splats: { x: number; y: number; r: number }[];
   printers: { s: number; tip: Pt }[]; // s = the printing plate's perch index
   headings: { s: number; left: number; right: number; top: number }[]; // tight text box of each heading on a plate
+  nodes: { s: number; x: number; y: number }[]; // circuit-tree link nodes (hex centres) on a plate, s = that plate
   view: { left: number; right: number; top: number; bottom: number }; // the viewport, document px
   reach: number; // px above his feet he can tap with a hop
   tapOut: number; // px from his origin forward to his raised hand
@@ -123,6 +125,13 @@ export function collectPois(sc: Scene): Poi[] {
     if (!s) return;
     const x = within(h.right + 30, s);
     push({ id: `heading:${n}`, kind: 'heading', s: h.s, x, face: x > (h.left + h.right) / 2 ? -1 : 1, look: { x: (h.left + h.right) / 2, y: h.top + 12 }, activity: 'read', weight: 0.9 });
+  });
+  // a circuit node: stand on its plate's top edge above it (never over the plate's text: he's on the
+  // edge, above the paper), look down at it and tap the edge; the Puppeteer lights its trace
+  sc.nodes.forEach((nd, n) => {
+    const s = S[nd.s];
+    if (!s || nd.y < s.y) return;
+    push({ id: `node:${n}`, kind: 'node', s: nd.s, x: within(nd.x, s), face: 0, look: { x: nd.x, y: nd.y }, activity: 'crouch', weight: 1.3, target: n });
   });
   return out;
 }
