@@ -1,7 +1,7 @@
 import { useReducedMotion } from 'motion/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { hero } from '../content/site';
-import { Depth, Ground, HexLattice, SpiderLeg, Splatter } from '../art/Decor';
+import { Depth, Ground, HexLattice, Ledge, SpiderLeg, Splatter } from '../art/Decor';
 import { MechArm, type ArmHandle } from '../art/MechArm';
 import { clamp, easeInOut, lerp, type Pt } from '../art/geometry';
 import { notifyLayout, ticker } from '../art/ticker';
@@ -110,6 +110,12 @@ export function Hero() {
   }, [reduce]);
 
   const narrow = w < 700;
+  // [x fraction of the hero, px above the ground perch]: each a hop from the last
+  const LEDGES: [number, number][] = [
+    [0.8, 130],
+    [0.93, 250],
+    [0.83, 370],
+  ];
   const groundH = narrow ? 70 : 96;
   const perchX = narrow ? 0.82 : 0.9;
   const t = clamp(w * 0.022, 12, 30);
@@ -164,6 +170,9 @@ export function Hero() {
       </div>
       {/* desktop: he walks only within the pool of light (a black silhouette vanishes on the dark ground beyond it) */}
       <div className="absolute inset-x-0" style={{ bottom: groundH * 0.62 }} data-perch={perchX} data-perch-span={narrow ? undefined : 260} aria-hidden="true" />
+      {/* desktop: hung hex stepping-stones in the light, clear of the headline — somewhere for him to climb */}
+      {!narrow &&
+        LEDGES.map(([x, up]) => <Ledge key={x} style={{ left: `calc(${x * 100}% - 42px)`, bottom: groundH * 0.62 + up - 26 }} />)}
     </section>
   );
 }

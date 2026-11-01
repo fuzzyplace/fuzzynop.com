@@ -1,9 +1,11 @@
 import { useReducedMotion } from 'motion/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Character, STRIDE, type CharacterHandle, type Pose } from './Character';
+import { Character, STRIDE, type Action, type CharacterHandle, type Pose } from './Character';
 import { MechArm, type ArmHandle } from './MechArm';
 import { clamp, easeInOut, lerp, type Pt } from './geometry';
+import { LIMITS, planRoute, sampleMove, type Move, type Surface } from './navigate';
 import { free, held, initial, transition, type Ev, type Machine, type Plan } from './puppet-machine';
+import { createRagdoll, primeRagdoll, stepRagdoll, type RagPose, type Ragdoll } from './ragdoll';
 import { onLayout, setAttr, ticker } from './ticker';
 import { WALK, clampTo, lookAngle, perchExtent, settledWalk, stepWalk, type Extent, type WalkState } from './walk';
 
@@ -21,7 +23,11 @@ import { WALK, clampTo, lookAngle, perchExtent, settledWalk, stepWalk, type Exte
  * - Idle relocation: 8–15 s without a big pointer move → the claw carries him to another visible
  *   perch, gives him a short dangle tour, or drags him along the surface, feet scraping.
  * - Scroll: carried to the perch nearest the reading line.
- * - Pressing on him: the claw takes him first (a short tour).
+ * - Pointer buzzing close round him (mouse): he backs off and swats at it like a fly.
+ * - Pressing on him: the claw picks him up and follows the pointer; he hangs from the collar as a
+ *   ragdoll (ragdoll.ts). Let go and he falls onto the printed perch below (or the nearest one).
+ * - Pointer resting over another printed plate: he makes his own way there — walk, jump, climb,
+ *   drop (navigate.ts) — if he can; otherwise he stays put and the claw may move him later.
  *
  * Perch rects are cached in document space; a frame does no layout reads. The loop sleeps once
  * he's idle and settled; scroll, layout, print-state, pointer input and timers wake it.
@@ -39,6 +45,11 @@ const COLLAR = { x: -4, y: -12 };
 const MARGIN = 36; // px kept clear at each end of a perch
 const LOOK = 1.8; // s he keeps glancing at the pointer after it last moved
 const HOVER = 70; // px from him where the idle claw hangs
+const PESTER = 60; // px: pointer this close round him and he swats at it
+const SWAT = 0.42; // s per swat
+const DWELL = 0.7; // s the pointer rests over another plate before he sets off for it
+const GRAB_HAND = 0.16; // s: the claw snaps onto him when you press
+const GRAVITY = 2200; // px/s², falls
 
 type State = {
   m: Machine;
@@ -65,8 +76,23 @@ type State = {
   edgeSince: number; // when he got stuck at an edge with the pointer beyond it (0 = not)
   holdUntil: number; // after an edge reset he ignores the pointer until this time (or it returns)
   idleAt: number; // when the claw gets bored
+  rd: Ragdoll | null; // limbs hang loose while held by hand / falling
+  rag: RagPose | null;
+  ragW: number; // 0..1 blend of the ragdoll pose (eases out after he lands)
+  hv: Pt; // smoothed screen velocity while held by hand, px/s
+  fall: Fall | null;
+  route: Move[] | null; // his own way to another perch
+  leg: number;
+  legAt: number;
+  action: Action | undefined;
+  actionK: number;
+  want: number; // perch the pointer rests over (-1 = none)
+  wantSince: number;
+  wantFail: number; // perch he already found no way to
 };
-type Perch = { el: HTMLElement; left: number; top: number; width: number; f: number; ext: Extent };
+/** A fall in document px: start, initial velocity, landing (char origin), duration. */
+type Fall = { x0: number; y0: number; vx: number; vy: number; x1: number; y1: number; T: number; to: number };
+type Perch = { el: HTMLElement; left: number; top: number; width: number; height: number; f: number; ext: Extent; ledge: boolean };
 type Pointer = { x: number; y: number; t: number };
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -105,7 +131,7 @@ export function Puppeteer() {
         const f = parseFloat(el.dataset.perch ?? '0.5');
         const half = parseFloat(el.dataset.perchSpan ?? '');
         const ext = perchExtent(r.width, MARGIN, half > 0 ? { center: r.width * f, half } : undefined);
-        return { el, left: r.left + sx, top: r.top + sy, width: r.width, f, ext };
+        return { el, left: r.left + sx, top: r.top + sy, width: r.width, height: r.height, f, ext, ledge: el.dataset.ledge !== undefined };
       });
       // the perch he stands on resized (window resize, late layout): keep his place on it proportionally
       const now = s && s.idx >= 0 ? cache[s.idx] : undefined;
@@ -117,6 +143,14 @@ export function Puppeteer() {
     measure();
     let dirty = false;
     let pressed: Pt | null = null;
+    let holding = false; // pointer still down after pressing on him
+    let hand: Pt | null = null; // where the pointer holding him is (any pointer type)
+    const k185 = scale / 1.85;
+    const lim = { ...LIMITS, jumpUp: LIMITS.jumpUp * k185, gap: LIMITS.gap * k185, reach: LIMITS.reach * k185, climbSpeed: LIMITS.climbSpeed * k185 };
+    const surfaces = (ok: boolean[]): Surface[] =>
+      cache.map((c, i) =>
+        ok[i] ? { left: c.left + c.ext.lo, right: c.left + c.ext.hi, y: c.top, bottom: c.top + c.height, x0: c.left, x1: c.left + c.width } : { left: Infinity, right: -Infinity, y: Infinity },
+      );
 
     // timers wake the sleeping loop (idle relocation, end of the follow hold) instead of keeping it awake
     const timers = new Set<number>();
@@ -138,7 +172,7 @@ export function Puppeteer() {
     const go = (s: State, ev: Ev, now: number) => {
       const next = transition(s.m, ev, now);
       if (next === s.m) return false;
-      if (import.meta.env.DEV) console.debug(`[puppet] ${s.m.mode} → ${next.mode}`, ev.type === 'take' ? ev.plan : ev.type);
+      if (import.meta.env.DEV && next.mode !== s.m.mode) console.debug(`[puppet] ${s.m.mode} → ${next.mode}`, ev.type === 'take' ? ev.plan : ev.type);
       const prev = s.m.mode;
       s.m = next;
       // entry actions
@@ -149,7 +183,8 @@ export function Puppeteer() {
         s.idx = plan.to;
         s.walk = { ...s.walk, v: 0, walking: false };
         const dist = Math.abs((plan.to >= 0 ? plan.x : 0) - s.walk.x);
-        if (next.mode === 'dragged') s.dur = clamp(dist / 110 + 0.3, 1.2, 3.2);
+        if (plan.kind === 'hand') s.dur = Infinity;
+        else if (next.mode === 'dragged') s.dur = clamp(dist / 110 + 0.3, 1.2, 3.2);
         else if (plan.kind === 'tour') s.dur = 3.4;
         else if (plan.why === 'edge') s.dur = 0.9;
         else if (plan.why === 'relocate' || plan.why === 'press') s.dur = 1.7;
@@ -166,11 +201,61 @@ export function Puppeteer() {
         if (next.plan?.why === 'edge') s.holdUntil = now + FOLLOW_HOLD * 1000;
         else s.placedBest = next.plan?.why === 'scroll' || next.plan?.why === 'enter' ? s.idx : s.placedBest;
       }
-      if (next.mode === 'idle' && prev === 'landing') {
+      if (next.mode === 'carried' && next.plan?.kind === 'hand') {
+        s.rd = createRagdoll(s.swing);
+        primeRagdoll(s.rd, collarOf(s), { x: 0, y: 0 });
+        s.hv = { x: 0, y: 0 };
+        s.route = null;
+        s.fall = null;
+        s.idx = -1;
+      }
+      if (next.mode === 'falling') startFall(s);
+      if (next.mode === 'grabbed') {
+        s.route = null;
+        s.fall = null;
+      }
+      if (next.mode === 'idle' && (prev === 'landing' || prev === 'falling' || prev === 'hopping')) {
         if (s.holdUntil > now) wakeIn((s.holdUntil - now) / 1000);
         armIdle(now);
       }
       return true;
+    };
+
+    const collarOf = (s: State): Pt => ({ x: s.char.x + COLLAR.x * s.facing * scale, y: s.char.y + COLLAR.y * scale });
+
+    // let go: pick the printed perch under him (or the nearest one) and throw him at it in document space
+    const startFall = (s: State) => {
+      const sx = window.scrollX;
+      const sy = window.scrollY;
+      const feet = s.char.y + FEET * scale;
+      const vis = cache.map((c, i) => ({ c, i, top: c.top - sy, l: c.left - sx + c.ext.lo, r: c.left - sx + c.ext.hi })).filter((q) => q.c.el.dataset.printed !== '0' && q.top > 0 && q.top < vp.h);
+      const below = vis.filter((q) => q.top >= feet - 4);
+      const under = below.filter((q) => s.char.x >= q.l - 20 && s.char.x <= q.r + 20).sort((a, b) => a.top - b.top)[0];
+      const off = (q: (typeof vis)[number]) => Math.max(0, q.l - s.char.x, s.char.x - q.r);
+      const pick = under ?? below.sort((a, b) => off(a) + 0.3 * (a.top - feet) - (off(b) + 0.3 * (b.top - feet)))[0] ?? vis.sort((a, b) => off(a) - off(b))[0];
+      const x0 = s.char.x + sx;
+      const y0 = s.char.y + sy;
+      const vx = clamp(s.hv.x, -900, 900);
+      let vy = clamp(s.hv.y, -900, 900);
+      let x1: number;
+      let y1: number;
+      if (pick) {
+        x1 = pick.c.left + clampTo(s.char.x + sx - pick.c.left, pick.c.ext);
+        y1 = pick.c.top - FEET * scale;
+      } else {
+        x1 = x0 + vx * 0.3;
+        y1 = sy + vp.h + 200; // nothing to land on: out the bottom; the claw fetches him
+      }
+      const dy = y1 - y0;
+      let T: number;
+      if (dy >= 0) T = (-vy + Math.sqrt(vy * vy + 2 * GRAVITY * dy)) / GRAVITY;
+      else {
+        T = 0.8; // perch above him (fallback only): a hop up onto it
+        vy = (dy - (GRAVITY * T * T) / 2) / T;
+      }
+      s.fall = { x0, y0, vx, vy, x1, y1, T: Math.max(0.15, T), to: pick ? pick.i : -1 };
+      s.idx = pick ? pick.i : -1;
+      if (s.rd) primeRagdoll(s.rd, collarOf(s), s.hv);
     };
 
     const frame = (now: number, dt: number) => {
@@ -188,6 +273,7 @@ export function Puppeteer() {
           pt: { x: p.left - sx + p.width * p.f, y: top - FEET * scale },
           top,
           visible: top > 70 && top < vp.h - 8,
+          bottom: top + p.height,
         };
       });
       if (!ps.length) return false; // layout / print-state changes wake us when perches appear
@@ -195,7 +281,7 @@ export function Puppeteer() {
       let best = -1;
       let bestD = Infinity;
       ps.forEach((p, i) => {
-        if (!p.ok || !p.visible) return;
+        if (!p.ok || !p.visible || cache[i].ledge) return; // the reading line picks plates, never ledges
         const d = Math.abs(p.top - line);
         if (d < bestD) {
           bestD = d;
@@ -231,6 +317,19 @@ export function Puppeteer() {
           edgeSince: 0,
           holdUntil: 0,
           idleAt: Infinity,
+          rd: null,
+          rag: null,
+          ragW: 0,
+          hv: { x: 0, y: 0 },
+          fall: null,
+          route: null,
+          leg: 0,
+          legAt: 0,
+          action: undefined,
+          actionK: 0,
+          want: -1,
+          wantSince: 0,
+          wantFail: -1,
         };
         armIdle(now);
       }
@@ -241,8 +340,9 @@ export function Puppeteer() {
       heldPt.x += Math.sin(now / 1400) * 18;
       heldPt.y += Math.cos(now / 1100) * 10;
 
-      // ---- the page decides: scroll / perch lost (urgent; interrupts anything) ----
-      {
+      // ---- the page decides: scroll / perch lost (urgent; interrupts anything but the user's hand / a fall) ----
+      const byHand = s.m.plan?.kind === 'hand';
+      if (mode() !== 'falling' && !byHand) {
         const cur = s.idx >= 0 ? ps[s.idx] : undefined;
         const curOk = !!cur && cur.ok && cur.visible;
         let take: Plan | null = null;
@@ -250,8 +350,8 @@ export function Puppeteer() {
           if (best >= 0) take = { kind: 'carry', why: 'scroll', to: best, x: home(best) };
         } else if (!curOk) {
           if (best >= 0) take = { kind: 'carry', why: 'scroll', to: best, x: home(best) };
-          else if (s.idx !== -1) take = { kind: 'carry', why: 'lost', to: -1, x: 0 };
-        } else if (best >= 0 && best !== s.idx && best !== s.placedBest && bestD + 80 < Math.abs(cur!.top - line)) {
+          else if (s.idx !== -1 || free(mode())) take = { kind: 'carry', why: 'lost', to: -1, x: 0 };
+        } else if (mode() !== 'hopping' && best >= 0 && best !== s.idx && best !== s.placedBest && bestD + 80 < Math.abs(cur!.top - line)) {
           take = { kind: 'carry', why: 'scroll', to: best, x: home(best) };
         }
         if (take) {
@@ -275,21 +375,38 @@ export function Puppeteer() {
         const ext = perch.ext;
         const raw = p ? p.x - ps[s.idx].left : s.walk.x;
         if (s.holdUntil && (now >= s.holdUntil || (raw >= ext.lo && raw <= ext.hi))) s.holdUntil = 0;
-        const follow = !!p && !reduce && !s.holdUntil;
-        if (follow) {
-          const prevX = s.walk.x;
-          s.walk = stepWalk(s.walk, raw, dt, ext, cfg);
-          if (s.walk.x !== prevX) s.anchored = false;
+        // a pointer buzzing round him: back off and swat at it
+        if (p && !reduce) {
+          const d = Math.hypot(p.x - s.char.x, p.y - (s.char.y - 8 * scale));
+          if (mode() !== 'swatting' && d < PESTER && now - p.t < 500) go(s, { type: 'pester' }, now);
+          else if (mode() === 'swatting' && (d > PESTER * 1.8 || now - p.t > 900)) go(s, { type: 'clear' }, now);
         }
-        if (s.walk.walking && mode() === 'idle') go(s, { type: 'move' }, now);
-        else if (!s.walk.walking && mode() === 'walking') go(s, { type: 'stop' }, now);
+        const swatting = mode() === 'swatting';
+        const follow = !!p && !reduce && !s.holdUntil;
+        if (follow || swatting) {
+          const prevX = s.walk.x;
+          const prevPhase = s.walk.phase;
+          const goal = swatting ? s.walk.x + (p!.x > s.char.x ? -70 : 70) : raw;
+          s.walk = stepWalk(s.walk, goal, dt, ext, swatting ? { ...cfg, vmax: cfg.vmax * 0.8 } : cfg);
+          const moved = s.walk.x - prevX;
+          if (moved) {
+            s.anchored = false;
+            // gait runs backward when he backs away facing the pointer
+            s.walk.phase = (((prevPhase + (moved * (s.facing || 1)) / cfg.cycle) % 1) + 1) % 1;
+          }
+        }
+        if (!swatting) {
+          if (s.walk.walking && mode() === 'idle') go(s, { type: 'move' }, now);
+          else if (!s.walk.walking && mode() === 'walking') go(s, { type: 'stop' }, now);
+        }
 
         // edge: pointer well past the end he's stuck at
         const stuck =
           follow &&
           settledWalk(s.walk) &&
           ext.hi - ext.lo > 60 &&
-          ((raw > ext.hi + 24 && s.walk.x >= ext.hi - 0.5) || (raw < ext.lo - 24 && s.walk.x <= ext.lo + 0.5));
+          !swatting &&
+          ((raw > ext.hi + 10 && s.walk.x >= ext.hi - 0.5) || (raw < ext.lo - 10 && s.walk.x <= ext.lo + 0.5));
         if (!stuck) s.edgeSince = 0;
         else if (!s.edgeSince) s.edgeSince = now;
         else if (now - s.edgeSince > EDGE_BEAT * 1000) {
@@ -299,11 +416,43 @@ export function Puppeteer() {
       }
 
       // ---- the claw's own ideas: a press on him, or boredom ----
-      if (free(mode()) && s.idx >= 0 && !reduce) {
+      if (pressed && !reduce && !byHand) {
+        go(s, { type: 'take', plan: { kind: 'hand', why: 'press', to: -1, x: 0 } }, now);
+        if (s.m.plan?.kind !== 'hand') holding = false; // the press didn't take (mid-handling)
+      }
+      if (byHand && mode() === 'carried' && !holding) go(s, { type: 'release' }, now);
+
+      // ---- his own ideas: the pointer rests over another printed plate → find a way there ----
+      if (free(mode()) && mode() !== 'swatting' && s.idx >= 0 && !reduce && p) {
+        // ledges are small: a generous zone above them counts as resting over them
+        const over = (q: (typeof ps)[number], i: number) =>
+          cache[i].ledge
+            ? p.x >= q.left - 24 && p.x <= q.left + cache[i].width + 24 && p.y >= q.top - 110 && p.y <= q.bottom + 16
+            : p.x >= q.left && p.x <= q.left + cache[i].width && p.y >= q.top - 40 && p.y <= q.bottom;
+        const j = ps.findIndex((q, i) => i !== s.idx && q.ok && q.visible && over(q, i));
+        if (j !== s.want) {
+          s.want = j;
+          s.wantSince = now;
+          if (j < 0) s.wantFail = -1;
+          if (j >= 0) wakeIn(DWELL);
+        } else if (j >= 0 && j !== s.wantFail && now - s.wantSince > DWELL * 1000) {
+          const ok = ps.map((q) => q.ok && q.top > -vp.h * 0.5 && q.top < vp.h * 1.5);
+          const S = surfaces(ok);
+          const tx = clampTo(p.x - ps[j].left, cache[j].ext) + cache[j].left;
+          const route = planRoute(S, { s: s.idx, x: cache[s.idx].left + s.walk.x }, { s: j, x: tx }, lim);
+          if (route && route.some((mv) => mv.kind !== 'walk')) {
+            s.route = route;
+            s.leg = 0;
+            s.legAt = now;
+            go(s, { type: 'hop' }, now);
+            s.idx = j;
+          } else s.wantFail = j;
+        }
+      } else if (!free(mode())) s.want = -1;
+
+      if (free(mode()) && mode() !== 'swatting' && s.idx >= 0 && !reduce) {
         const ext = cache[s.idx].ext;
-        if (pressed) {
-          go(s, { type: 'take', plan: { kind: 'tour', why: 'press', to: s.idx, x: home(s.idx) } }, now);
-        } else if (mode() === 'idle' && now >= s.idleAt) {
+        if (mode() === 'idle' && now >= s.idleAt) {
           const others = ps.map((_, i) => i).filter((i) => i !== s.idx && ps[i].ok && ps[i].visible);
           const span = ext.hi - ext.lo;
           const options: Plan[] = [];
@@ -327,10 +476,17 @@ export function Puppeteer() {
       // ---- motion for the current mode ----
       const prevX = s.char.x;
       const m = s.m;
-      const k = clamp((now - m.since) / 1000 / (m.mode === 'grabbed' ? GRAB : m.mode === 'landing' ? LAND : s.dur));
+      const k = clamp((now - m.since) / 1000 / (m.mode === 'grabbed' ? (m.plan?.kind === 'hand' ? GRAB_HAND : GRAB) : m.mode === 'landing' ? LAND : s.dur));
       const perchPos = (i: number, x: number): Pt => ({ x: ps[i].left + x, y: ps[i].pt.y });
       let lean: number | null = null; // fixed pose angle (drag) instead of pendulum physics
+      let ragdoll = false;
+      s.action = undefined;
+      if (m.mode === 'swatting') {
+        s.action = 'swat';
+        s.actionK = (((now - m.since) / 1000 / SWAT) % 1 + 1) % 1;
+      }
       switch (m.mode) {
+        case 'swatting':
         case 'idle':
         case 'walking':
         case 'landing':
@@ -339,7 +495,7 @@ export function Puppeteer() {
           if (m.mode === 'landing' && k >= 1) go(s, { type: 'landed' }, now);
           break;
         case 'grabbed':
-          if (s.idx >= 0) s.char = perchPos(s.idx, s.walk.x);
+          if (s.idx >= 0 && m.plan?.kind !== 'hand') s.char = perchPos(s.idx, s.walk.x); // by hand: he stays where you caught him
           s.grip = easeInOut(k);
           if (k >= 1) go(s, { type: 'gripped' }, now);
           break;
@@ -349,6 +505,21 @@ export function Puppeteer() {
           break;
         case 'carried': {
           const plan = m.plan!;
+          if (plan.kind === 'hand') {
+            // the claw follows the pointer; he hangs from the collar
+            if (hand) {
+              const goal = { x: hand.x - COLLAR.x * s.facing * scale, y: hand.y - COLLAR.y * scale };
+              const a = 1 - Math.pow(1e-6, dt);
+              const nx = lerp(s.char.x, goal.x, a);
+              const ny = lerp(s.char.y, goal.y, a);
+              const b = 1 - Math.pow(0.02, dt);
+              s.hv = { x: lerp(s.hv.x, (nx - s.char.x) / Math.max(dt, 1e-3), b), y: lerp(s.hv.y, (ny - s.char.y) / Math.max(dt, 1e-3), b) };
+              s.char = { x: nx, y: ny };
+            }
+            s.grip = 1;
+            ragdoll = true;
+            break;
+          }
           const target = plan.to < 0 ? heldPt : perchPos(plan.to, plan.x);
           const e = easeInOut(k);
           const peak = Math.min(s.from.y, target.y) - s.lift;
@@ -365,6 +536,66 @@ export function Puppeteer() {
           s.char = { x, y };
           s.grip = 1;
           if (k >= 1) go(s, { type: 'arrived' }, now);
+          break;
+        }
+        case 'falling': {
+          const f = s.fall!;
+          const t = (now - m.since) / 1000;
+          const u = clamp(t / f.T);
+          const x = f.x0 + (f.x1 - f.x0) * u + f.vx * f.T * u * (1 - u) * 0.5;
+          const y = f.y0 + f.vy * Math.min(t, f.T) + (GRAVITY * Math.min(t, f.T) ** 2) / 2;
+          s.char = { x: x - window.scrollX, y: (u >= 1 ? f.y1 : y) - window.scrollY };
+          s.grip = Math.max(0, s.grip - dt * 6);
+          ragdoll = true;
+          if (u >= 1) {
+            s.fall = null;
+            s.squash = 0.16;
+            if (f.to >= 0) {
+              s.idx = f.to;
+              s.walk = { x: clampTo(f.x1 - cache[f.to].left, cache[f.to].ext), v: 0, phase: s.walk.phase, walking: false };
+              s.anchored = false;
+              s.placedBest = best;
+              s.holdUntil = now + 1500; // catches his breath before following again
+            } else s.idx = -1;
+            go(s, { type: 'arrived' }, now);
+          }
+          break;
+        }
+        case 'hopping': {
+          // his own route: one Move at a time, in document space
+          const route = s.route!;
+          let mv = route[s.leg];
+          let t = (now - s.legAt) / 1000 / mv.duration;
+          while (t >= 1 && s.leg < route.length - 1) {
+            if (mv.kind === 'jump' || mv.kind === 'fall') s.squash = 0.1;
+            s.legAt += mv.duration * 1000;
+            s.leg++;
+            mv = route[s.leg];
+            t = (now - s.legAt) / 1000 / mv.duration;
+          }
+          const smp = sampleMove(mv, t, 40 * (scale / 1.85));
+          const prevPhase = s.walk.phase;
+          s.char = { x: smp.p.x - window.scrollX, y: smp.p.y - FEET * scale - window.scrollY };
+          const dir = mv.to.x >= mv.from.x ? 1 : -1;
+          if (Math.abs(mv.to.x - mv.from.x) > 1) s.facing = dir;
+          if (smp.action === 'walk') s.walk = { ...s.walk, v: dir * lim.speed, phase: (prevPhase + Math.abs(s.char.x - prevX) / cfg.cycle) % 1 };
+          else {
+            s.walk = { ...s.walk, v: 0 };
+            s.action = smp.action;
+            s.actionK = smp.k;
+          }
+          s.grip = 0;
+          if (t >= 1) {
+            const last = route[route.length - 1];
+            if (last.kind !== 'walk') s.squash = 0.1;
+            s.route = null;
+            s.idx = last.onto;
+            s.walk = { x: clampTo(last.to.x - cache[last.onto].left, cache[last.onto].ext), v: 0, phase: s.walk.phase, walking: false };
+            s.anchored = false;
+            s.placedBest = best;
+            s.want = -1;
+            go(s, { type: 'arrived' }, now);
+          }
           break;
         }
         case 'dragged': {
@@ -389,7 +620,13 @@ export function Puppeteer() {
       // pendulum swing while carried, settles otherwise; drags hold a lean
       const inAir = s.m.mode === 'carried' || s.m.mode === 'dangling';
       const vx = (s.char.x - prevX) / Math.max(dt, 0.001);
-      if (lean !== null) {
+      if (ragdoll && s.rd) {
+        // falling: the collar drops with him, so gravity barely pulls his limbs (they float up loose)
+        s.rag = stepRagdoll(s.rd, collarOf(s), dt, scale, m.mode === 'falling' ? 0.5 : 1);
+        s.ragW = 1;
+        s.swing = s.rag.torso;
+        s.swingV = s.rd.torso.v;
+      } else if (lean !== null) {
         s.swing = lean;
         s.swingV = 0;
       } else {
@@ -398,10 +635,21 @@ export function Puppeteer() {
         s.swing += s.swingV * dt;
       }
       s.squash = Math.max(0, s.squash - dt * 0.6);
+      if (!ragdoll && s.ragW > 0) {
+        s.ragW = Math.max(0, s.ragW - dt * 3); // limbs ease back to the pose after he lands
+        if (s.ragW === 0) {
+          s.rag = null;
+          s.rd = null;
+        }
+      }
 
       // facing: direction of travel while handled or walking; otherwise toward the pointer (or the page centre)
       const handled = held(s.m.mode);
-      if (handled) {
+      if (s.m.mode === 'hopping') {
+        // set by the route
+      } else if (s.m.mode === 'swatting' && p) {
+        s.facing = p.x > s.char.x ? 1 : -1; // faces the pest while backing off
+      } else if (handled || s.m.mode === 'falling') {
         if (Math.abs(vx) > 30) s.facing = vx > 0 ? 1 : -1;
       } else if (Math.abs(s.walk.v) > 2) s.facing = s.walk.v > 0 ? 1 : -1;
       else if (p) {
@@ -413,7 +661,8 @@ export function Puppeteer() {
       s.turn = reduce || Math.abs(dTurn) < 0.004 ? s.facing : s.turn + clamp(dTurn * dt * 8, -turnStep, turnStep);
 
       // gait amplitude follows speed; eases out when he stops. Dragged: a weak stumble, feet scraping.
-      const amtGoal = free(s.m.mode) ? clamp(Math.abs(s.walk.v) / (cfg.vmax * 0.35)) : s.m.mode === 'dragged' ? 0.35 : 0;
+      const amtGoal =
+        free(s.m.mode) || (s.m.mode === 'hopping' && !s.action) ? clamp(Math.abs(s.walk.v) / (cfg.vmax * 0.35)) : s.m.mode === 'dragged' ? 0.35 : 0;
       s.amt = amtGoal >= s.amt ? amtGoal : Math.max(amtGoal, s.amt - dt * 4);
 
       // a glance at the pointer for a moment after it moves, while he stands still
@@ -446,6 +695,7 @@ export function Puppeteer() {
         Math.abs(s.swing) < 1e-4 &&
         Math.abs(s.swingV) < 1e-4 &&
         s.squash === 0 &&
+        s.ragW === 0 &&
         Math.abs(s.baseX - baseGoal) < 1e-4; // tight: a looser snap leaves the carriage visibly off by a sub-pixel
       if (s.m.mode === 'dangling') return Math.abs(s.swing) > 1e-4 || !reduce; // sways in the air; reduced motion: still
       return !settled;
@@ -464,10 +714,13 @@ export function Puppeteer() {
       if (tip.x > base.x + 40) s.bend = -1;
       else if (tip.x < base.x - 40) s.bend = 1;
       const mode = s.m.mode;
-      const dangle = mode === 'carried' || mode === 'dangling' ? 1 : mode === 'dragged' ? 0.55 : 0;
-      const pose: Pose = { swing: 0, dangle, facing: s.turn, squash: s.squash, phase: s.walk.phase, walk: s.amt, tilt: s.tilt };
+      const loose = s.rag && s.ragW > 0;
+      const dangle = loose ? 0.3 * s.ragW : mode === 'carried' || mode === 'dangling' ? 1 : mode === 'dragged' ? 0.55 : 0;
+      const w = s.ragW;
+      const rag = loose ? { torso: 0, head: s.rag!.head * w, armL: s.rag!.armL * w, armR: s.rag!.armR * w, legL: s.rag!.legL * w, legR: s.rag!.legR * w } : undefined;
+      const pose: Pose = { swing: 0, dangle, facing: s.turn, squash: s.squash, phase: s.walk.phase, walk: s.amt, tilt: s.tilt, rag, action: s.action, actionK: s.actionK };
       // character pivots on the collar while the claw has him
-      const pivot = g > 0 && Math.abs(s.swing) > 1e-4;
+      const pivot = Math.abs(s.swing) > 1e-4;
       setAttr(tiltRef.current, 'transform', pivot ? `rotate(${(s.swing * 180) / Math.PI} ${collar.x} ${collar.y})` : null);
       charRef.current?.set(s.char.x, s.char.y, scale, pose);
       armRef.current?.set({ base, tip, bend: s.bend, grip: g });
@@ -492,26 +745,43 @@ export function Puppeteer() {
     };
     const onHim = (x: number, y: number) => {
       const s = st.current;
-      if (!s || !free(s.m.mode)) return false;
+      const md = s?.m.mode;
+      if (!s || reduce || !(free(md!) || md === 'landing' || md === 'falling' || md === 'hopping')) return false;
       return Math.abs(x - s.char.x) < 18 * scale && y > s.char.y - 45 * scale && y < s.char.y + FEET * scale;
     };
 
     // pointer: mouse/pen follow live; touch follows the last tap (a short press that didn't scroll)
     let down: { x: number; y: number; t: number } | null = null;
     const onMove = (e: PointerEvent) => {
+      if (holding) {
+        hand = { x: e.clientX, y: e.clientY };
+        wake();
+      }
       if (e.pointerType === 'touch') return;
       ptr.current = { x: e.clientX, y: e.clientY, t: performance.now() };
       attention(e.clientX, e.clientY);
       wake();
     };
     const onDown = (e: PointerEvent) => {
-      if (onHim(e.clientX, e.clientY)) {
+      if (e.button === 0 && onHim(e.clientX, e.clientY)) {
+        e.preventDefault(); // no text selection / focus change under him
         pressed = { x: e.clientX, y: e.clientY };
+        holding = true;
+        hand = { x: e.clientX, y: e.clientY };
+        document.documentElement.style.cursor = 'grabbing';
         wake();
+        return;
       }
       if (e.pointerType === 'touch') down = { x: e.clientX, y: e.clientY, t: performance.now() };
     };
+    const letGo = () => {
+      if (!holding) return;
+      holding = false;
+      document.documentElement.style.cursor = '';
+      wake();
+    };
     const onUp = (e: PointerEvent) => {
+      letGo();
       if (e.pointerType !== 'touch' || !down) return;
       const tap = Math.hypot(e.clientX - down.x, e.clientY - down.y) < 12 && performance.now() - down.t < 600;
       down = null;
@@ -520,13 +790,21 @@ export function Puppeteer() {
       attention(e.clientX, e.clientY);
       wake();
     };
-    const onCancel = () => void (down = null);
+    const onCancel = () => {
+      down = null;
+      letGo();
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (holding && e.cancelable) e.preventDefault(); // dragging him doesn't scroll the page
+    };
     const onScroll = () => {
       armIdle(performance.now());
       wake();
     };
     window.addEventListener('pointermove', onMove, { passive: true });
-    window.addEventListener('pointerdown', onDown, { passive: true });
+    window.addEventListener('pointerdown', onDown);
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('blur', letGo);
     window.addEventListener('pointerup', onUp, { passive: true });
     window.addEventListener('pointercancel', onCancel, { passive: true });
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -540,6 +818,9 @@ export function Puppeteer() {
       timers.clear();
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('blur', letGo);
+      document.documentElement.style.cursor = '';
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onCancel);
       window.removeEventListener('scroll', onScroll);

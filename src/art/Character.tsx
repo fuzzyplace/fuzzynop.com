@@ -1,4 +1,5 @@
 import { useImperativeHandle, useLayoutEffect, useRef, type Ref } from 'react';
+import type { RagPose } from './ragdoll';
 import { setAttr } from './ticker';
 import { gait } from './walk';
 
@@ -12,6 +13,10 @@ import { gait } from './walk';
  * amplitude (0 = standing). Feet stay the anchor — the body bobs on an inner group and the hips
  * follow, so the planted foot never leaves the surface. Idle breathing is a stepped CSS loop
  * (`char-breathe`) so the stage loop can sleep while he stands still.
+ *
+ * `action` + `actionK` (0..1 progress) layer a body pose for swat / jump / climb / fall on top of the
+ * gait. `rag` (from ragdoll.ts) bends head, arms and legs about their joints while he's held or falling;
+ * its angles are screen-space, so they're mirrored here when he faces -x.
  */
 export type Pose = {
   swing: number;
@@ -21,7 +26,11 @@ export type Pose = {
   phase?: number;
   walk?: number; // 0..1 gait amplitude
   tilt?: number; // head tilt in radians, + = chin down
+  rag?: RagPose; // limbs relative to the torso (torso itself is applied by the Puppeteer as a collar pivot)
+  action?: Action;
+  actionK?: number; // 0..1 through the action
 };
+export type Action = 'swat' | 'jump' | 'climb' | 'fall';
 export type CharacterHandle = { set: (x: number, y: number, scale: number, pose: Pose) => void };
 
 /** Foot travel per step, character units. The Puppeteer walks 2·STRIDE·scale px per gait cycle. */
@@ -29,6 +38,22 @@ export const STRIDE = 14;
 
 const f = (n: number) => Math.round(n * 100) / 100;
 type P2 = [number, number];
+/** Rotate p about c by a radians (SVG convention). */
+const rot = (p: P2, c: P2, a: number): P2 => {
+  if (!a) return p;
+  const cs = Math.cos(a);
+  const sn = Math.sin(a);
+  const dx = p[0] - c[0];
+  const dy = p[1] - c[1];
+  return [c[0] + dx * cs - dy * sn, c[1] + dx * sn + dy * cs];
+};
+/** Point `len` from `c` at angle `a` from straight down (+ = toward -x, SVG rotate convention). */
+const hang = (c: P2, len: number, a: number): P2 => [c[0] - Math.sin(a) * len, c[1] + Math.cos(a) * len];
+const SH_L: P2 = [-7, -7];
+const SH_R: P2 = [7, -7];
+const HIP_L: P2 = [-1.75, 3];
+const HIP_R: P2 = [4.25, 2.5];
+const NECK: P2 = [0, -13];
 /** A tapered leg: hip edge → knee → foot edge. The knee bends forward by `knee` units. */
 function leg(ho: P2, hi: P2, fo: P2, fi: P2, knee: number) {
   const ko = [(ho[0] + fo[0]) / 2 + knee, (ho[1] + fo[1]) / 2];
@@ -54,23 +79,79 @@ export function Character({ ref }: { ref?: Ref<CharacterHandle> }) {
   useImperativeHandle(
     ref,
     () => ({
-      set(x, y, scale, { swing, dangle, facing, squash, phase = 0, walk = 0, tilt = 0 }) {
+      set(x, y, scale, { swing, dangle, facing, squash, phase = 0, walk = 0, tilt = 0, rag, action, actionK = 0 }) {
         const legA = dangle * 0.35; // legs drift apart while carried
         const armA = dangle * 0.5;
         const g = gait(phase, walk, STRIDE);
         const b = g.bob;
         const fx = (facing < 0 ? -1 : 1) * Math.max(0.08, Math.abs(facing));
+        const mir = fx < 0 ? -1 : 1; // screen-space rag angles → local (local x is flipped when facing -x)
         setAttr(el.root, 'display', null);
         setAttr(el.root, 'transform', `translate(${x} ${y}) rotate(${(swing * 180) / Math.PI}) scale(${fx * scale} ${scale * (1 - squash)})`);
-        const L = g.footL;
-        const R = g.footR;
-        setAttr(el.legL, 'd', leg([-3, 2 - b], [-0.5, 4 - b], [-5 - legA * 10 + L.x, 26 - L.lift], [-2 - legA * 10 + L.x, 26 - L.lift], L.lift * 0.8));
-        setAttr(el.legR, 'd', leg([3, 2 - b], [5.5, 3 - b], [4 + legA * 9 + R.x, 26 - R.lift], [7 + legA * 9 + R.x, 26 - R.lift], R.lift * 0.8));
+
+        // feet (outer, inner) and hands from the gait, then the action, then the ragdoll
+        let L = { x: g.footL.x - legA * 10, lift: g.footL.lift };
+        let R = { x: g.footR.x + legA * 9, lift: g.footR.lift };
         const sw = g.arm * 2.6; // arms counter-swing the legs
-        setAttr(el.armL, 'd', `M-7 -7 L${f(-9 - armA * 6 - sw)} ${8 - armA * 4}`);
-        setAttr(el.armR, 'd', `M7 -7 L${f(9 + armA * 6 + sw)} ${8 - armA * 4}`);
+        let handL: P2 = [-9 - armA * 6 - sw, 8 - armA * 4];
+        let handR: P2 = [9 + armA * 6 + sw, 8 - armA * 4];
+        let headA = tilt;
+        let kneeL = L.lift * 0.8;
+        let kneeR = R.lift * 0.8;
+        const k = Math.min(1, Math.max(0, actionK));
+        if (action === 'swat') {
+          // a quick flick of the front hand up and out, then back; head pulls away
+          const s1 = Math.sin(Math.PI * k);
+          handR = hang(SH_R, 15, -(0.5 + 2.1 * s1 * s1));
+          handL = hang(SH_L, 15, 0.35 * s1);
+          headA += -0.12 * s1;
+        } else if (action === 'jump') {
+          // crouch, arms back → stretch, arms up → tuck in the air → land
+          const crouch = k < 0.15 ? Math.sin((k / 0.15) * Math.PI * 0.5) : Math.max(0, 1 - (k - 0.15) * 8);
+          const tuck = k > 0.3 ? Math.sin(((k - 0.3) / 0.7) * Math.PI) : 0;
+          kneeL = kneeR = 3.5 * crouch + 5 * tuck;
+          L = { x: L.x - 1.5 * tuck, lift: 6 * tuck };
+          R = { x: R.x - 1.5 * tuck, lift: 6 * tuck };
+          handL = hang(SH_L, 15, crouch > 0.2 ? 0.6 : -2.4 * tuck - 0.3);
+          handR = hang(SH_R, 15, crouch > 0.2 ? 0.6 : -2.6 * tuck - 0.3);
+        } else if (action === 'climb') {
+          // hand over hand, knees alternating against the wall
+          const c = Math.sin(k * Math.PI * 10);
+          handL = hang(SH_L, 15, Math.PI - 0.25 + 0.25 * c);
+          handR = hang(SH_R, 15, Math.PI + 0.1 - 0.25 * c);
+          L = { x: 3, lift: 5 + 3 * c };
+          R = { x: 4, lift: 5 - 3 * c };
+          kneeL = 5 + 2 * c;
+          kneeR = 5 - 2 * c;
+          headA += -0.1;
+        } else if (action === 'fall') {
+          // arms up, legs apart
+          const a = Math.min(1, k * 3);
+          handL = hang(SH_L, 15, 2.4 * a);
+          handR = hang(SH_R, 15, -2.5 * a);
+          L = { x: L.x - 3 * a, lift: 2 * a };
+          R = { x: R.x + 3 * a, lift: 2 * a };
+        }
+        let fo: P2[] = [
+          [-5 + L.x, 26 - L.lift],
+          [-2 + L.x, 26 - L.lift],
+          [4 + R.x, 26 - R.lift],
+          [7 + R.x, 26 - R.lift],
+        ];
+        if (rag) {
+          handL = rot(handL, SH_L, rag.armL * mir);
+          handR = rot(handR, SH_R, rag.armR * mir);
+          fo = [rot(fo[0], HIP_L, rag.legL * mir), rot(fo[1], HIP_L, rag.legL * mir), rot(fo[2], HIP_R, rag.legR * mir), rot(fo[3], HIP_R, rag.legR * mir)];
+          headA += rag.head * mir;
+          kneeL = 1.2;
+          kneeR = 1.2;
+        }
+        setAttr(el.legL, 'd', leg([-3, 2 - b], [-0.5, 4 - b], fo[0], fo[1], kneeL));
+        setAttr(el.legR, 'd', leg([3, 2 - b], [5.5, 3 - b], fo[2], fo[3], kneeR));
+        setAttr(el.armL, 'd', `M-7 -7 L${f(handL[0])} ${f(handL[1])}`);
+        setAttr(el.armR, 'd', `M7 -7 L${f(handR[0])} ${f(handR[1])}`);
         const bodyT = b ? `translate(0 ${f(-b)})` : null;
-        const headT = tilt ? `rotate(${f((tilt * 180) / Math.PI)} 0 -13)` : null;
+        const headT = headA ? `rotate(${f((headA * 180) / Math.PI)} ${NECK[0]} ${NECK[1]})` : null;
         setAttr(el.body, 'transform', bodyT);
         setAttr(el.bodyG, 'transform', bodyT);
         setAttr(el.head, 'transform', headT);

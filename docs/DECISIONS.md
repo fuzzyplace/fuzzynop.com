@@ -65,6 +65,9 @@
 3. **Fonts:** Instrument Serif (organic display) + Geist / Geist Mono (machine).
 4. **v1 preserved** in `legacy/v1/` as reference; not built or deployed.
 
+- **2026-11-01 — v2.3 p3 claw + ragdoll + navigation.** Merged `claude/v2.3-p3-claw` (state machine, edge reset, idle relocation; 40 px/s walk). Edge-reset trigger margin 24 → 10 px (it couldn't fire on the desktop hero). New pure modules: `ragdoll.ts` (damped pendulums from the collar, joint limits, driven by collar acceleration), `navigate.ts` (surfaces → cheapest walk/jump/climb/fall route, ≤ 3 hops). Machine gains `hopping`. Behaviour: pointer within 60 px → he backs off facing it and swats (mouse only); press on him → claw snaps on (0.16 s), follows the pointer, he hangs as a ragdoll; release → ballistic fall (keeps throw velocity) onto the printed perch under him, else the nearest one, else out the bottom and the claw fetches him; pointer resting 0.7 s over another reachable perch → he makes his own way there. One ticker, refs only, sleeps when settled. Reduced motion: none of it (no swat, pickup or hops).
+- **2026-11-01 — Hero stepping-stones (`<Ledge>`).** Plates print bottom-up with scroll and only count as perches once fully printed, so two printed plate tops are never on screen together at normal heights — plate-to-plate hops would almost never happen. Added three hung ink hex stones in the hero's lit right third (desktop only, clear of the headline) as `[data-ledge]` perches: he can climb/jump/fall between them and the ground; the reading-line carry never targets a ledge. Plate-to-plate routes still work on tall screens.
+
 ## Open assumptions — Z to confirm
 - [x] ~~Phase 1 kept the `#ink` rough edge on the moving hero arm even though it costs ~half the frame rate on desktop. OK to swap in a cheaper edge on moving arms?~~ Resolved without a visual change: rail split onto its own filter layer → 60 fps with the same edge (2026-10-31).
 
@@ -84,3 +87,7 @@
 - [ ] **Hub destinations**: live now = LinkedIn, SoundCloud, Spotify, Mixcloud (CONTENT.md listed Spotify/Mixcloud as "not currently used" — OK to show?). Placeholders "Notes", "Projects", "Sources", "Archive" need URLs or removal.
 - [ ] **Hub plate copy**: eyebrow "Links", title "Elsewhere." are UI labels, not from Approved copy. Keep or rephrase?
 - [ ] Hub kind sub-labels (social / sound / work / source) visible — keep, or labels only?
+- [ ] **Ragdoll / drop feel** (p3): swing stiffness, throw strength, landing squash — tune by eye on the preview?
+- [ ] **Swat**: 60 px trigger and backing away while facing the cursor — too skittish? Touch has no swat (no hover).
+- [ ] **Hero stepping-stones**: keep the three hung hex stones (only place he can hop on most screens)? Want ledges between plates too (e.g. a hex bracket off each plate's corner) so he can travel the whole page?
+- [ ] Should he wander between ledges on his own when idle, or only when the pointer invites him?

@@ -1,5 +1,5 @@
 import { motion, useReducedMotion, useScroll, useTransform } from 'motion/react';
-import { useRef, type ReactNode } from 'react';
+import { useRef, type CSSProperties, type ReactNode } from 'react';
 import { hexPoints, rng } from './geometry';
 
 /** Tone = depth. far: gray + blur (fog swallows it). mid: near-black. near: pure ink, rough edge. */
@@ -132,5 +132,24 @@ export function Ground({ width, height = 90, seed = 5 }: { width: number; height
         <polygon points={hexPoints(width * 0.81, height * 0.4, 6)} />
       </g>
     </svg>
+  );
+}
+
+/**
+ * A hex stepping-stone hung on two wires, like a paper-cut set piece. Its top edge is a perch
+ * ([data-ledge]): the character can jump, climb and fall between it and other perches, but the
+ * claw never picks it as the reading-line perch.
+ */
+export function Ledge({ width = 84, height = 26, style }: { width?: number; height?: number; style?: CSSProperties }) {
+  const i = height / 2;
+  const pts = `0,${i} ${i},0 ${width - i},0 ${width},${i} ${width - i},${height} ${i},${height}`;
+  return (
+    <div className="pointer-events-none absolute z-10" style={{ width, height, ...style }} data-perch="0.5" data-perch-span="8" data-ledge="" aria-hidden="true">
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="block max-w-none overflow-visible">
+        <path d={`M${i + 4} 0 L${i + 10} -2000 M${width - i - 4} 0 L${width - i - 12} -2000`} className="stroke-silhouette-mid" strokeWidth="1.2" fill="none" />
+        <polygon points={pts} className="fill-ink stroke-ink" filter="url(#ink)" />
+        <polygon points={hexPoints(width / 2, height / 2, height * 0.22)} className="fill-silhouette-mid" />
+      </svg>
+    </div>
   );
 }

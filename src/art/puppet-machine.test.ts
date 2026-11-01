@@ -56,3 +56,37 @@ describe('puppet machine', () => {
     expect(transition(m, { type: 'gripped' }, 1)).toBe(m);
   });
 });
+
+describe('puppet machine: pester, hand, fall, hop', () => {
+  it('pointer buzzing: swatting until it clears', () => {
+    const m = run(initial(0, null), [{ type: 'move' }, { type: 'pester' }]);
+    expect(m.mode).toBe('swatting');
+    expect(transition(m, { type: 'clear' }, 9).mode).toBe('idle');
+  });
+
+  it('press: grabbed → carried by hand; only release ends it, then falling → idle', () => {
+    let m = run(initial(0, null), [{ type: 'take', plan: plan({ kind: 'hand', why: 'press', to: -1 }) }, { type: 'gripped' }]);
+    expect(m.mode).toBe('carried');
+    // the page and the claw's whims don't get a say while the user holds him
+    expect(transition(m, { type: 'take', plan: plan({ why: 'scroll', to: 2 }) }, 5)).toBe(m);
+    expect(transition(m, { type: 'arrived' }, 5)).toBe(m);
+    m = transition(m, { type: 'release' }, 6);
+    expect(m.mode).toBe('falling');
+    expect(m.plan).toBeNull();
+    expect(transition(m, { type: 'arrived' }, 7).mode).toBe('idle');
+  });
+
+  it('caught mid-fall by another press', () => {
+    const m = run(initial(0, null), [{ type: 'take', plan: plan({ kind: 'hand', why: 'press', to: -1 }) }, { type: 'gripped' }, { type: 'release' }]);
+    expect(transition(m, { type: 'take', plan: plan({ kind: 'hand', why: 'press', to: -1 }) }, 9).mode).toBe('grabbed');
+    expect(transition(m, { type: 'take', plan: plan({ why: 'edge' }) }, 9)).toBe(m);
+  });
+
+  it('hop: his own route; scroll or a press interrupts, whims do not', () => {
+    const m = run(initial(0, null), [{ type: 'move' }, { type: 'hop' }]);
+    expect(m.mode).toBe('hopping');
+    expect(transition(m, { type: 'take', plan: plan({ why: 'relocate' }) }, 9)).toBe(m);
+    expect(transition(m, { type: 'take', plan: plan({ why: 'scroll' }) }, 9).mode).toBe('grabbed');
+    expect(transition(m, { type: 'arrived' }, 9).mode).toBe('idle');
+  });
+});

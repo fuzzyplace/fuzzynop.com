@@ -6,12 +6,13 @@
  *   carried(to: hold) → dangling → carried → landing
  *   idle | walking ⇄ swatting (the pointer buzzing round him like a fly)
  *   press on him → grabbed → carried(hand: the claw follows the pointer) → release → falling → idle
+ *   idle | walking → hopping (his own route: walk / jump / climb / fall between perches) → idle
  *
  * `take` is the claw deciding to handle him; its `plan` says why and where. While he's already
  * being handled, only the page (scroll / perch lost) may interrupt — the claw's own whims
  * (edge reset, idle relocation) wait their turn. While the user holds him (`hand`), nothing does.
  */
-export type Mode = 'idle' | 'walking' | 'swatting' | 'grabbed' | 'carried' | 'dragged' | 'landing' | 'dangling' | 'falling';
+export type Mode = 'idle' | 'walking' | 'swatting' | 'grabbed' | 'carried' | 'dragged' | 'landing' | 'dangling' | 'falling' | 'hopping';
 export type Why = 'scroll' | 'lost' | 'edge' | 'relocate' | 'press' | 'enter';
 export type Plan = {
   kind: 'carry' | 'tour' | 'drag' | 'hand'; // hand = the claw follows the pointer until release
@@ -29,7 +30,8 @@ export type Ev =
   | { type: 'landed' } // claw let go
   | { type: 'pester' } // pointer buzzing close around him
   | { type: 'clear' } // it went away
-  | { type: 'release' }; // pointer up while the claw holds him by hand
+  | { type: 'release' } // pointer up while the claw holds him by hand
+  | { type: 'hop' }; // he set off on a route of his own to another perch
 
 /** The page itself (scroll, a perch disappearing) outranks the claw's own ideas. */
 export const urgent = (why: Why) => why === 'scroll' || why === 'lost';
@@ -45,11 +47,13 @@ export function transition(m: Machine, ev: Ev, now: number): Machine {
     case 'idle':
       if (ev.type === 'move') return to('walking');
       if (ev.type === 'pester') return to('swatting');
+      if (ev.type === 'hop') return to('hopping', null);
       if (ev.type === 'take') return to('grabbed', ev.plan);
       return m;
     case 'walking':
       if (ev.type === 'stop') return to('idle');
       if (ev.type === 'pester') return to('swatting');
+      if (ev.type === 'hop') return to('hopping', null);
       if (ev.type === 'take') return to('grabbed', ev.plan);
       return m;
     case 'swatting':
@@ -79,6 +83,10 @@ export function transition(m: Machine, ev: Ev, now: number): Machine {
     case 'falling':
       if (ev.type === 'arrived') return to('idle', null);
       if (ev.type === 'take' && ev.plan.why === 'press') return to('grabbed', ev.plan); // caught mid-fall
+      return m;
+    case 'hopping':
+      if (ev.type === 'arrived') return to('idle', null);
+      if (ev.type === 'take' && (urgent(ev.plan.why) || ev.plan.why === 'press')) return to('grabbed', ev.plan); // only the page or the user stops him
       return m;
   }
 }
