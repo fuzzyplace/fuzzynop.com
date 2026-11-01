@@ -15,6 +15,12 @@
 6. **Claw:** idle claw trails behind him with an eased hover point and carriage, on a leash around its old rest spot (±220 px desktop, ±30 px narrow) so it never comes to rest over hero text; elbow side has hysteresis (no pop).
 7. **Hero ground:** desktop walk span limited to ±260 px around the perch point (the pool of light); full width on narrow screens.
 
+
+**2026-10-31 — v2.3 phase 4: torn-paper cut-outs (Claude)**
+1. **Procedural outline** in `src/art/cutout.ts` (pure, Vitest-covered): seeded by `hashSeed(id)` (or a `seed` prop), sampled every ~13–39px along each edge with small fibre jitter, occasional 2–3-point tears, rare V notches, 1–2 half-hex bites and clipped corners. Every vertex stays within `TEAR_DEPTH` = 14px of the edge, so the existing padding (≥ 28px) always clears it.
+2. **Applied as CSS `clip-path: path()`** inline on the plate face (px, from the measured size; regenerated only on resize). No hidden SVG / ids. Falls back to the old `.plate-cut` polygon before measurement.
+3. **Collage:** two backing layers with their own seeded tears (paper plate: gray-600 + ink; ink plate: gray-700 + gray-400), offset 5–13px and slightly rotated. They sit inside the print-reveal element, so they print with the plate. The reveal `inset()` now overhangs 28px on the sides/bottom (and the top once printed) so layers aren't chopped; scroll/arm logic unchanged.
+4. **Alive:** per-plate tilt 0.5–1.2° via `--plate-rot` on the measured element (layout-based measuring, so unaffected). While printing it sits counter-tilted and 6px low, then settles on `data-printed="1"` (700ms emphasized-decelerate). Hover/focus-within lift (−6px, tilt eases, bigger drop shadow) only on fine-pointer hover devices. Reduced motion: no transitions, static tilt.
 **2026-10-31 — v2.3 phase 1: ticker + refs (Claude)**
 1. **One shared rAF ticker** (`src/art/ticker.ts`). Loops return `false` to sleep; scroll, layout (body ResizeObserver + `notifyLayout()`), and `data-printed` mutations wake them. A throwing loop drops out without freezing the stage.
 2. **Ref-based rendering:** `MechArm` / `Character` render once and are posed via `ref.current.set(...)`; attribute writes go through a change-skipping `setAttr`. No React render per frame anywhere.
