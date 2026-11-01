@@ -86,6 +86,29 @@
 }
 /* cut-out paper sits a few mm off the backdrop */
 @utility plate-shadow { filter: drop-shadow(10px 14px 0 rgba(0,0,0,.55)); }
+/* v2.3 cut-outs: per-plate rotation (--plate-rot, set inline from cutout.ts), a settle
+   when the print completes (data-printed on the PrintedPlate root), and a lift on hover/focus.
+   Durations are motion tokens, which drop to 0ms under prefers-reduced-motion. */
+.plate-alive {
+  rotate: var(--plate-rot, 0deg);
+  translate: 0 0;
+  transition:
+    rotate var(--md-sys-motion-duration-extra-long1) var(--md-sys-motion-easing-emphasized-decelerate),
+    translate var(--md-sys-motion-duration-extra-long1) var(--md-sys-motion-easing-emphasized-decelerate),
+    filter var(--md-sys-motion-duration-medium4) var(--md-sys-motion-easing-standard);
+}
+[data-printed='0'] > .plate-alive { rotate: calc(var(--plate-rot, 0deg) * -0.6); translate: 0 6px; }
+.plate-layer { transform-origin: 50% 50%; pointer-events: none; }
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  [data-printed='1'] > .plate-alive:is(:hover, :focus-within) {
+    rotate: calc(var(--plate-rot, 0deg) * 0.4);
+    translate: -3px -6px;
+    filter: drop-shadow(16px 22px 0 rgba(0,0,0,.6));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plate-alive, [data-printed='0'] > .plate-alive { transition: none; rotate: var(--plate-rot, 0deg); translate: 0 0; }
+}
 /* hexagon cell (flat-top) */
 @utility hex-cell {
   width: 168px; height: 146px; clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);

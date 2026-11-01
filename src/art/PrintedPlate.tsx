@@ -1,5 +1,6 @@
 import { useReducedMotion } from 'motion/react';
-import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
+import { cutLayout, hashSeed, tornPath } from './cutout';
 import { MechArm, type ArmHandle } from './MechArm';
 import { clamp, easeInOut, lerp } from './geometry';
 import { docTop, onLayout, setAttr, ticker } from './ticker';
@@ -17,17 +18,19 @@ const OVER = 240; // space above the plate the arm works in
 const SIDE = 44; // gutter for the rail
 const START = 0.95; // progress 0: plate top at 95% of the viewport
 const END = 0.7; // progress 1: plate bottom at 70% of the viewport
+const BLEED = 28; // reveal-clip overhang so the backing paper layers aren't chopped
 
 type Props = {
   id?: string;
   side: 'left' | 'right'; // which side the rail + arm live on
   tone?: 'paper' | 'ink';
   perch?: number; // 0..1 where the character stands on the top edge
+  seed?: number; // torn-edge seed; defaults to a hash of id
   className?: string;
   children: ReactNode;
 };
 
-export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right' ? 0.18 : 0.82, className = '', children }: Props) {
+export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right' ? 0.18 : 0.82, seed, className = '', children }: Props) {
   const outer = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLDivElement>(null);
   const clip = useRef<HTMLDivElement>(null);
@@ -63,7 +66,8 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
     const printed = pr >= 1;
     const printing = pr > 0 && pr < 1;
     setAttr(outer.current, 'data-printed', printed ? '1' : '0');
-    const inset = h === 0 && !reduce ? 'inset(100% 0 0 0)' : `inset(${(h * (1 - pr)).toFixed(1)}px -2px -2px -2px)`;
+    const top = pr >= 1 ? -BLEED : h * (1 - pr);
+    const inset = h === 0 && !reduce ? 'inset(100% 0 0 0)' : `inset(${top.toFixed(1)}px -${BLEED}px -${BLEED}px -${BLEED}px)`;
     if (clip.current && lastInset.current !== inset) clip.current.style.clipPath = lastInset.current = inset;
     if (!w) return;
 
@@ -128,6 +132,16 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
   const l = Math.max(120, OVER * 0.6);
   const ox = SIDE;
 
+  // torn-paper cut-out: seeded per plate, regenerated only when the plate resizes
+  const autoId = useId();
+  const s0 = seed ?? hashSeed(id ?? `${autoId}-${side}-${tone}`);
+  const layout = useMemo(() => cutLayout(s0), [s0]);
+  const cut = useMemo(() => {
+    const path = (sd: number) => (w > 0 && h > 0 ? `path("${tornPath(w, h, sd)}")` : undefined);
+    return { face: path(s0), layers: layout.layers.map((ly) => path(ly.seed)) };
+  }, [w, h, s0, layout]);
+  const layerTone = tone === 'paper' ? ['bg-gray-600', 'bg-ink'] : ['bg-gray-700', 'bg-gray-300'];
+
   return (
     <div
       ref={outer}
@@ -139,9 +153,20 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
         draw.current();
       }}
     >
-      <div ref={ref} className="plate-shadow">
-        <div ref={clip}>
-          <div className={`plate-cut ${tone === 'paper' ? 'plate-paper text-on-paper' : 'plate-ink text-on-surface'} px-7 py-10 md:px-12 md:py-14`}>
+      <div ref={ref} className="plate-shadow plate-alive" style={{ '--plate-rot': `${layout.rot.toFixed(2)}deg` } as CSSProperties}>
+        <div ref={clip} className="relative isolate">
+          {layout.layers.map((ly, i) => (
+            <div
+              key={i}
+              aria-hidden="true"
+              className={`plate-layer absolute inset-0 ${layerTone[i]} ${cut.layers[i] ? '' : 'plate-cut'}`}
+              style={{ clipPath: cut.layers[i], zIndex: -1 - i, transform: `translate(${ly.dx.toFixed(1)}px, ${ly.dy.toFixed(1)}px) rotate(${ly.rot.toFixed(2)}deg)` }}
+            />
+          ))}
+          <div
+            className={`relative ${cut.face ? '' : 'plate-cut'} ${tone === 'paper' ? 'plate-paper text-on-paper' : 'plate-ink text-on-surface'} px-7 py-10 md:px-12 md:py-14`}
+            style={{ clipPath: cut.face }}
+          >
             {children}
           </div>
         </div>
