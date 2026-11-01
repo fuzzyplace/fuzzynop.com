@@ -66,3 +66,7 @@ The "experiment log" device (EXP. 0N, Result lines, `?`, `_`) is retired from th
 6. **04 Contact — Say hello.** NEW: "If you break things for a living, need help building a team, or are making something where people and machines meet, I'd like to hear about it." + CTA ("Message me · LinkedIn" until Calendly/email exist) + "Elsewhere" circuit tree.
 
 Lines marked NEW need Z's sign-off; everything else is approved copy or Z's tagline.
+
+
+## Revision — Z, 2026-11-02 (supersedes the structure above)
+Hero back to the tagline "Team Builder, / Red Teamer, / Professional Bogeyman" with "Finding creative, empathetic security solutions for cyborgs." Chapters are **01 Past / 02 Present / 03 Future** (+ 04 Contact). Past = tracking bad guys → playing the adversary → building teams and leading in security (no retirement/art). Present = hackers' heads, AI safety from the human side, minds as machines appear more human. Future = Practice + Now combined: opportunities to build teams or guide projects (red teaming, AI safety, consciousness exploration, wellness for security professionals and hackers), or inspiring projects at the forefront of cyborg psychology. Exact copy: docs/CONTENT.md.

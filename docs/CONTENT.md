@@ -15,21 +15,28 @@ Copy lives in `src/content/site.ts`. Only publish what's in "Approved copy" belo
 >
 > The through-line of my whole career has been the same question: what happens when humans and machines meet, and how do we stay human in the process?
 
-## How it maps to the site (copy style: quiet first person — see docs/NARRATIVE.md)
-| Where | Copy | Source / status |
+## Copy rules (Z, 2026-11-02)
+- Z's voice: plain, direct, first person. Professional, human, a little dry. Never AI-sounding.
+- **No em or en dashes anywhere on the page, share card or meta.** Use a period, comma, colon or slash. Enforced by `src/content/copy.test.ts`.
+- No stock phrasing ("journey", "passionate", "leverage", "unlock", "where X meets Y"), no exclamation marks, no emoji.
+
+## How it maps to the site (Z, 2026-11-02)
+| Where | Copy | Source |
 |---|---|---|
-| Identity / title | Josh Schwartz — FuzzyNop | Z |
-| Hero | "What would / happen if_" + "Red teamer, team builder, professional bogeyman. These days, working where humans and machines meet." | Z's question; tagline + "these days" line are Z's |
-| 01 Before | "Hacker. Executive." + approved paragraphs 1–2, plus "Most of the work was breaking the stories people told themselves about being safe. They felt less safe afterwards. They were safer." | approved; middle paragraph NEW (from interview) |
-| 02 Practice | "I create things." + approved paragraph; list: Red teaming · Building and leading teams · Interfaces, rituals, small systems · Art and community | approved |
-| The question | "The through-line of my whole career has been the same question:" / "What happens when humans and machines meet?" / "And how do we stay human in the process?" | approved |
-| 03 Now | "These days." / "I’m working at the intersection of" + Consciousness · Wellness for hackers · AI safety · Cyborg psychology | approved |
-| 04 Contact | "Say hello." + "If you break things for a living, need help building a team, or are making something where people and machines meet, I’d like to hear about it." CTA "Message me · LinkedIn" (→ "Book time" once Calendly exists) | body NEW; CTA label UI |
-| Elsewhere | Circuit tree: Work (LinkedIn), Make (SoundCloud, Spotify, Mixcloud); "soon" items hidden in production | Z (branch names) |
-| Hidden trust line | "Nothing here is secure." / "He feels safe anyway." | Z interview |
-| Footer | `0x90 0x90 0x90 — nothing happened here` | v1 |
-| Meta / share | Title "Josh Schwartz — FuzzyNop"; description = hero line; OG image "What would happen if_" | derived |
-| UI labels | Nav Before / Practice / Now / Contact; "What I do", "Elsewhere", "Skip to content" | UI |
+| Identity / title | Josh Schwartz / FuzzyNop | Z |
+| Hero | "Team Builder, / Red Teamer, / Professional Bogeyman" + "Finding creative, empathetic security solutions for cyborgs." | Z |
+| 01 Past | **Hacker / Executive.** "I started out tracking bad guys. Then I switched sides and played the adversary for a living." "Over time that grew into building teams and leading in the security space." | Z (shaped) |
+| 02 Present | **The human side.** "Lately I’m working on how hackers take care of their own heads, what AI safety looks like from the human side, and what happens to our minds as machines start to seem more human." | Z (title from his words) |
+| The question | "The through-line of my whole career has been the same question:" "What happens when humans and machines meet?" "And how do we stay human in the process?" | Z |
+| 03 Future | **What I’m looking for.** "The chance to make a real impact, either building a team or guiding a project in:" Red teaming · AI safety · Consciousness exploration · Wellness for security professionals and hackers. "Or anything at the forefront of cyborg psychology." | Z (shaped) |
+| 04 Contact | **Say hello.** "If you’re working on any of this, or think I could help, get in touch." CTA "Message me · LinkedIn" | drafted, Z to confirm |
+| Elsewhere | Circuit tree: Work (LinkedIn), Make (SoundCloud, Spotify, Mixcloud) | Z |
+| Hidden trust line | "Nothing here is secure." "He feels safe anyway." | Z |
+| Footer | `0x90 0x90 0x90 · nothing happened here` | v1 (dash removed) |
+| Meta / share | Title "Josh Schwartz / FuzzyNop"; description = tagline + hero line; OG image = tagline | derived |
+| UI labels | Nav Past / Present / Future / Contact; "Elsewhere"; "Skip to content" | UI |
+
+Retired from the page (still Z's words): the retirement/return-to-art paragraph, "I create things" paragraph and list, "These days" areas, "What would happen if".
 
 ## Allowed links (own profiles only)
 - LinkedIn https://www.linkedin.com/in/joshuaaschwartz/

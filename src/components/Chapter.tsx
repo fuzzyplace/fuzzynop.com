@@ -30,6 +30,7 @@ export function Chapter({ ch, children }: { ch: Ch; children?: ReactNode }) {
           ))}
         </ul>
       )}
+      {ch.coda && <p className="type-body-large mt-8 max-w-[60ch] text-on-paper-variant">{ch.coda}</p>}
       {children}
     </>
   );

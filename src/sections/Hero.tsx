@@ -23,7 +23,7 @@ export function Hero() {
   const { w, h } = useSize(ref);
   const reduce = useReducedMotion();
   const [boxes, setBoxes] = useState<Box[]>([]);
-  const text = hero.question; // the open question (main story: docs/NARRATIVE.md), left with a blinking cursor
+  const text = hero.tagline;
   const n = text.length;
   const writeEnd = DELAY + n * PER_LINE;
 
@@ -166,11 +166,6 @@ export function Hero() {
               className="block w-fit py-1"
             >
               {line}
-              {i === n - 1 && (
-                <span className="caret" aria-hidden="true">
-                  _
-                </span>
-              )}
             </span>
           ))}
         </h1>

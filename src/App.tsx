@@ -6,7 +6,7 @@ import { Puppeteer } from './art/Puppeteer';
 import { CircuitTree } from './components/CircuitTree';
 import { Chapter } from './components/Chapter';
 import { Cta } from './components/ui';
-import { before, contact, elsewhere, interlude, nav, now, practice, site, ui } from './content/site';
+import { contact, elsewhere, future, interlude, nav, past, present, site, ui } from './content/site';
 import { Hero } from './sections/Hero';
 
 /*
@@ -46,7 +46,7 @@ export default function App() {
         <Hero />
 
         <div className="shell relative pb-40">
-          {/* ---- 01 Before ---- */}
+          {/* ---- 01 Past ---- */}
           <div className="plate-slot relative grid lg:grid-cols-12">
             <Depth depth={0.7} className="-left-48 -top-40">
               <HexLattice cols={8} rows={7} r={40} tone="far" seed={21} />
@@ -54,18 +54,18 @@ export default function App() {
             <Depth depth={0.15} className="-right-10 top-1/3 hidden lg:block">
               <Splatter size={170} seed={31} />
             </Depth>
-            <PrintedPlate id={before.id} side="right" className="mx-6 lg:col-span-7 lg:mx-0">
-              <Chapter ch={before} />
+            <PrintedPlate id={past.id} side="right" className="mx-6 lg:col-span-7 lg:mx-0">
+              <Chapter ch={past} />
             </PrintedPlate>
           </div>
 
-          {/* ---- 02 Practice ---- */}
+          {/* ---- 02 Present ---- */}
           <div className="plate-slot relative grid lg:grid-cols-12">
             <Depth depth={0.4} className="-top-72 left-[8%] hidden md:block">
               <SpiderLeg length={620} t={18} tone="mid" delay={2} />
             </Depth>
-            <PrintedPlate id={practice.id} side="left" className="mx-6 lg:col-span-7 lg:col-start-6 lg:mx-0">
-              <Chapter ch={practice} />
+            <PrintedPlate id={present.id} side="left" className="mx-6 lg:col-span-7 lg:col-start-6 lg:mx-0">
+              <Chapter ch={present} />
             </PrintedPlate>
           </div>
 
@@ -81,7 +81,7 @@ export default function App() {
             </PrintedPlate>
           </div>
 
-          {/* ---- 03 Now ---- */}
+          {/* ---- 03 Future ---- */}
           <div className="plate-slot relative grid lg:grid-cols-12">
             <Depth depth={0.6} className="-right-56 -top-32">
               <HexLattice cols={7} rows={8} r={44} tone="far" seed={57} />
@@ -89,8 +89,8 @@ export default function App() {
             <Depth depth={0.3} className="-top-80 right-[12%] hidden md:block">
               <SpiderLeg length={540} t={15} tone="near" flip delay={3.5} />
             </Depth>
-            <PrintedPlate id={now.id} side="right" className="mx-6 lg:col-span-7 lg:col-start-2 lg:mx-0">
-              <Chapter ch={now} />
+            <PrintedPlate id={future.id} side="right" className="mx-6 lg:col-span-7 lg:col-start-2 lg:mx-0">
+              <Chapter ch={future} />
             </PrintedPlate>
           </div>
 

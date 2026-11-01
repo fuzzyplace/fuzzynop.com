@@ -9,8 +9,8 @@ export const site = {
   handle: 'FuzzyNop',
   url: 'https://fuzzynop.com',
   description:
-    'Josh Schwartz (FuzzyNop). Red teamer, team builder, professional bogeyman. These days, working where humans and machines meet.',
-  footerEgg: '0x90 0x90 0x90 — nothing happened here',
+    'Josh Schwartz (FuzzyNop). Team builder, red teamer, professional bogeyman. Finding creative, empathetic security solutions for cyborgs.',
+  footerEgg: '0x90 0x90 0x90 · nothing happened here',
   /**
    * The one call to action (HANDOFF §3.5). Mechanism TBD by Z (docs/DECISIONS.md).
    * href: booking link once chosen. fallback: `mailto:` once a public email exists.
@@ -26,51 +26,43 @@ export const site = {
 
 /** v2.4: the log replaces Before / Practice / Now. Labels are UI, not claims (open assumption). */
 export const nav = [
-  { id: 'before', label: 'Before' },
-  { id: 'practice', label: 'Practice' },
-  { id: 'now', label: 'Now' },
+  { id: 'past', label: 'Past' },
+  { id: 'present', label: 'Present' },
+  { id: 'future', label: 'Future' },
   { id: 'contact', label: 'Contact' },
 ] as const;
 
 export const hero = {
-  eyebrow: 'Josh Schwartz — FuzzyNop',
-  /** Z's own question, left with the cursor blinking (docs/NARRATIVE.md). */
-  question: ['What would', 'happen if'],
-  /** Who, in one line: the v2.3 tagline + the approved "these days" line. */
-  lede: 'Red teamer, team builder, professional bogeyman. These days, working where humans and machines meet.',
+  eyebrow: 'Josh Schwartz / FuzzyNop',
+  tagline: ['Team Builder,', 'Red Teamer,', 'Professional Bogeyman'],
+  lede: 'Finding creative, empathetic security solutions for cyborgs.',
 };
 
 /**
- * The page, in Z's voice: quiet first person, plain sentences (copy style locked 2026-11-01).
- * Paragraphs are Z's approved copy (docs/CONTENT.md); lines marked NEW are drafted from the
- * 2026-11-01 interview and await Z's sign-off.
+ * Z's voice: plain, direct, first person. Written by hand, not generated.
+ * Hard rules: no em or en dashes anywhere on the page; no stock phrasing (see docs/CONTENT.md).
  */
-export type Chapter = { n: string; id: string; eyebrow: string; title: string; body: string[]; lede?: string; list?: string[]; listLabel?: string };
+export type Chapter = { n: string; id: string; eyebrow: string; title: string; body: string[]; lede?: string; list?: string[]; listLabel?: string; coda?: string };
 
-export const before: Chapter = {
+export const past: Chapter = {
   n: '01',
-  id: 'before',
-  eyebrow: 'Before',
-  title: 'Hacker. Executive.',
+  id: 'past',
+  eyebrow: 'Past',
+  title: 'Hacker / Executive',
   body: [
-    'I spent my career as a hacker and an executive. Red teaming, building teams, leading at the top.',
-    // NEW (interview: security is a feeling; the bogeyman; EXP. 01 result approved in round 1)
-    'Most of the work was breaking the stories people told themselves about being safe. They felt less safe afterwards. They were safer.',
-    'I retired from that world, and what came after wasn’t a pivot so much as a return: to art, to community, to the questions underneath all of it.',
+    'I started out tracking bad guys. Then I switched sides and played the adversary for a living.',
+    'Over time that grew into building teams and leading in the security space.',
   ],
 };
 
-export const practice: Chapter = {
+export const present: Chapter = {
   n: '02',
-  id: 'practice',
-  eyebrow: 'Practice',
-  title: 'I create things.',
+  id: 'present',
+  eyebrow: 'Present',
+  title: 'The human side',
   body: [
-    'Not as a job title, but as a way of thinking. Interfaces, rituals, small systems that sit at the edge of code and consciousness.',
-    'I lead projects and I lead people, and I care about both in the same way.',
+    'Lately I’m working on how hackers take care of their own heads, what AI safety looks like from the human side, and what happens to our minds as machines start to seem more human.',
   ],
-  listLabel: 'What I do',
-  list: ['Red teaming', 'Building and leading teams', 'Interfaces, rituals, small systems', 'Art and community'],
 };
 
 export const interlude = {
@@ -79,25 +71,24 @@ export const interlude = {
   followUp: 'And how do we stay human in the process?',
 };
 
-export const now: Chapter = {
+export const future: Chapter = {
   n: '03',
-  id: 'now',
-  eyebrow: 'Now',
-  title: 'These days.',
+  id: 'future',
+  eyebrow: 'Future',
+  title: 'What I’m looking for',
   body: [],
-  lede: 'I’m working at the intersection of',
-  list: ['Consciousness', 'Wellness for hackers', 'AI safety', 'Cyborg psychology'],
+  lede: 'The chance to make a real impact, either building a team or guiding a project in:',
+  listLabel: 'Areas',
+  list: ['Red teaming', 'AI safety', 'Consciousness exploration', 'Wellness for security professionals and hackers'],
+  coda: 'Or anything at the forefront of cyborg psychology.',
 };
 
 export const contact: Chapter = {
   n: '04',
   id: 'contact',
   eyebrow: 'Contact',
-  title: 'Say hello.',
-  body: [
-    // NEW (interview: who should feel invited)
-    'If you break things for a living, need help building a team, or are making something where people and machines meet, I’d like to hear about it.',
-  ],
+  title: 'Say hello',
+  body: ['If you’re working on any of this, or think I could help, get in touch.'],
 };
 
 /** Name of the circuit-tree nav (screen readers) and its small visible label. */
