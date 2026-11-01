@@ -167,6 +167,8 @@ export function Hero() {
         <SpiderLeg length={700} t={20} tone="near" flip delay={1.2} />
       </Depth>
       <div className="hero-shade" aria-hidden="true" />
+      {/* a soft light the stage moves behind the character while he plays on the title (off at rest) */}
+      <div className="hero-spot" data-stunt-light aria-hidden="true" />
       {/* a pool of light where the character stands — silhouettes need something to stand against */}
       <div className="hero-pool" style={{ left: `${perchX * 100}%` }} aria-hidden="true" />
       <Depth depth={0.1} className="bottom-[14%] right-[12%] hidden md:block">

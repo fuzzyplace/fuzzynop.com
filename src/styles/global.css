@@ -42,6 +42,13 @@
   position: absolute; bottom: -120px; width: 760px; height: 520px; transform: translateX(-50%); pointer-events: none;
   background: radial-gradient(ellipse at 50% 70%, rgba(201,201,195,.55) 0%, rgba(122,122,117,.28) 34%, rgba(0,0,0,0) 68%);
 }
+/* the light behind the character during the title stunt (stuntDriver.ts moves it; invisible at rest) */
+@utility hero-spot {
+  position: absolute; left: -260px; top: -260px; width: 520px; height: 520px; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(201,201,195,.26) 0%, rgba(122,122,117,.12) 40%, rgba(0,0,0,0) 70%);
+  transition: opacity var(--md-sys-motion-duration-extra-long1) var(--md-sys-motion-easing-standard);
+}
+.hero-spot[data-on] { opacity: 1; will-change: transform; }
 /* torn paper-cut silhouette */
 @utility plate-cut {
   clip-path: polygon(0 26px, 22px 4px, 46% 0, 47.5% 6px, 49% 0, calc(100% - 10px) 0, 100% 14px, 100% 62%, calc(100% - 5px) 63.5%, 100% 65%, 100% calc(100% - 30px), calc(100% - 26px) 100%, 14px 100%, 0 calc(100% - 12px));
