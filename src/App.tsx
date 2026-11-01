@@ -1,7 +1,7 @@
 import { Analytics } from '@vercel/analytics/react';
 import { ArtDefs } from './art/ArtDefs';
 import { Depth, HexLattice, SpiderLeg, Splatter } from './art/Decor';
-import { PrintedPlate } from './art/PrintedPlate';
+import { PrintedPlate, Words } from './art/PrintedPlate';
 import { Puppeteer } from './art/Puppeteer';
 import { CircuitTree } from './components/CircuitTree';
 import { Chapter } from './components/Chapter';
@@ -76,9 +76,13 @@ export default function App() {
               <Splatter size={240} seed={44} />
             </Depth>
             <PrintedPlate side="right" perch={0.12} className="mx-6 lg:mx-0">
-              <p className="type-display-medium max-w-[16ch] text-on-paper">{tieTitle(vibe.statement)}</p>
-              <p className="type-body-large mt-8 max-w-[52ch] text-on-paper-variant">{tie(vibe.body)}</p>
-              <p className="mt-6">
+              <p className="type-display-medium max-w-[16ch] text-on-paper" data-asm="words">
+                <Words text={tieTitle(vibe.statement)} />
+              </p>
+              <p className="type-body-large mt-8 max-w-[52ch] text-on-paper-variant" data-asm="lines">
+                <Words text={tie(vibe.body)} />
+              </p>
+              <p className="mt-6" data-asm="place">
                 {vibe.link.href ? (
                   <a href={vibe.link.href} target="_blank" rel="noopener noreferrer" className="type-label-large inline-flex min-h-11 items-center gap-2 text-on-paper underline decoration-accent decoration-1 underline-offset-8">
                     {vibe.link.label}
@@ -117,10 +121,12 @@ export default function App() {
             </Depth>
             <PrintedPlate id={contact.id} side="left" className="mx-6 lg:col-span-8 lg:col-start-4 lg:mx-0">
               <Chapter ch={contact}>
-                <div className="mt-8">
+                <div className="mt-8" data-asm="place">
                   <Cta cta={site.cta} />
                 </div>
-                <p className="type-label-medium mt-14 text-on-paper-variant">{elsewhere.label}</p>
+                <p className="type-label-medium mt-14 text-on-paper-variant" data-asm="unit">
+                  {elsewhere.label}
+                </p>
                 <CircuitTree className="mt-6" label={elsewhere.label} />
               </Chapter>
             </PrintedPlate>

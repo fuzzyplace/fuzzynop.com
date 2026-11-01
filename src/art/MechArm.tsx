@@ -27,6 +27,7 @@ type Props = {
   tool?: 'nozzle' | 'claw';
   toolLen?: number;
   rail?: { x1: number; x2: number };
+  tether?: boolean; // a cable from the rail (pose.railY) straight down to the shoulder: the arm hangs from a trolley
   ref?: Ref<ArmHandle>;
 };
 
@@ -73,7 +74,7 @@ function placeJoint(els: JointEls, p: Pt, r: number) {
   }
 }
 
-export function MechArm({ l1, l2, t, tool = 'nozzle', toolLen = t * 3.4, rail, ref }: Props) {
+export function MechArm({ l1, l2, t, tool = 'nozzle', toolLen = t * 3.4, rail, tether = false, ref }: Props) {
   const nuts = rail ? Math.max(2, Math.floor((rail.x2 - rail.x1) / 90)) : 0;
   const el = useRef({
     root: null as SVGGElement | null,
@@ -94,8 +95,11 @@ export function MechArm({ l1, l2, t, tool = 'nozzle', toolLen = t * 3.4, rail, r
     glow: null as SVGGElement | null,
     halo: null as SVGCircleElement | null,
     spark: null as SVGCircleElement | null,
+    tetherG: null as SVGGElement | null,
+    tetherLine: null as SVGLineElement | null,
+    trolley: null as SVGPolygonElement | null,
   }).current;
-  const cfg = { l1, l2, t, tool, toolLen, rail, nuts };
+  const cfg = { l1, l2, t, tool, toolLen, rail, nuts, tether };
   const cfgRef = useRef(cfg);
   cfgRef.current = cfg;
 
@@ -106,7 +110,7 @@ export function MechArm({ l1, l2, t, tool = 'nozzle', toolLen = t * 3.4, rail, r
     ref,
     () => ({
       set({ base, tip, bend, hot = 0, grip = 0, railY = 0 }) {
-        const { l1, l2, t, tool, toolLen, rail, nuts } = cfgRef.current;
+        const { l1, l2, t, tool, toolLen, rail, nuts, tether } = cfgRef.current;
         const wristTarget = { x: tip.x, y: tip.y - toolLen };
         const { elbow, wrist, shoulder, forearm } = solveIK(base, wristTarget, l1, l2, bend);
         const tipDraw = { x: wrist.x, y: wrist.y + toolLen };
@@ -116,6 +120,17 @@ export function MechArm({ l1, l2, t, tool = 'nozzle', toolLen = t * 3.4, rail, r
           setAttr(el.railLine, 'y1', railY);
           setAttr(el.railLine, 'y2', railY);
           for (let i = 0; i <= nuts; i++) setAttr(el.nuts[i], 'points', hexPoints(rail.x1 + (rail.x2 - rail.x1) * (i / nuts), railY, t * 0.36));
+        }
+        if (tether) {
+          const hang = base.y - railY > 2;
+          setAttr(el.tetherG, 'display', hang ? null : 'none');
+          if (hang) {
+            setAttr(el.tetherLine, 'x1', base.x);
+            setAttr(el.tetherLine, 'x2', base.x);
+            setAttr(el.tetherLine, 'y1', railY);
+            setAttr(el.tetherLine, 'y2', base.y);
+            setAttr(el.trolley, 'points', hexPoints(base.x, railY, t * 0.5));
+          }
         }
         setAttr(el.cableA, 'd', `M${base.x} ${base.y} Q ${elbow.x + t * 1.8} ${elbow.y + t * 2.6} ${wrist.x + t * 0.4} ${wrist.y - t * 0.4}`);
         setAttr(el.cableB, 'd', `M${base.x} ${base.y} Q ${elbow.x - t * 1.2} ${elbow.y + t * 3.4} ${wrist.x - t * 0.3} ${wrist.y - t * 0.2}`);
@@ -172,6 +187,13 @@ export function MechArm({ l1, l2, t, tool = 'nozzle', toolLen = t * 3.4, rail, r
           {Array.from({ length: nuts + 1 }, (_, i) => (
             <polygon key={i} ref={(e) => void (el.nuts[i] = e)} className="fill-ink" />
           ))}
+        </g>
+      )}
+
+      {tether && (
+        <g ref={(e) => void (el.tetherG = e)} filter="url(#ink)" display="none">
+          <line ref={(e) => void (el.tetherLine = e)} className="stroke-ink" strokeWidth={Math.max(1.5, t * 0.16)} />
+          <polygon ref={(e) => void (el.trolley = e)} className="fill-ink" />
         </g>
       )}
 

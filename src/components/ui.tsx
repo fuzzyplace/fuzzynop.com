@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Words } from '../art/PrintedPlate';
 
 type Tone = 'paper' | 'ink';
 
@@ -19,14 +20,17 @@ export function HexBadge({ n, tone = 'paper' }: { n: string; tone?: Tone }) {
   );
 }
 
-export function PlateHeader({ n, eyebrow, title, tone = 'paper' }: { n: string; eyebrow: string; title: ReactNode; tone?: Tone }) {
+/** `data-asm`: the plate's arms carry the badge row in whole, then the title word by word (PrintedPlate). */
+export function PlateHeader({ n, eyebrow, title, tone = 'paper' }: { n: string; eyebrow: string; title: string; tone?: Tone }) {
   return (
     <header className="mb-8">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3" data-asm="place">
         <HexBadge n={n} tone={tone} />
         <p className={`type-label-medium ${tone === 'paper' ? 'text-on-paper-variant' : 'text-secondary'}`}>{eyebrow}</p>
       </div>
-      <h2 className="type-display-small mt-5">{title}</h2>
+      <h2 className="type-display-small mt-5" data-asm="words">
+        <Words text={title} />
+      </h2>
     </header>
   );
 }

@@ -25,7 +25,7 @@ function Traces({ layout, lit, className }: { layout: TreeLayout; lit: Set<strin
   const litPts = new Set(layout.traces.filter((t) => lit.has(t.id)).flatMap((t) => t.points.map((p) => `${p.x},${p.y}`)));
   const on = (p: { x: number; y: number }) => litPts.has(`${p.x},${p.y}`);
   return (
-    <svg className={`circuit-svg ${className}`} width={layout.width} height={layout.height} viewBox={`0 0 ${layout.width} ${layout.height}`} aria-hidden="true" focusable="false">
+    <svg className={`circuit-svg ${className}`} data-asm="unit" width={layout.width} height={layout.height} viewBox={`0 0 ${layout.width} ${layout.height}`} aria-hidden="true" focusable="false">
       <g fill="none">
         {ordered.map((t) => (
           <path key={t.id} d={t.d} className={lit.has(t.id) ? 'trace is-lit' : 'trace'} />
@@ -76,7 +76,7 @@ export function CircuitTree({ data = defaultData, label, className = '' }: { dat
   const node = (n: LeafNode) => {
     const handlers = { onPointerEnter: enter(n.id), onPointerLeave: leave(n.id), onFocus: enter(n.id), onBlur: leave(n.id) };
     // a probe target: the character tugs a node and it jolts toward him (global.css, `poke-tug`)
-    const probe = { 'data-poke': 'tug', 'data-poke-reach': 'side' };
+    const probe = { 'data-poke': 'tug', 'data-poke-reach': 'side', 'data-asm': 'unit' }; // data-asm: an arm places each node (PrintedPlate)
     const lit = active === n.id ? ' is-lit' : '';
     return (
       <li key={n.id}>
@@ -106,13 +106,13 @@ export function CircuitTree({ data = defaultData, label, className = '' }: { dat
   const lit = (l: TreeLayout) => litPath(l, active);
 
   return (
-    <div className={`circuit-wrap ${className}`}>
+    <div className={`circuit-wrap ${className}`} data-asm-cluster="">
       <div className="circuit" style={sizes}>
         <Traces layout={h} lit={lit(h)} className="circuit-svg--h" />
         <Traces layout={v} lit={lit(v)} className="circuit-svg--v" />
 
         {/* the root mark: decoration (the handle is already in the header) */}
-        <div className={`circuit-root${active ? ' is-lit' : ''}`} style={rootPos} aria-hidden="true">
+        <div className={`circuit-root${active ? ' is-lit' : ''}`} style={rootPos} aria-hidden="true" data-asm="unit">
           <svg viewBox="-30 -26 60 52" className="circuit-root-hex" focusable="false">
             <polygon points={hexPoints(28)} className="circuit-root-shell" />
             <polygon points={hexPoints(23)} className="circuit-root-rim" />
@@ -129,7 +129,7 @@ export function CircuitTree({ data = defaultData, label, className = '' }: { dat
               const lp = { '--hx': g.labelAt!.x, '--hy': g.labelAt!.y, '--vx': vg.labelAt!.x, '--vy': vg.labelAt!.y } as CSSProperties;
               return (
                 <li key={g.branch}>
-                  <span id={id} className="circuit-branch type-label-medium text-on-paper-variant" style={lp}>
+                  <span id={id} className="circuit-branch type-label-medium text-on-paper-variant" style={lp} data-asm="unit">
                     {g.label}
                   </span>
                   <ul aria-labelledby={id} className="circuit-list">
