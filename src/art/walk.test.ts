@@ -32,7 +32,7 @@ describe('stepWalk', () => {
     expect(Math.abs(600 - s.x)).toBeLessThanOrEqual(WALK.arrive);
     expect(s.v).toBe(0);
     expect(vmax).toBeLessThanOrEqual(WALK.vmax + 1e-9);
-    // ~500 px at 60 px/s plus easing in and out
+    // ~500 px at vmax plus easing in and out
     expect(secs).toBeGreaterThan(500 / WALK.vmax);
     expect(secs).toBeLessThan(500 / WALK.vmax + 2);
   });
