@@ -9,7 +9,7 @@ export const site = {
   handle: 'FuzzyNop',
   url: 'https://fuzzynop.com',
   description:
-    'Josh Schwartz (FuzzyNop). Hacker, former executive, maker of interfaces, rituals, and small systems at the edge of code and consciousness.',
+    'Josh Schwartz — FuzzyNop. What would happen if_',
   footerEgg: '0x90 0x90 0x90 — nothing happened here',
   /**
    * The one call to action (HANDOFF §3.5). Mechanism TBD by Z (docs/DECISIONS.md).
@@ -27,30 +27,20 @@ export const site = {
 /** v2.4: the log replaces Before / Practice / Now. Labels are UI, not claims (open assumption). */
 export const nav = [
   { id: 'exp-01', label: 'Log' },
-  { id: 'exp-04', label: 'Now' },
-  { id: 'links', label: 'Links' },
-  { id: 'contact', label: 'Contact' },
+  { id: 'exp-05', label: 'Next' },
 ] as const;
 
 export const hero = {
   eyebrow: 'Josh Schwartz — FuzzyNop',
-  /** v2.3 tagline, kept for `?hero=classic` comparison in previews. */
-  tagline: ['Red Teamer,', 'Team Builder,', 'Professional Bogeyman'],
   /** v2.4 (docs/NARRATIVE.md): an open question, left with the cursor blinking. Z's own phrasing. */
   question: ['What would', 'happen if'],
-  /** `?hero=rotate`: the three questions Z asks, cycled. */
-  questions: [
-    ['What would', 'happen if'],
-    ['What could', 'be'],
-    ['Why does it', 'happen that way'],
-  ],
 };
 
 /**
  * v2.4 experiment log (docs/NARRATIVE.md). Titles, fragments and results approved by Z in the
  * 2026-11-01 interview; fragments are condensed from the approved copy, nothing invented.
  */
-export type Experiment = { n: string; id: string; title: string; fragments: string[]; areas?: string[]; result: string[]; pending?: true };
+export type Experiment = { n: string; id: string; title: string; srTitle?: string; fragments: string[]; areas?: string[]; result: string[]; pending?: true };
 export const experiments: Experiment[] = [
   {
     n: '01',
@@ -79,11 +69,24 @@ export const experiments: Experiment[] = [
     title: '?',
     fragments: [],
     areas: ['Consciousness', 'Wellness for hackers', 'AI safety', 'Cyborg psychology'],
-    result: ['Pending'],
-    pending: true, // result ends in a blinking cursor
+    result: ['Running.'],
   },
 ];
-export const log = { eyebrow: 'Exp.', resultLabel: 'Result', untitled: 'Untitled' }; // untitled: screen-reader name for EXP. 04's '?'
+/**
+ * EXP. 05 — the next run, with the visitor (main story, docs/NARRATIVE.md). Title is a blank cursor;
+ * the CTA and the circuit tree are the ways to start it.
+ */
+export const next: Experiment = {
+  n: '05',
+  id: 'exp-05',
+  title: '_',
+  srTitle: 'Next',
+  fragments: [],
+  result: ['Pending'],
+  pending: true, // result ends in a blinking cursor
+};
+
+export const log = { eyebrow: 'Exp.', resultLabel: 'Result', untitled: 'Untitled', linksLabel: 'Links' }; // untitled: sr name for EXP. 04's '?'; linksLabel: the circuit nav's name
 
 /** UI labels (not claims). */
 export const ui = { skip: 'Skip to content', mark: 'FZNP', markName: 'FuzzyNop', primaryNav: 'Primary' };
@@ -100,12 +103,4 @@ export const interlude = {
 
 
 /** Plate header for the circuit tree; the links themselves live in src/content/links.ts. */
-export const hubPlate = {
-  eyebrow: 'Links',
-  title: 'Elsewhere.',
-};
 
-export const contact = {
-  eyebrow: 'Contact',
-  title: 'Say hello.',
-};

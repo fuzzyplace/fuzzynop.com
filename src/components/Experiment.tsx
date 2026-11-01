@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { Experiment as Exp } from '../content/site';
 import { log } from '../content/site';
 import { PlateHeader } from './ui';
@@ -6,15 +7,17 @@ import { PlateHeader } from './ui';
  * One entry in the experiment log (docs/NARRATIVE.md): a terse title, a few fragments,
  * and a result line. `hypothesis` (interlude folded in) replaces the fragments on EXP. 04.
  */
-export function Experiment({ exp, hypothesis }: { exp: Exp; hypothesis?: string[] }) {
+export function Experiment({ exp, hypothesis, children }: { exp: Exp; hypothesis?: string[]; children?: ReactNode }) {
   const pending = !!exp.pending;
   return (
     <>
       <PlateHeader n={exp.n} eyebrow={log.eyebrow} title={
-          exp.pending && exp.title === '?' ? (
+          exp.srTitle || exp.title === '?' ? (
             <>
-              <span aria-hidden="true">?</span>
-              <span className="sr-only">{log.untitled}</span>
+              <span aria-hidden="true" className={exp.title === '_' ? 'caret' : undefined}>
+                {exp.title}
+              </span>
+              <span className="sr-only">{exp.srTitle ?? log.untitled}</span>
             </>
           ) : (
             exp.title
@@ -51,6 +54,7 @@ export function Experiment({ exp, hypothesis }: { exp: Exp; hypothesis?: string[
           ))}
         </ul>
       )}
+      {children}
       <dl className={`flex gap-6 pt-5 ${exp.areas ? '' : 'mt-10 border-t border-ink/20'}`}>
         <dt className="type-label-medium pt-1 text-on-paper-variant">{log.resultLabel}</dt>
         <dd className="type-title-large text-on-paper">

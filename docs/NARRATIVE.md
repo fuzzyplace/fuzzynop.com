@@ -42,3 +42,12 @@ Shape: one root node (Z) sends out circuit-trace branches that end in hex nodes.
 3. Interlude: keep as its own plate, or fold into EXP. 04?
 4. Calendly / socials / art / email URLs.
 5. Hero (Z: "need to see a prototype"): the preview build lets Z switch `?hero=fixed|rotate` and `?interlude=keep|fold`. Exact form of the open question (`What would happen if_` vs. rotating: what would happen if / what could be / why does it happen that way).
+
+## Main story — LOCKED (Z, 2026-11-01): "A, with B as its heart"
+**The experiment is you.** Z's life is a series of experiments at the edge of safety. The page shows the past runs; the live run is the visitor. What's always being tested is whether something *feels* safe (security is a feeling: B is the heart).
+- **Protagonist:** the visitor. The ink figure is the subject they interact with; Z is the experimenter, in the margins.
+- **Arc:** EXP. 01–03 past runs → EXP. 04 the current run (Running.) → the figure's trust is the experiment running on the visitor right now → EXP. 05 the next run, together (Pending_), with the ways to start it.
+- **Leave feeling:** seen, and curious.
+- **Never say** "you are the experiment". Restraint keeps it from becoming a gimmick.
+- **Decided by the story:** fixed hero "What would / happen if_" (rotate/classic removed); interlude folded into EXP. 04 as its hypothesis; Links + Contact merged into EXP. 05 (title is a blank cursor `_`, CTA + circuit tree inside); "soon" links hidden in production; nav Log · Next; share text and OG image = "What would happen if_".
+- **New lines derived from the story (Z to sign off):** EXP. 04 result "Running."; EXP. 05 title "_" (screen readers: "Next"), result "Pending_".

@@ -58,7 +58,7 @@ export function Cta({ cta }: { cta: { label: string; href: string | null; fallba
   return (
     <a href={cta.neutral.href} target="_blank" rel="noopener noreferrer" data-cta="" className="cta-btn type-label-large">
       <span className="cta-label">{cta.neutral.label}</span>
-      <span className="type-label-small text-on-paper-variant">{cta.neutral.via}</span>
+      <span className="cta-via type-label-small">{cta.neutral.via}</span>
       <span aria-hidden="true">↗</span>
     </a>
   );

@@ -1,5 +1,5 @@
 import { useId, useMemo, useState, type CSSProperties } from 'react';
-import { circuit as defaultData, type CircuitData } from '../content/links';
+import { published as defaultData, type CircuitData } from '../content/links';
 import { layoutTree, litPath, type LeafNode, type TreeLayout } from './circuitLayout';
 
 /**

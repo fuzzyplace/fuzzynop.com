@@ -148,6 +148,12 @@
 .cta-btn:hover .cta-label { text-decoration: underline; text-decoration-color: var(--md-sys-color-accent); text-decoration-thickness: 1px; text-underline-offset: 6px; }
 .cta-btn--placeholder, .cta-btn--placeholder:hover { background: transparent; color: var(--md-sys-color-on-surface); box-shadow: inset 0 0 0 1px var(--md-ref-gray-500); cursor: not-allowed; }
 .cta-btn--placeholder:hover .cta-label { text-decoration: none; }
+/* on a paper plate (EXP. 05) the one filled control is ink */
+.cta-via { color: var(--md-sys-color-on-paper-variant); }
+.plate-paper .cta-via { color: var(--md-ref-gray-300); }
+.plate-paper .cta-btn { background: var(--md-sys-color-ink); color: var(--md-sys-color-on-surface); }
+.plate-paper .cta-btn:hover { background: var(--md-ref-gray-900); }
+.plate-paper .cta-btn--placeholder, .plate-paper .cta-btn--placeholder:hover { background: transparent; color: var(--md-sys-color-on-paper); }
 
 /* the open question's cursor: left blinking after the arm writes */
 @keyframes caret-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }

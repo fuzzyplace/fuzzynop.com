@@ -45,3 +45,6 @@ export const circuit: CircuitData = {
     { id: 'interactive', branch: 'make', label: 'Interactive projects', href: null, status: 'soon', order: 5, kind: 'projects' },
   ],
 };
+
+/** What renders: in production only links that exist ("an experiment log only lists what exists"); dev shows everything. */
+export const published: CircuitData = import.meta.env.DEV ? circuit : { ...circuit, links: circuit.links.filter((l) => l.status === 'live') };
