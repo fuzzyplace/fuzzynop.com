@@ -5,19 +5,26 @@
  * that passed under the earlier condition, so the stage loop can sleep for minutes and wake to the
  * right value (`nextChange` says when it next matters).
  *
- * - He starts wary. A calm presence (near-ish and moving gently, or resting) earns trust slowly:
- *   about a minute of it from wary to full. Being left alone warms him up a little, never fully.
- * - Fast, erratic movement near him and chasing him cost a little; so does each swatting episode.
- * - Being grabbed spikes fear and knocks trust down sharply. Fear fades over ~half a minute and holds
- *   the trust gain back while it does.
+ * - He starts wary. Attention that's easy on him earns trust quickly: a couple of seconds of a calm
+ *   pointer near him (resting, or moving gently) and he's tolerant, about seven and he trusts you
+ *   fully. Ordinary mouse use around him counts too, a little slower. A gentle hand resting just over
+ *   his head (a pat) earns fastest. Left alone he warms up a little, never fully.
+ * - Touch: gentle taps near him (not on him) earn a good step each; staying on a section without
+ *   scrolling earns slowly.
+ * - Fast, erratic movement near him and chasing him cost trust; so does each swatting episode.
+ * - Being grabbed spikes fear and knocks trust down sharply. Fear fades (about ten seconds shaken)
+ *   and holds the trust gain back while it does.
  *
  * Behaviour reads off `band` (and the helpers below it): how close he lets the pointer come, whether
- * he swats, whether he wanders.
+ * he swats, whether he wanders. `freeze` / `thaw` carry it across a reload in the same session.
  */
 export type Cond =
   | 'calm' // near-ish and gentle, or resting near him
+  | 'easy' // around him, moving the way people move a mouse: neither gentle nor rough
+  | 'pat' // resting / drifting just over his head
+  | 'linger' // touch: staying on this part of the page (not scrolling)
   | 'alone' // no pointer about (touch between taps, mouse far / gone)
-  | 'neutral' // around, neither calm nor rough
+  | 'neutral' // poking right at him, the claw has him, or the page is hidden: nothing earned or lost
   | 'rough' // fast, erratic movement near him
   | 'chase' // coming at him
   | 'held'; // in your hand: fear doesn't fade, nothing is earned
@@ -33,29 +40,36 @@ export type Trust = {
 
 export const START = 0.15;
 export const FULL = 0.95;
-export const CALM_FULL = 60; // s of calm from START to 1 (no fear)
+export const CALM_FULL = 7.5; // s of calm from START to 1 (no fear): FULL in ~7 s, tolerant in ~2 s
 export const CALM_RATE = (1 - START) / CALM_FULL; // per s
-export const ALONE_RATE = CALM_RATE / 3.5; // per s, left alone
-export const ALONE_CAP = 0.75; // being left alone never earns full trust
-export const ROUGH_RATE = 0.08; // per s lost to fast movement near him
-export const CHASE_RATE = 0.14; // per s lost while coming at him
-export const SWAT_COST = 0.03; // per swatting episode
-export const TAP_GAIN = 0.05; // a gentle tap nearby (touch)
-export const TAP_RUSH = 0.02; // lost to taps hammered in quick succession
-export const TAP_GAP = 0.8; // s between taps for one to count as gentle
-export const FEAR_TAU = 12; // s, fear's time constant
+export const EASY_RATE = CALM_RATE * 0.75; // per s, ordinary movement around him
+export const PAT_RATE = CALM_RATE * 1.6; // per s, a hand resting over his head
+export const LINGER_RATE = 0.035; // per s, touch: staying on a section
+export const ALONE_RATE = 0.008; // per s, left alone
+export const ALONE_CAP = 0.5; // being left alone never earns more than this
+export const ROUGH_RATE = 0.16; // per s lost to fast movement near him
+export const CHASE_RATE = 0.3; // per s lost while coming at him
+export const SWAT_COST = 0.06; // per swatting episode
+export const TAP_GAIN = 0.12; // a gentle tap nearby (touch)
+export const TAP_RUSH = 0.03; // lost to taps hammered in quick succession
+export const TAP_GAP = 0.6; // s between taps for one to count as gentle
+export const FEAR_TAU = 7.5; // s, fear's time constant: shaken ~10 s after a grab, uneasy ~17 s
 export const SHAKEN = 0.25; // fear above this: trembling, cowering, keeps well away, startles early
 export const UNEASY = 0.1; // fear above this: no wandering off
 export const BANDS = [0.4, 0.75] as const; // wary | tolerant | warm
 
 // classify thresholds
-export const NEAR = 60; // px: closer than this, moving isn't "calm" (resting still is)
-export const FAR = 300; // px: further than this he's left alone
-export const GENTLE = 380; // px/s
-export const ERRATIC = 1100; // px/s
-export const CHASE_V = 260; // px/s of approach
+export const NEAR = 60; // px: closer than this, only slow movement (or resting) is calm
+export const FAR = 320; // px: further than this he's left alone
+export const SLOW = 220; // px/s: slow enough to be calm even right beside him
+export const GENTLE = 600; // px/s
+export const ERRATIC = 1800; // px/s
+export const CHASE_V = 450; // px/s of approach
 export const CHASE_D = 160; // px
-export const REST = 0.8; // s still before a pointer counts as resting
+export const REST = 0.6; // s still before a pointer counts as resting
+// taps (touch)
+export const TAP_NEAR = 60; // px: closer is a tap on him (a grab), not a tap near him
+export const TAP_FAR = 300; // px: further and he doesn't take it as meant for him
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
@@ -70,12 +84,16 @@ function earned(T: number, f: number) {
   return T - 2 * f * tau * (1 - Math.exp(-T / tau)) + ((f * f * tau) / 2) * (1 - Math.exp((-2 * T) / tau));
 }
 
+/** Per-second gain under a condition that earns trust (0 = it doesn't). */
+const gain = (cond: Cond) =>
+  cond === 'calm' ? CALM_RATE : cond === 'easy' ? EASY_RATE : cond === 'pat' ? PAT_RATE : cond === 'linger' ? LINGER_RATE : cond === 'alone' ? ALONE_RATE : 0;
+/** The condition earns trust. */
+export const earning = (cond: Cond) => gain(cond) > 0;
+
 /** Trust after `T` s under `cond`, from v with fear f. */
 function after(v: number, f: number, cond: Cond, T: number) {
   if (T <= 0) return v;
   switch (cond) {
-    case 'calm':
-      return clamp01(v + CALM_RATE * earned(T, f));
     case 'alone':
       return v >= ALONE_CAP ? v : Math.min(ALONE_CAP, v + ALONE_RATE * earned(T, f));
     case 'rough':
@@ -85,6 +103,8 @@ function after(v: number, f: number, cond: Cond, T: number) {
     case 'neutral':
     case 'held':
       return v;
+    default:
+      return clamp01(v + gain(cond) * earned(T, f));
   }
 }
 
@@ -114,9 +134,9 @@ export function nudge(t: Trust, now: number, dv: number): Trust {
   return { ...a, v, full: a.full || v >= FULL };
 }
 
-/** A touch tap `d` px from him (not on him): gentle ones earn a little; hammering costs. */
+/** A touch tap `d` px from him (not on him): gentle ones earn a good step; hammering costs. */
 export function tap(t: Trust, now: number, d: number): Trust {
-  if (d < NEAR || d > FAR) return advance(t, now);
+  if (d < TAP_NEAR || d > TAP_FAR) return advance(t, now);
   const gentle = (now - t.tapAt) / 1000 >= TAP_GAP;
   const n = nudge(t, now, gentle ? TAP_GAIN * (1 - fearAt(t, now)) ** 2 : -TAP_RUSH);
   return { ...n, tapAt: now };
@@ -128,16 +148,20 @@ export type Sense = {
   approach: number; // px/s toward him (+) or away (−), smoothed
   still: number; // s since the pointer last moved
   touch: boolean; // the last input was touch (taps are counted by `tap`, not here)
+  pat?: boolean; // resting / drifting slowly just over his head (the Puppeteer decides: it knows where his head is)
+  linger?: boolean; // touch: the page hasn't scrolled for a while and is visible
 };
 
 /** What the pointer is doing, as far as he's concerned. */
 export function classify(p: Sense): Cond {
-  if (p.d === null || p.touch || p.d > FAR) return 'alone';
+  if (p.touch) return p.linger ? 'linger' : 'alone';
+  if (p.d === null || p.d > FAR) return 'alone';
+  if (p.pat) return 'pat';
   if (p.still >= REST) return 'calm';
   if (p.approach > CHASE_V && p.d < CHASE_D) return 'chase';
   if (p.speed > ERRATIC) return 'rough';
-  if (p.speed <= GENTLE && p.d >= NEAR) return 'calm';
-  return 'neutral';
+  if (p.d < NEAR) return p.speed <= SLOW ? 'calm' : 'neutral';
+  return p.speed <= GENTLE ? 'calm' : 'easy';
 }
 
 export type Band = 'shaken' | 'wary' | 'tolerant' | 'warm';
@@ -146,6 +170,8 @@ export function band(t: Trust, now: number): Band {
   const v = advance(t, now).v;
   return v < BANDS[0] ? 'wary' : v < BANDS[1] ? 'tolerant' : 'warm';
 }
+/** Bands in order of ease: shaken 0 … warm 3. */
+export const RANK: Record<Band, number> = { shaken: 0, wary: 1, tolerant: 2, warm: 3 };
 
 /** px: a moving pointer this close and he swats at it (0 = he doesn't). Shaken: further, and sooner. */
 export function pesterDist(t: Trust, now: number) {
@@ -183,8 +209,13 @@ export function nextChange(t: Trust, now: number): number | null {
   if (a.cond !== 'held') {
     for (const th of [SHAKEN, UNEASY]) if (a.fear >= th) take(FEAR_TAU * Math.log(a.fear / th) + 0.05);
   }
-  const rising = a.cond === 'calm' || a.cond === 'alone';
-  if (rising) {
+  const falling = a.cond === 'rough' || a.cond === 'chase';
+  if (falling) {
+    const rate = a.cond === 'rough' ? ROUGH_RATE : CHASE_RATE;
+    const below = [...BANDS].reverse().find((th) => th <= a.v);
+    if (below !== undefined) take((a.v - below) / rate + 0.05);
+  }
+  if (earning(a.cond)) {
     const top = a.cond === 'alone' ? ALONE_CAP : 1;
     const target = [...BANDS, FULL].find((th) => th > a.v && th <= top);
     if (target !== undefined) {
@@ -203,4 +234,21 @@ export function nextChange(t: Trust, now: number): number | null {
     }
   }
   return best;
+}
+
+/** What a reload in the same session keeps (sessionStorage). */
+export type Saved = { v: number; fear: number; full: boolean; wall: number };
+/** Snapshot `t` at `now` (performance ms) / `wall` (Date ms). */
+export function freeze(t: Trust, now: number, wall: number): Saved {
+  const a = advance(t, now);
+  return { v: Math.round(a.v * 1000) / 1000, fear: Math.round(a.fear * 1000) / 1000, full: a.full, wall };
+}
+/** Back from a snapshot (anything malformed = null). Fear kept fading while the page was gone. */
+export function thaw(x: unknown, now: number, wall: number): Trust | null {
+  if (!x || typeof x !== 'object') return null;
+  const o = x as Record<string, unknown>;
+  const ok = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1;
+  if (!ok(o.v) || !ok(o.fear) || typeof o.full !== 'boolean' || typeof o.wall !== 'number' || !Number.isFinite(o.wall)) return null;
+  const gone = Math.max(0, wall - o.wall) / 1000;
+  return { ...initTrust(now, o.v), fear: o.fear * Math.exp(-gone / FEAR_TAU), full: o.full || o.v >= FULL };
 }
