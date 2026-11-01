@@ -3,8 +3,9 @@ import { ArtDefs } from './art/ArtDefs';
 import { Depth, HexLattice, SpiderLeg, Splatter } from './art/Decor';
 import { PrintedPlate } from './art/PrintedPlate';
 import { Puppeteer } from './art/Puppeteer';
-import { LinkRow, PlateHeader, Prose } from './components/ui';
-import { before, contact, interlude, nav, now, practice, site } from './content/site';
+import { Honeycomb } from './components/HexShards';
+import { Cta, PlateHeader, Prose } from './components/ui';
+import { before, contact, hub, hubPlate, interlude, nav, now, practice, site } from './content/site';
 import { Hero } from './sections/Hero';
 
 /*
@@ -63,14 +64,13 @@ export default function App() {
             <PrintedPlate id="practice" side="left" className="mx-6 lg:col-span-8 lg:col-start-5 lg:mx-0">
               <PlateHeader n="02" eyebrow={practice.eyebrow} title={practice.title} />
               <Prose paragraphs={practice.body} />
-              <ul className="mt-12 flex flex-wrap justify-center gap-y-3 md:justify-start" aria-label="Capabilities">
-                {practice.capabilities.map((c, i) => (
-                  <li key={c} className={`hex-cell -mr-6 bg-ink text-on-surface last:mr-0 ${i % 2 ? 'md:translate-y-[73px]' : ''}`}>
-                    <span className="type-title-small">{c}</span>
-                  </li>
-                ))}
-              </ul>
-              <div className="hidden h-[73px] md:block" aria-hidden="true" />
+              <Honeycomb
+                className="mt-12"
+                variant="static"
+                cols={4}
+                label="Capabilities"
+                items={practice.capabilities.map((c) => ({ label: c }))}
+              />
             </PrintedPlate>
           </div>
 
@@ -109,14 +109,31 @@ export default function App() {
             </PrintedPlate>
           </div>
 
-          {/* ---- Contact ---- */}
+          {/* ---- Hub: links, pieced together ---- */}
+          <div className="plate-slot relative grid lg:grid-cols-12">
+            <Depth depth={0.5} className="-left-40 -top-24">
+              <HexLattice cols={6} rows={6} r={38} tone="far" seed={63} />
+            </Depth>
+            <PrintedPlate id="links" side="right" className="mx-6 lg:col-span-8 lg:col-start-1 lg:mx-0">
+              <PlateHeader n="04" eyebrow={hubPlate.eyebrow} title={hubPlate.title} />
+              <Honeycomb
+                className="mt-10"
+                variant="link"
+                cols={4}
+                label="Links"
+                items={hub.map((h) => ({ label: h.label, href: h.href, meta: h.kind }))}
+              />
+            </PrintedPlate>
+          </div>
+
+          {/* ---- Contact: the one call to action ---- */}
           <div className="plate-slot relative grid lg:grid-cols-12">
             <Depth depth={0.2} className="-left-10 top-10 hidden lg:block">
               <Splatter size={150} seed={72} />
             </Depth>
             <PrintedPlate id="contact" side="left" tone="ink" className="mx-6 lg:col-span-5 lg:col-start-7 lg:mx-0">
-              <PlateHeader n="04" eyebrow={contact.eyebrow} title={contact.title} tone="ink" />
-              <LinkRow links={contact.links} tone="ink" />
+              <PlateHeader n="05" eyebrow={contact.eyebrow} title={contact.title} tone="ink" />
+              <Cta cta={site.cta} />
             </PrintedPlate>
           </div>
         </div>

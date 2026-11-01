@@ -55,6 +55,42 @@ export function Prose({ paragraphs, tone = 'paper' }: { paragraphs: string[]; to
   );
 }
 
+/**
+ * The one call to action (HANDOFF §3.5): the only filled control on the page.
+ * Resolution: booking href → mailto fallback → (prod) neutral "Say hello" via LinkedIn,
+ * (dev) a visible placeholder with a dev badge so the gap isn't forgotten.
+ * `data-cta` marks it so the character can stand next to it.
+ */
+export function Cta({ cta }: { cta: { label: string; href: string | null; fallback: string | null; neutral: { label: string; via: string; href: string } } }) {
+  const target = cta.href ?? cta.fallback;
+  if (target) {
+    const external = !target.startsWith('mailto:');
+    return (
+      <a href={target} data-cta="" className="cta-btn type-label-large" {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
+        <span className="cta-label">{cta.label}</span>
+        {external && <span aria-hidden="true">↗</span>}
+      </a>
+    );
+  }
+  if (import.meta.env.DEV) {
+    return (
+      <div className="flex flex-wrap items-center gap-4">
+        <span role="link" aria-disabled="true" data-cta="" className="cta-btn cta-btn--placeholder type-label-large">
+          <span className="cta-label">{cta.label}</span>
+        </span>
+        <span className="type-label-small border border-dashed border-gray-500 px-2 py-1 text-on-surface-variant">dev · booking link / email not set</span>
+      </div>
+    );
+  }
+  return (
+    <a href={cta.neutral.href} target="_blank" rel="noopener noreferrer" data-cta="" className="cta-btn type-label-large">
+      <span className="cta-label">{cta.neutral.label}</span>
+      <span className="type-label-small text-on-paper-variant">{cta.neutral.via}</span>
+      <span aria-hidden="true">↗</span>
+    </a>
+  );
+}
+
 export function LinkRow({ links, tone = 'paper' }: { links: Link[]; tone?: Tone }) {
   return (
     <ul className="flex flex-wrap gap-x-10 gap-y-4">
