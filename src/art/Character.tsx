@@ -1,6 +1,7 @@
 import { useImperativeHandle, useLayoutEffect, useRef, type Ref } from 'react';
 import { lerp } from './geometry';
 import { FOOT_Y, HIP_L, HIP_R, NECK, SH_L, SH_R, actPose, applyMood, base, turnPose, type Action, type LegPts, type Mood, type P2 } from './poses';
+import { stuntPose, type StuntAct, type StuntOpts } from './poses'; // ---- stunt ----
 import type { RagPose } from './ragdoll';
 import { setAttr } from './ticker';
 import { gait } from './walk';
@@ -40,6 +41,7 @@ export type Pose = {
   turn?: { k: number; hop: boolean }; // mid about-face, k 0..1 (facing already flipped once k ≥ FLIP)
   tremble?: boolean; // shaken: a stepped CSS tremor (`char-shiver`, character.css), so the stage loop can still sleep
   mood?: Mood; // how he holds himself (wary hunch, warm and open, pushing up into a pat): under every action
+  stunt?: { kind: StuntAct; k: number } & StuntOpts; // ---- stunt ---- a title-stunt pose, over everything else
 };
 export type CharacterHandle = { set: (x: number, y: number, scale: number, pose: Pose) => void };
 
@@ -85,13 +87,14 @@ export function Character({ ref }: { ref?: Ref<CharacterHandle> }) {
   useImperativeHandle(
     ref,
     () => ({
-      set(x, y, scale, { swing, dangle, facing, squash, phase = 0, walk = 0, tilt = 0, rag, action, actionK = 0, kick = 0, amp = 1, turn, tremble = false, mood }) {
+      set(x, y, scale, { swing, dangle, facing, squash, phase = 0, walk = 0, tilt = 0, rag, action, actionK = 0, kick = 0, amp = 1, turn, tremble = false, mood, stunt }) {
         setAttr(el.shake, 'class', tremble ? 'char-shiver' : null);
         const legA = dangle * 0.35; // legs drift apart while carried
         const g = gait(phase, walk, STRIDE);
         const bob = g.bob;
         // standing body from the gait, then the action, then the turn, then the ragdoll
         const o = applyMood(actPose(action, actionK, base({ x: g.footL.x - legA * 10, lift: g.footL.lift }, { x: g.footR.x + legA * 9, lift: g.footR.lift }, g.arm, dangle, tilt), kick, amp), mood, action, actionK);
+        if (stunt) Object.assign(o, stuntPose(stunt.kind, stunt.k, o, stunt)); // ---- stunt ----
         let sx = 1;
         let headBack = o.headBack;
         if (turn) {

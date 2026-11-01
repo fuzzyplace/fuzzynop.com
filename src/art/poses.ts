@@ -500,3 +500,91 @@ export function turnPose(k: number, hop: boolean): TurnPose {
   const u = (k - FLIP) / (1 - FLIP);
   return { flipped, headBack: false, dx: 1.4 * (1 - s01(u)), cross: (hop ? 1.5 : 4) * (1 - s01(u)), lift, sx: 0.92 + 0.08 * s01(u) };
 }
+
+// ---- stunt poses ----
+// The title stunt (stunt.ts / stuntDriver.ts). Kept apart from `Action` so the stage's own actions
+// stay as they were; Character.tsx layers a stunt pose on top of everything else while one plays.
+
+export type StuntAct =
+  | 'cling' // hangs off a letter's top corner, both hands on it in front of his face, legs dangling
+  | 'poke' // leans in and jabs the front hand at `reach` (contact at k = 1)
+  | 'regard'; // after a poke: the hand comes back, he rocks back a touch and looks at what he did
+export type StuntOpts = {
+  reach?: P2; // poke / regard: where the front hand goes (local units)
+  sway?: number; // cling: -1..1, how the legs trail a swing
+  back?: boolean; // cling: head turned to look behind him (at the visitor)
+};
+/** Where his front hand grips when he hangs off a letter (local units; he faces the letter). */
+export const HANG_HAND: P2 = [12, -22];
+const ARM = 15; // shoulder to hand, units
+
+/** Clamp a hand target to a reachable length from its shoulder (a little stretch allowed). */
+const reachFrom = (sh: P2, to: P2, max = ARM * 1.35): P2 => {
+  const dx = to[0] - sh[0];
+  const dy = to[1] - sh[1];
+  const d = Math.hypot(dx, dy);
+  return d <= max ? to : [sh[0] + (dx / d) * max, sh[1] + (dy / d) * max];
+};
+/** An elbow for a bent arm: halfway, pushed out sideways by `out` units. */
+const elbowOf = (sh: P2, hand: P2, out: number): P2 => {
+  const dx = hand[0] - sh[0];
+  const dy = hand[1] - sh[1];
+  const d = Math.hypot(dx, dy) || 1;
+  return [(sh[0] + hand[0]) / 2 - (dy / d) * out, (sh[1] + hand[1]) / 2 + (dx / d) * out];
+};
+
+/** Layer a stunt pose at progress k onto `b`. Pure; never mutates `b`. */
+export function stuntPose(kind: StuntAct | undefined, k: number, b: Body, opt: StuntOpts = {}): Body {
+  if (!kind) return b;
+  k = clamp(k);
+  const o: Body = { ...b };
+  switch (kind) {
+    case 'cling': {
+      // fingers over the corner, elbows bent, chin up to it; legs hang, a little bent, trailing a swing
+      const sway = clamp(opt.sway ?? 0, -1, 1);
+      o.handR = [HANG_HAND[0], HANG_HAND[1]];
+      o.handL = [HANG_HAND[0] - 2.5, HANG_HAND[1] - 0.6];
+      o.elbowR = elbowOf(SH_R, o.handR, 2.2);
+      o.elbowL = elbowOf(SH_L, o.handL, 3.4);
+      o.head = (opt.back ? 0.05 : -0.16) + b.head * 0.5;
+      o.headBack = !!opt.back;
+      o.dx = -0.6;
+      o.dy = -1.2 + Math.sin(k * Math.PI * 2) * 0.12;
+      o.L = { x: -2.5 - 3 * sway, lift: 1.2 + Math.max(0, sway) * 2 };
+      o.R = { x: -0.5 - 3.5 * sway, lift: 0.4 + Math.max(0, -sway) * 2 };
+      o.kneeL = 2 + 1.5 * Math.abs(sway);
+      o.kneeR = 1.2 + 1.5 * Math.abs(sway);
+      o.lift = 0;
+      break;
+    }
+    case 'poke': {
+      // weight forward, a little crouch; the front hand drifts out to just short of the target, then jabs
+      const to = reachFrom(SH_R, opt.reach ?? [16, 6]);
+      const lean = s01(k / 0.5);
+      const near: P2 = [to[0] - 3, to[1] - 2.5];
+      const hand = k < 0.62 ? toward(b.handR, near, s01(k / 0.62)) : toward(near, to, s01((k - 0.62) / 0.3));
+      o.dx = b.dx + 1.8 * lean;
+      o.dy = b.dy + 2.6 * lean;
+      o.kneeL += 1.6 * lean;
+      o.kneeR += 1.2 * lean;
+      o.head += 0.2 * lean;
+      o.handR = hand;
+      o.elbowR = elbowOf(SH_R, hand, 1.5);
+      o.handL = toward(b.handL, [-5, 4], lean); // the back hand tucks in
+      break;
+    }
+    case 'regard': {
+      // the hand comes back fast, he rocks back a touch on his heels and looks (the stage aims his head)
+      const to = reachFrom(SH_R, opt.reach ?? [16, 6]);
+      const back = s01(k / 0.3);
+      const rock = Math.sin(Math.PI * Math.min(1, k / 0.5)) * (1 - k);
+      o.handR = toward(to, b.handR, back);
+      if (back < 1) o.elbowR = elbowOf(SH_R, o.handR, 1.5 * (1 - back));
+      o.dx = b.dx + 1.8 * (1 - back) - 1.4 * rock;
+      o.dy = b.dy + 2.6 * (1 - back);
+      o.head += 0.2 * (1 - back) - 0.08 * rock;
+      break;
+    }
+  }
+  return o;
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ACT_DUR, CALM_MOOD, FLIP, FOOT_Y, SIT_DY, TURN, actPose, applyMood, base, envelope, sitLegs, turnPose, type Action } from './poses';
+import { HANG_HAND, stuntPose } from './poses'; // ---- stunt ----
 
 const stand = () => base({ x: 0, lift: 0 }, { x: 0, lift: 0 }, 0);
 const ACTIONS = Object.keys(ACT_DUR) as Action[];
@@ -126,5 +127,23 @@ describe('mood posture', () => {
     const sat = actPose('sit', 1, b);
     expect(applyMood(sat, m, 'sit', 1).dy).toBe(sat.dy);
     expect(applyMood(b, CALM_MOOD)).toBe(b);
+  });
+});
+
+// ---- stunt poses ----
+describe('stunt poses', () => {
+  it('cling: the front hand is on the grip point, every frame', () => {
+    const b = stand();
+    for (const k of [0, 0.3, 1]) expect(stuntPose('cling', k, b, { sway: 0.8 }).handR).toEqual(HANG_HAND);
+    expect(b.handR).toEqual(stand().handR); // never mutates
+  });
+  it('poke: the hand reaches the target at k = 1, and comes back in regard', () => {
+    const b = stand();
+    const reach: [number, number] = [16, 8];
+    const at = stuntPose('poke', 1, b, { reach }).handR;
+    expect(at[0]).toBeCloseTo(16, 5);
+    expect(at[1]).toBeCloseTo(8, 5);
+    expect(stuntPose('regard', 1, b, { reach }).handR).toEqual(b.handR);
+    expect(stuntPose(undefined, 0.5, b)).toBe(b);
   });
 });
