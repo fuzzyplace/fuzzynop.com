@@ -3,9 +3,10 @@ import { ArtDefs } from './art/ArtDefs';
 import { Depth, HexLattice, SpiderLeg, Splatter } from './art/Decor';
 import { PrintedPlate } from './art/PrintedPlate';
 import { Puppeteer } from './art/Puppeteer';
+import { CircuitTree } from './components/CircuitTree';
 import { Honeycomb } from './components/HexShards';
 import { Cta, PlateHeader, Prose } from './components/ui';
-import { before, contact, hub, hubPlate, interlude, nav, now, practice, site } from './content/site';
+import { before, contact, hubPlate, interlude, nav, now, practice, site } from './content/site';
 import { Hero } from './sections/Hero';
 
 /*
@@ -109,20 +110,14 @@ export default function App() {
             </PrintedPlate>
           </div>
 
-          {/* ---- Hub: links, pieced together ---- */}
+          {/* ---- Links: the circuit tree (data: src/content/links.ts) ---- */}
           <div className="plate-slot relative grid lg:grid-cols-12">
             <Depth depth={0.5} className="-left-40 -top-24">
               <HexLattice cols={6} rows={6} r={38} tone="far" seed={63} />
             </Depth>
             <PrintedPlate id="links" side="right" className="mx-6 lg:col-span-8 lg:col-start-1 lg:mx-0">
               <PlateHeader n="04" eyebrow={hubPlate.eyebrow} title={hubPlate.title} />
-              <Honeycomb
-                className="mt-10"
-                variant="link"
-                cols={4}
-                label="Links"
-                items={hub.map((h) => ({ label: h.label, href: h.href, meta: h.kind }))}
-              />
+              <CircuitTree className="mt-10" label={hubPlate.eyebrow} />
             </PrintedPlate>
           </div>
 

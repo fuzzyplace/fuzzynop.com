@@ -243,3 +243,75 @@
 .cta-btn:hover .cta-label { text-decoration: underline; text-decoration-color: var(--md-sys-color-accent); text-decoration-thickness: 1px; text-underline-offset: 6px; }
 .cta-btn--placeholder, .cta-btn--placeholder:hover { background: transparent; color: var(--md-sys-color-on-surface); box-shadow: inset 0 0 0 1px var(--md-ref-gray-500); cursor: not-allowed; }
 .cta-btn--placeholder:hover .cta-label { text-decoration: none; }
+
+/* ---- v2.4: the circuit tree (src/components/CircuitTree.tsx, layout in circuitLayout.ts) ----
+   Geometry arrives as unitless px custom props from layoutTree: --vx/--vy (vertical, narrow) and
+   --hx/--hy (horizontal, once the plate's content box is ≥ 520px). Ink on paper; no orange here
+   except the global focus ring. Reduced motion: the travelling dash is dropped, the lit path stays. */
+.circuit-wrap { container-type: inline-size; }
+.circuit { position: relative; height: calc(var(--v-h) * 1px); --x: var(--vx); --y: var(--vy); }
+.circuit * { --x: var(--vx); --y: var(--vy); }
+.circuit-svg { position: absolute; left: 0; top: 0; max-width: none; overflow: visible; pointer-events: none; }
+.circuit-svg--h { display: none; }
+.circuit-list { list-style: none; margin: 0; padding: 0; }
+
+.trace {
+  stroke: var(--md-ref-gray-500); stroke-width: 1.25; stroke-linecap: round; stroke-linejoin: round;
+  transition: stroke var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),
+              stroke-width var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard);
+}
+.trace.is-lit { stroke: var(--md-sys-color-ink); stroke-width: 2.5; }
+/* a paper-coloured gap travelling root → node along the lit ink trace */
+.trace-pulse {
+  stroke: var(--md-sys-color-paper); stroke-width: 1.25; stroke-linecap: round; stroke-dasharray: 2 14;
+  animation: circuit-pulse var(--md-sys-motion-duration-extra-long1) linear infinite;
+}
+@keyframes circuit-pulse { to { stroke-dashoffset: -16; } }
+.pad { fill: var(--md-ref-gray-600); }
+.pad.is-lit { fill: var(--md-sys-color-ink); }
+.via { fill: var(--md-sys-color-paper); stroke: var(--md-ref-gray-600); stroke-width: 1.25; }
+.via.is-lit { stroke: var(--md-sys-color-ink); stroke-width: 2; }
+
+/* root mark: an ink hex with the handle */
+.circuit-root {
+  --r: var(--vr);
+  position: absolute; display: grid; place-items: center;
+  width: calc(var(--r) * 2px + 4px); aspect-ratio: 60 / 52;
+  left: calc(var(--x) * 1px - var(--r) * 1px - 2px); top: calc(var(--y) * 1px - var(--r) * 0.866px - 2px);
+}
+.circuit-root-hex { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; overflow: visible; }
+.circuit-root-shell { fill: var(--md-sys-color-ink); }
+.circuit-root-rim { fill: none; stroke: var(--md-ref-gray-700); stroke-width: 1; vector-effect: non-scaling-stroke; transition: stroke var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard); }
+.circuit-root.is-lit .circuit-root-rim { stroke: var(--md-ref-gray-300); }
+.circuit-root-label { position: relative; color: var(--md-sys-color-paper); letter-spacing: .06em; }
+
+.circuit-branch { position: absolute; left: calc(var(--x) * 1px); top: calc(var(--y) * 1px); transform: translateY(-50%); white-space: nowrap; }
+
+/* a node: 44px hex slot + label; the whole row is the target (≥ 48px tall) */
+.circuit-node {
+  position: absolute; display: flex; align-items: center; gap: .625rem;
+  left: calc(var(--x) * 1px - 22px); top: calc(var(--y) * 1px - 24px);
+  min-height: 48px; max-width: calc(100% - var(--x) * 1px + 22px);
+  padding-inline: 6px .5rem; text-decoration: none;
+}
+.circuit-hex { flex: none; overflow: visible; transition: transform var(--md-sys-motion-duration-medium4) var(--md-sys-motion-easing-emphasized-decelerate); }
+.circuit-hex-shell { fill: var(--md-sys-color-ink); stroke: var(--md-sys-color-ink); stroke-width: 1; stroke-linejoin: round; }
+.circuit-hex-shell--soon { fill: var(--md-sys-color-paper); stroke: var(--md-ref-gray-500); stroke-width: 1.25; stroke-dasharray: 3 3; }
+.circuit-hex-core { fill: var(--md-sys-color-paper); }
+.circuit-node-label { line-height: 1.3; }
+.circuit-node.is-lit:not(.circuit-node--soon) .circuit-hex { transform: rotate(30deg); }
+.circuit-node.is-lit:not(.circuit-node--soon) .circuit-node-label { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+.circuit-node--soon.is-lit .circuit-hex-shell--soon { stroke: var(--md-ref-gray-700); }
+@media (prefers-reduced-motion: reduce) {
+  .trace-pulse { display: none; }
+  .trace, .circuit-hex, .circuit-root-rim { transition: none; }
+}
+/* wide plates: horizontal tree (kept last so it overrides the vertical defaults above) */
+@container (min-width: 520px) {
+  .circuit { height: calc(var(--h-h) * 1px); }
+  .circuit * { --x: var(--hx); --y: var(--hy); }
+  .circuit-svg--h { display: block; }
+  .circuit-svg--v { display: none; }
+  .circuit-root { --r: var(--hr); }
+  .circuit-branch { transform: translate(-100%, -50%); }
+}
