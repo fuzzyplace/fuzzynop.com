@@ -83,7 +83,7 @@ export const experiments: Experiment[] = [
     pending: true, // result ends in a blinking cursor
   },
 ];
-export const log = { eyebrow: 'Exp.', resultLabel: 'Result' };
+export const log = { eyebrow: 'Exp.', resultLabel: 'Result', untitled: 'Untitled' }; // untitled: screen-reader name for EXP. 04's '?'
 
 /** UI labels (not claims). */
 export const ui = { skip: 'Skip to content', mark: 'FZNP', markName: 'FuzzyNop', primaryNav: 'Primary' };

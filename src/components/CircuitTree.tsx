@@ -91,6 +91,7 @@ export function CircuitTree({ data = defaultData, label, className = '' }: { dat
             <LeafHex live={false} r={h.hexR} />
             <span className="circuit-node-label text-on-paper-variant">
               <span className="type-title-small">{n.link.label}</span> <span className="type-label-small" aria-hidden="true">{data.statusLabel.soon}</span>
+              <span className="sr-only">{data.statusLabel.soonSr}</span>
             </span>
           </span>
         )}

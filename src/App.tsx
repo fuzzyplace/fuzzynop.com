@@ -23,16 +23,17 @@ export default function App() {
         {ui.skip}
       </a>
 
-      <header className="header-fade fixed inset-x-0 top-0 z-40">
+      <header className="header-fade fixed inset-x-0 top-0 z-40 pb-6">
         <div className="shell flex h-16 items-center justify-between">
-          <a href="#top" className="type-label-large text-on-surface" aria-label={ui.markName}>
+          <a href="#top" className="type-label-large inline-flex min-h-11 items-center text-on-surface">
             {ui.mark}
+            <span className="sr-only"> {ui.markName}</span>
           </a>
           <nav aria-label={ui.primaryNav}>
-            <ul className="hidden gap-8 md:flex">
+            <ul className="flex gap-5 md:gap-8">
               {nav.map((n) => (
                 <li key={n.id}>
-                  <a href={`#${n.id}`} className="type-label-medium text-gray-300 transition-colors duration-200 ease-standard hover:text-on-surface">
+                  <a href={`#${n.id}`} className="type-label-small md:type-label-medium inline-flex min-h-11 items-center text-gray-300 transition-colors duration-200 ease-standard hover:text-on-surface">
                     {n.label}
                   </a>
                 </li>
@@ -86,7 +87,7 @@ export default function App() {
               <Depth depth={-0.2} className="-left-6 -top-24">
                 <Splatter size={240} seed={44} />
               </Depth>
-              <PrintedPlate side="right" tone="ink" perch={0.12} className="mx-6 lg:mx-0 lg:-rotate-1">
+              <PrintedPlate side="right" tone="ink" perch={0.12} className="mx-6 lg:mx-0">
                 <p className="type-display-medium max-w-[18ch] text-on-surface">{interlude.question}</p>
                 <p className="type-headline-medium mt-6 italic text-on-surface-variant">{interlude.followUp}</p>
               </PrintedPlate>

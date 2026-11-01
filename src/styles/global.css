@@ -23,37 +23,6 @@
 /* layout container */
 @utility shell { width: 100%; max-width: var(--layout-max); margin-inline: auto; padding-inline: var(--gutter); }
 
-/* hairline machine grid backdrop */
-@utility grid-hairline {
-  background-image:
-    linear-gradient(to right, color-mix(in srgb, var(--md-sys-color-on-surface) 5%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in srgb, var(--md-sys-color-on-surface) 5%, transparent) 1px, transparent 1px);
-  background-size: 64px 64px;
-}
-
-/* hairline rule with a short orange segment — the accent as a whisper */
-@utility rule-accent {
-  height: 1px;
-  background:
-    linear-gradient(to right, var(--md-sys-color-accent) 0 48px, transparent 48px),
-    var(--md-sys-color-outline-variant);
-}
-
-/* small orange dot — status / "you are here" marker */
-@utility dot-accent {
-  display: inline-block; width: 6px; height: 6px; border-radius: 9999px;
-  background: var(--md-sys-color-accent); flex: none;
-}
-
-/* M3 state layer for interactive surfaces */
-@utility state-layer {
-  position: relative; isolation: isolate;
-  &::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: currentColor; opacity: 0; pointer-events: none;
-    transition: opacity var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard); }
-  &:hover::after { opacity: var(--md-sys-state-hover); }
-  &:focus-visible::after, &:active::after { opacity: var(--md-sys-state-focus); }
-}
-
 /* ---- art direction: fog, grain, paper-cut plates ---- */
 @utility fog {
   position: fixed; inset: 0; z-index: -10; pointer-events: none;
@@ -109,13 +78,9 @@
 @media (prefers-reduced-motion: reduce) {
   .plate-alive, [data-printed='0'] > .plate-alive { transition: none; rotate: var(--plate-rot, 0deg); translate: 0 0; }
 }
-/* hexagon cell (flat-top) */
-@utility hex-cell {
-  width: 168px; height: 146px; clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
-  display: grid; place-items: center; text-align: center; padding-inline: 30px;
-}
 @utility plate-slot { margin-top: 220px; @media (min-width: 840px) { margin-top: 280px; } }
-@utility header-fade { background: linear-gradient(to bottom, rgba(0,0,0,.85), rgba(0,0,0,0)); }
+/* a near-solid strip behind the nav (it must stay readable over paper plates), fading out below */
+@utility header-fade { background: linear-gradient(to bottom, rgba(0,0,0,.92) 0, rgba(0,0,0,.92) 64px, rgba(0,0,0,0) 100%); }
 @keyframes sway { 0%, 100% { transform: rotate(-2.2deg); } 50% { transform: rotate(2.2deg); } }
 .sway { transform-box: fill-box; transform-origin: 50% 0; animation: sway 9s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .sway { animation: none; } }
@@ -165,6 +130,8 @@
   }
   ::selection { background: var(--md-ref-gray-700); color: var(--md-ref-gray-100); }
   :focus-visible { outline: 2px solid var(--md-sys-color-accent); outline-offset: 3px; border-radius: var(--md-sys-shape-corner-extra-small); }
+  /* on paper the orange alone is ~2.4:1: an ink ring carries the contrast, orange stays a thin outer edge */
+  .plate-paper :focus-visible { outline-color: var(--md-sys-color-ink); box-shadow: 0 0 0 5px var(--md-sys-color-accent); }
   a { color: inherit; text-underline-offset: .2em; text-decoration-thickness: 1px; }
   img, svg, video { display: block; max-width: 100%; }
 }

@@ -9,4 +9,5 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 );
 
-console.log('%c0x90 0x90 0x90', 'color:#FF6A13;font-family:monospace', '— nothing happened here.');
+const accent = getComputedStyle(document.documentElement).getPropertyValue('--md-sys-color-accent').trim();
+console.log('%c0x90 0x90 0x90', `color:${accent};font-family:monospace`, '— nothing happened here.');
