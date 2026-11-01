@@ -24,9 +24,9 @@ Reference mood: *Limbo* (fog-lit grayscale, black paper-cut silhouettes, depth t
 
 **The hero arm** writes the tagline line by line on load, then retracts and idles, riding a ceiling rail.
 
-**The character (`Character`, `Puppeteer`).** An original ink silhouette of Z: short sides, textured quiff, rectangular glasses (the only part that catches light, gray-300), short beard, blazer. A ceiling claw arm carries him by the collar between perches (`[data-perch]`, only once a plate is `[data-printed="1"]`). With no perch on screen he dangles from the claw. Swings like a pendulum while carried and squashes on landing.
+**The character (`Character`, `Puppeteer`).** An original ink silhouette of Z: short sides, textured quiff, rectangular glasses (the only part that catches light, gray-300), short beard, blazer. A ceiling claw arm carries him by the collar between perches (`[data-perch]`, only once a plate is `[data-printed="1"]`). With no perch on screen he dangles from the claw. Swings like a pendulum while carried and squashes on landing. Left alone he's curious: fidgets (looks round, scratches his head, pushes his glasses up), wanders to things on the page (peeks over plate edges, taps the hung hex stones so they swing, crouches over ink, watches a print arm, stands beside headings — on the plate's edge, never over text) and sits on edges with his legs dangling. Turns are a quick pivot (head first, step across or a little hop), never a paper-thin squash. Pose math in `poses.ts`; choices in `explore.ts` / `idle.ts`.
 
-**Reduced motion.** Plates are pre-printed; arms are parked; no sway; the character perches without transit.
+**Reduced motion.** Plates are pre-printed; arms are parked; no sway; the character perches without transit, doesn't wander or fidget, and turns instantly.
 
 **Performance.** Arms re-render on scroll (SVG + `#ink` filter). Keep arm count ≤ 1 per plate + hero + puppeteer. Lazy additions only.
 

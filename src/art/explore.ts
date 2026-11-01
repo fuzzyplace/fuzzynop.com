@@ -4,7 +4,7 @@
  * turns the scene into points of interest and picks one.
  *
  * A point of interest (POI) is a spot on a walkable surface plus what he does when he gets there:
- * peek over a plate's edge, hop up and tap a hung hex stone, crouch over an ink splatter, watch a
+ * peek over a plate's edge, hop up and tap a hung hex stone's end, crouch over an ink splatter, watch a
  * printing arm, stand beside a heading (on the plate's top edge — never over its text), sit on a
  * ledge or a plate's end with his legs over the edge.
  */
@@ -34,6 +34,7 @@ export type Scene = {
   headings: { s: number; left: number; right: number; top: number }[]; // tight text box of each heading on a plate
   view: { left: number; right: number; top: number; bottom: number }; // the viewport, document px
   reach: number; // px above his feet he can tap with a hop
+  tapOut: number; // px from his origin forward to his raised hand
   pad: number; // px he keeps from the viewport's sides
   sitOut: number; // px from his origin to the edge when he sits on it (his knees just overhang it)
 };
@@ -67,14 +68,17 @@ export function collectPois(sc: Scene): Poi[] {
         push({ id: `seat:${i}:${dir}`, kind: 'seat', s: i, x, face: dir, look: null, activity: 'sit', weight: s.ledge ? 1.4 : 0.8 });
       }
     }
-    // a hung stone overhead: stand under it and hop up to tap it
+    // a hung stone above a surface: stand beside it, facing it, and hop up to tap its side
     if (s.ledge) {
       S.forEach((b, j) => {
         if (!b || j === i) return;
         const up = b.y - s.bottom; // gap from the stone's underside down to the surface below it
         if (up < 20 || up > sc.reach) return;
-        if (mid < b.left - 4 || mid > b.right + 4) return;
-        push({ id: `stone:${i}`, kind: 'stone', s: j, x: within(mid, b), face: 0, look: { x: mid, y: s.bottom }, activity: 'tap', weight: 1.5, target: i });
+        for (const dir of [-1, 1] as const) {
+          const x = (dir < 0 ? s.x0 : s.x1) + dir * sc.tapOut; // his raised hand just meets the stone's end
+          if (x < b.left || x > b.right) continue;
+          push({ id: `stone:${i}:${dir}`, kind: 'stone', s: j, x, face: dir < 0 ? 1 : -1, look: { x: mid, y: s.bottom }, activity: 'tap', weight: 1.5, target: i });
+        }
       });
     }
   });

@@ -63,6 +63,7 @@ const SWAT = 0.42; // s per swat
 const DWELL = 0.7; // s the pointer rests over another plate before he sets off for it
 const GRAB_HAND = 0.16; // s: the claw snaps onto him when you press
 const GRAVITY = 2200; // px/s², falls
+const HEADER = 64; // px of fixed header at the top of the viewport
 const ATTEND = 6; // px of pointer travel that means the user is around (his own whims stop)
 const EXPLORE_PACE = 0.72; // exploring walk speed vs. his usual
 
@@ -341,12 +342,14 @@ export function Puppeteer() {
       play(s, f, now);
     };
     /** The scene for explore.ts: usable surfaces, decor and headings in document px (measured now: rare). */
-    const scene = (ps: Seen[]): Scene => {
+    const scene = (ps: Seen[], here: number): Scene => {
       const sx = window.scrollX;
       const sy = window.scrollY;
       const view = { left: sx, right: sx + vp.w, top: sy, bottom: sy + vp.h };
+      // he only wanders onto surfaces with room for all of him below the header (his own excepted)
+      const headroom = HEADER + (FEET + 44) * scale;
       const surfaces = cache.map((c, i): SceneSurface | null =>
-        ps[i].ok && ps[i].visible
+        ps[i].ok && ps[i].visible && (i === here || ps[i].top > headroom)
           ? { left: c.left + c.ext.lo, right: c.left + c.ext.hi, y: c.top, bottom: c.top + c.height, x0: c.left, x1: c.left + c.width, ledge: c.ledge, plate: c.el.dataset.printed !== undefined }
           : null,
       );
@@ -368,11 +371,11 @@ export function Puppeteer() {
         });
       });
       // hand raised (≈48 units above his feet) plus the hop
-      return { surfaces, splats, printers, headings, view, reach: (44 + TAP_HOP * 1.3) * scale, pad: 40, sitOut: 7 * scale }; // sat, his knees reach ≈ 13 units ahead: just past the edge, shins clear of it
+      return { surfaces, splats, printers, headings, view, reach: (44 + TAP_HOP * 1.5) * scale, tapOut: 13 * scale, pad: 40, sitOut: 7 * scale }; // sat, his knees reach ≈ 13 units ahead: just past the edge, shins clear of it
     };
     /** Pick a point of interest and set off for it. False = nowhere to go. */
     const startExplore = (s: State, mood: 'explore' | 'rest', ps: Seen[], now: number) => {
-      const sc = scene(ps);
+      const sc = scene(ps, s.idx);
       const S: Surface[] = sc.surfaces.map((q) => q ?? { left: Infinity, right: -Infinity, y: Infinity });
       const from = { s: s.idx, x: cache[s.idx].left + s.walk.x };
       const routes = new Map<string, Move[]>();
@@ -436,7 +439,7 @@ export function Puppeteer() {
       if (poi.activity === 'tap' && poi.target !== undefined) {
         const stone = cache[poi.target];
         const gap = (cache[poi.s].top - (stone.top + stone.height)) / scale; // units from his feet up to the stone
-        s.amp = clamp((gap - 44) / TAP_HOP, 0.15, 1.3); // hand up ≈ 44 units over his feet
+        s.amp = clamp((gap - 40) / TAP_HOP, 0.15, 1.5); // hand up and forward ≈ 44 units over his feet: meet the stone a little above its underside
       } else s.amp = 1;
       play(s, poi.activity, now);
     };
@@ -460,7 +463,9 @@ export function Puppeteer() {
       go(s, { type: 'take', plan: options[Math.floor(Math.random() * options.length)] }, now);
     };
 
+    let frames = 0; // dev: frames run (to check the loop sleeps when he's settled)
     const frame = (now: number, dt: number) => {
+      if (import.meta.env.DEV) frames++;
       if (dirty) {
         measure(); // coalesced: at most one layout read per wake
         dirty = false;
@@ -1088,6 +1093,12 @@ export function Puppeteer() {
           },
           get mode() {
             return st.current?.m.mode;
+          },
+          get state() {
+            return st.current;
+          },
+          get frames() {
+            return frames;
           },
         },
       });

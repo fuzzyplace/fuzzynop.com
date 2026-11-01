@@ -12,6 +12,7 @@ const scene = (over: Partial<Scene> = {}): Scene => ({
   headings: [],
   view: { left: 0, right: 1440, top: 0, bottom: 900 },
   reach: 110,
+  tapOut: 26,
   pad: 40,
   sitOut: 13,
   ...over,
@@ -27,9 +28,12 @@ describe('points of interest', () => {
     expect(edges.every((e) => e.activity === 'peek')).toBe(true);
   });
 
-  it('a hung stone within reach is tapped from the surface under it', () => {
-    const stone = collectPois(scene()).find((p) => p.kind === 'stone');
-    expect(stone).toMatchObject({ s: 0, x: 1150, activity: 'tap', target: 1 });
+  it('a hung stone within reach is tapped from beside it, facing it', () => {
+    const stones = collectPois(scene()).filter((p) => p.kind === 'stone');
+    expect(stones.map((p) => [p.s, p.x, p.face, p.target])).toEqual([
+      [0, 1108 - 26, 1, 1],
+      [0, 1192 + 26, -1, 1],
+    ]);
     // out of reach: none
     expect(collectPois(scene({ reach: 80 })).some((p) => p.kind === 'stone')).toBe(false);
   });

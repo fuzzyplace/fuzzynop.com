@@ -91,7 +91,7 @@ export const ACT_DUR: Record<Action, number> = {
 /** Tap: when the hand reaches the top of the hop (what he taps reacts then). */
 export const TAP_AT = 0.45;
 /** Tap: how high the hop goes, units, before the Puppeteer's reach scaling. */
-export const TAP_HOP = 9;
+export const TAP_HOP = 10;
 
 /** The neutral standing body for given gait feet/arms (the starting point every action edits). */
 export function base(L: Foot, R: Foot, armSwing: number, dangle = 0, tilt = 0): Body {
