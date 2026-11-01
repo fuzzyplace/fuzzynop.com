@@ -10,7 +10,8 @@ import { useSize } from './useSize';
  * A paper-cut content plate that a rail-mounted arm 3D-prints, bottom-up, as you scroll.
  * Text is always in the DOM (screen readers, no-JS); only the visual reveal is clipped.
  * Exposes data-perch / data-printed so the Puppeteer can set the character down on it, and, while
- * printing, data-printing + data-arm ("baseX baseY tipX tipY", px from the plate's top-left) so he can watch it.
+ * printing, data-printing + data-arm ("baseX baseY tipX tipY", px from the plate's top-left) so he can watch it
+ * (data-arm stays while the arm retracts off the finished plate, so he can duck it).
  *
  * Scroll progress uses motion's offset convention (['start 0.95', 'end 0.7'], capped so the top is
  * done by mid-viewport) on cached
@@ -97,7 +98,8 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
 
     // for the character: a plate being printed is something to watch (and to duck when its arm swings past)
     setAttr(outer.current, 'data-printing', printing ? '1' : null);
-    setAttr(outer.current, 'data-arm', printing ? `${(base.x - SIDE).toFixed(0)} ${(base.y - OVER).toFixed(0)} ${(tip.x - SIDE).toFixed(0)} ${(tip.y - OVER).toFixed(0)}` : null);
+    // the arm is exposed while it prints and while it swings back up off the finished plate (where he may stand)
+    setAttr(outer.current, 'data-arm', printing || (back > 0 && back < 1) ? `${(base.x - SIDE).toFixed(0)} ${(base.y - OVER).toFixed(0)} ${(tip.x - SIDE).toFixed(0)} ${(tip.y - OVER).toFixed(0)}` : null);
     setAttr(lines.current, 'display', printing ? null : 'none');
     if (printing) {
       setAttr(edgeLine.current, 'y1', edge);
