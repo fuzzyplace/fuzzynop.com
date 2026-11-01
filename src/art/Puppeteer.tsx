@@ -10,6 +10,8 @@ import { LIMITS, planRoute, sampleMove, type Move, type Surface } from './naviga
 import { afoot, free, held, initial, own, transition, type Ev, type Machine, type Plan } from './puppet-machine';
 import { createRagdoll, primeRagdoll, stepRagdoll, type RagPose, type Ragdoll } from './ragdoll';
 import { onLayout, setAttr, ticker } from './ticker';
+import { TrustLine, type TrustLineHandle } from './TrustLine';
+import { FAR, FULL, SWAT_COST, advance, band, classify, initTrust, keepGap, nextChange, nudge, observe, pesterDist, scare, tap, uneasy, type Band, type Cond, type Trust } from './trust';
 import { WALK, clampTo, lookAngle, perchExtent, settledWalk, stepWalk, type Extent, type WalkState } from './walk';
 
 /**
@@ -41,6 +43,13 @@ import { WALK, clampTo, lookAngle, perchExtent, settledWalk, stepWalk, type Exte
  *   one of the things that can happen when he's left alone, not the default.
  * - Turns are an instant flip of facing sold by a short pivot (poses.ts `turnPose`), never a squash.
  * - A plate's print arm swinging close past him: he ducks.
+ * - Trust (trust.ts): he starts wary of the pointer (keeps his distance, swats, glances round). A calm,
+ *   patient pointer slowly earns trust: he stops swatting, lets it closer, comes to it, looks up at it
+ *   and, when it rests, sits down beside it. Rough movement and chasing cost a little; picking him up
+ *   costs a lot: he's shaken for a while (trembles, cowers, keeps away, startles early, doesn't wander).
+ *   The first time he fully trusts you in a session the hidden line appears (TrustLine). Never explained.
+ *   Trust is arithmetic over elapsed time, so it changes while the loop sleeps; a timer wakes the loop
+ *   when it next crosses a band.
  *
  * Perch rects are cached in document space; a frame does no layout reads (choosing a point of
  * interest measures decor once, every few seconds at most). The loop sleeps once he's idle and
@@ -66,6 +75,8 @@ const GRAVITY = 2200; // px/s², falls
 const HEADER = 64; // px of fixed header at the top of the viewport
 const ATTEND = 6; // px of pointer travel that means the user is around (his own whims stop)
 const EXPLORE_PACE = 0.72; // exploring walk speed vs. his usual
+const SIT_REST = 2.5; // s the pointer rests beside him (fully trusted) before he sits down by it
+const SIT_BESIDE: [number, number] = [40, 70]; // s he stays sat by it if it doesn't move
 
 /** Something he does on the spot: a fidget, an activity at a point of interest, a reaction. */
 type Act = { kind: Action; at: number; dur: number; reverse?: boolean; block?: boolean };
@@ -129,6 +140,9 @@ type State = {
   kick: number; // -1..1 shin swing this frame
   duckUntil: number;
   arms: string[]; // last seen print-arm positions per perch (a duck needs one moving)
+  side: 1 | -1; // which side of the pointer he keeps to (hysteresis for keepGap)
+  sitWake: number; // pointer timestamp a sit-beside wake was set for
+  tremble: boolean;
 };
 /** A fall in document px: start, initial velocity, landing (char origin), duration. */
 type Fall = { x0: number; y0: number; vx: number; vy: number; x1: number; y1: number; T: number; to: number };
@@ -147,6 +161,9 @@ export function Puppeteer() {
   const charRef = useRef<CharacterHandle>(null);
   const armRef = useRef<ArmHandle>(null);
   const tiltRef = useRef<SVGGElement>(null);
+  const lineRef = useRef<TrustLineHandle>(null);
+  const tr = useRef<Trust | null>(null); // survives resizes / the effect re-running
+  const lineShown = useRef(false);
 
   useEffect(() => {
     const onResize = () => setVp({ w: window.innerWidth, h: window.innerHeight });
@@ -213,6 +230,20 @@ export function Puppeteer() {
       wakeIn(wait);
     };
 
+    // ---- trust ----
+    if (!tr.current) tr.current = initTrust(performance.now());
+    const trustNow = (now: number, f: (t: Trust) => Trust = (t) => advance(t, now)) => (tr.current = f(tr.current!));
+    const feel = (now: number): Band => band(tr.current!, now);
+    // what the pointer has been doing, for trust (mouse / pen; touch only taps)
+    const sense = { speed: 0, approach: 0, touch: false, gone: false, last: null as { x: number; y: number; t: number; d: number } | null };
+    let trustTimer = 0;
+    /** The pointer if it's a mouse that's about and within reach of his attention (screen px), plus its distance. */
+    const company = (s: State, p: Pointer | null) => {
+      if (!p || sense.touch || sense.gone) return null;
+      const d = Math.hypot(p.x - s.char.x, p.y - (s.char.y - 8 * scale));
+      return d <= FAR ? { p, d } : null;
+    };
+
     const go = (s: State, ev: Ev, now: number) => {
       const next = transition(s.m, ev, now);
       if (next === s.m) return false;
@@ -254,6 +285,7 @@ export function Puppeteer() {
         s.idx = -1;
       }
       if (next.mode === 'falling') startFall(s);
+      if (next.mode === 'grabbed' && next.plan?.kind === 'hand') trustNow(now, (t) => scare(t, now));
       if (next.mode === 'grabbed') {
         s.route = null;
         s.fall = null;
@@ -338,8 +370,28 @@ export function Puppeteer() {
       s.lastFidget = f;
       s.goal = null;
       s.look = null;
-      if (f === 'lookUp' && Math.abs(s.hoverX - s.char.x) > 20) s.facing = s.hoverX > s.char.x ? 1 : -1; // toward the claw
+      const near = feel(now) === 'warm' ? company(s, ptr.current) : null;
+      if (near) {
+        // at ease with you: he turns to the pointer, and looks at (or up at) it
+        if (Math.abs(near.p.x - s.char.x) > 12) s.facing = near.p.x > s.char.x ? 1 : -1;
+      } else if (f === 'lookUp' && Math.abs(s.hoverX - s.char.x) > 20) s.facing = s.hoverX > s.char.x ? 1 : -1; // toward the claw
       play(s, f, now);
+      if (near && f !== 'look') s.look = { x: near.p.x + window.scrollX, y: near.p.y + window.scrollY };
+    };
+    /** Fully trusted, the pointer resting beside him: he sits down by it. */
+    const sitBeside = (s: State, p: Pointer, now: number) => {
+      if (!go(s, { type: 'sit' }, now)) return;
+      s.goal = null;
+      if (Math.abs(p.x - s.char.x) > 8) s.facing = p.x > s.char.x ? 1 : -1;
+      play(s, 'sit', now);
+      s.look = { x: p.x + window.scrollX, y: p.y + window.scrollY };
+      s.seatFrom = s.seat;
+      s.seatTo = 0;
+      s.sitUntil = now + rand(SIT_BESIDE[0], SIT_BESIDE[1]) * 1000;
+      s.kickAt = now + (ACT_DUR.sit + kickDelay(Math.random)) * 1000;
+      s.kickFrom = 0;
+      wakeIn((s.kickAt - now) / 1000);
+      wakeIn((s.sitUntil - now) / 1000);
     };
     /** The scene for explore.ts: usable surfaces, decor and headings in document px (measured now: rare). */
     const scene = (ps: Seen[], here: number): Scene => {
@@ -558,12 +610,35 @@ export function Puppeteer() {
           kick: 0,
           duckUntil: 0,
           arms: [],
+          side: 1,
+          sitWake: 0,
+          tremble: false,
         };
         armIdle(now);
       }
       const s = st.current;
       const mode = () => s.m.mode;
       const p = ptr.current;
+      // ---- trust: what the pointer has been doing since the last frame / wake ----
+      {
+        const md = mode();
+        let cond: Cond;
+        if (s.m.plan?.kind === 'hand' || md === 'falling') cond = 'held';
+        else if (!afoot(md) && md !== 'landing') cond = 'neutral'; // the claw has him: nothing earned or lost
+        else {
+          const d = p && !sense.touch && !sense.gone ? Math.hypot(p.x - s.char.x, p.y - (s.char.y - 8 * scale)) : null;
+          cond = classify({ d, speed: sense.speed, approach: sense.approach, still: p ? (now - p.t) / 1000 : Infinity, touch: sense.touch });
+        }
+        const t = trustNow(now, (t) => observe(t, now, cond));
+        if (t.full && !lineShown.current && afoot(md) && s.idx >= 0) {
+          // the first time he fully trusts you: the hidden line, above him (once a session; TrustLine guards it)
+          lineShown.current = true;
+          const half = Math.min(120, vp.w / 2 - 16);
+          lineRef.current?.show(clamp(s.char.x, 16 + half, vp.w - 16 - half), Math.max(s.char.y - 50 * scale, HEADER + 72));
+        }
+      }
+      const fl = feel(now);
+      s.tremble = fl === 'shaken' && !reduce;
       const heldPt = { x: vp.w * (vp.w < 700 ? 0.78 : 0.86), y: vp.h * 0.34 };
       heldPt.x += Math.sin(now / 1400) * 18;
       heldPt.y += Math.cos(now / 1100) * 10;
@@ -614,16 +689,19 @@ export function Puppeteer() {
       }
 
       // ---- on a perch under his own power: walk, maybe get reset at an edge ----
+      let backing = false; // edging away from the pointer (he keeps facing it)
       if (free(mode()) && s.idx >= 0) {
         const perch = cache[s.idx];
         const ext = perch.ext;
         const raw = p ? p.x - ps[s.idx].left : s.walk.x;
         if (s.holdUntil && (now >= s.holdUntil || (raw >= ext.lo && raw <= ext.hi))) s.holdUntil = 0;
-        // a pointer buzzing round him: back off and swat at it
+        // a pointer buzzing round him: back off and swat at it (wary or shaken only: trust ends it)
         if (p && !reduce) {
           const d = Math.hypot(p.x - s.char.x, p.y - (s.char.y - 8 * scale));
-          if (mode() !== 'swatting' && d < PESTER && now - p.t < 500) go(s, { type: 'pester' }, now);
-          else if (mode() === 'swatting' && (d > PESTER * 1.8 || now - p.t > 900)) go(s, { type: 'clear' }, now);
+          const pd = pesterDist(tr.current!, now);
+          if (mode() !== 'swatting' && d < pd && now - p.t < 500) {
+            if (go(s, { type: 'pester' }, now)) trustNow(now, (t) => nudge(t, now, -SWAT_COST));
+          } else if (mode() === 'swatting' && (d > Math.max(pd, PESTER) * 1.8 || now - p.t > 900)) go(s, { type: 'clear' }, now);
         }
         const swatting = mode() === 'swatting';
         const blocked = !!s.act?.block && now < s.act.at + s.act.dur * 1000; // standing up first
@@ -631,7 +709,10 @@ export function Puppeteer() {
         if (follow || swatting) {
           const prevX = s.walk.x;
           const prevPhase = s.walk.phase;
-          const goal = swatting ? s.walk.x + (p!.x > s.char.x ? -70 : 70) : raw;
+          // he keeps to his side of the pointer, as far off as he's comfortable with (wary: well back; warm: right by it)
+          if (Math.abs(s.walk.x - raw) > 8) s.side = s.walk.x > raw ? 1 : -1;
+          const goal = swatting ? s.walk.x + (p!.x > s.char.x ? -70 : 70) : raw + s.side * keepGap(tr.current!, now);
+          backing = !swatting && Math.sign(goal - s.walk.x) === s.side && Math.abs(goal - s.walk.x) > 4;
           s.walk = stepWalk(s.walk, goal, dt, ext, swatting ? { ...cfg, vmax: cfg.vmax * 0.8 } : cfg);
           const moved = s.walk.x - prevX;
           if (moved) {
@@ -668,7 +749,7 @@ export function Puppeteer() {
       if (byHand && mode() === 'carried' && !holding) go(s, { type: 'release' }, now);
 
       // ---- his own ideas: the pointer rests over another printed plate → find a way there ----
-      if (free(mode()) && mode() !== 'swatting' && s.idx >= 0 && !reduce && p && p.t > s.ignoreBefore) {
+      if (free(mode()) && mode() !== 'swatting' && s.idx >= 0 && !reduce && p && p.t > s.ignoreBefore && (fl === 'tolerant' || fl === 'warm')) {
         // ledges are small: a generous zone above them counts as resting over them
         const over = (q: (typeof ps)[number], i: number) =>
           cache[i].ledge
@@ -696,9 +777,22 @@ export function Puppeteer() {
       } else if (!free(mode())) s.want = -1;
 
       // ---- left alone: fidget, explore, sit — or the claw has an idea ----
+      const near = company(s, p);
+      const still = p ? (now - p.t) / 1000 : 0;
+      if (mode() === 'idle' && s.idx >= 0 && !reduce && !s.walk.walking && !s.holdUntil && !s.act && near && fl === 'warm' && !uneasy(tr.current!, now)) {
+        // fully at ease and the pointer resting right by him: he sits down beside it
+        const by = Math.abs(near.p.x - s.char.x) < 110 && Math.abs(near.p.y - s.char.y) < 240;
+        if (by && still >= SIT_REST) sitBeside(s, near.p, now);
+        else if (by && s.sitWake !== near.p.t) {
+          s.sitWake = near.p.t;
+          wakeIn(SIT_REST - still);
+        }
+      }
       if (mode() === 'idle' && s.idx >= 0 && !reduce && now >= s.idleAt && !s.walk.walking && !s.holdUntil && !s.act) {
         const quiet = (now - attnAt) / 1000;
-        const c = decideIdle({ quiet, explored: s.explored, last: s.lastFidget, rand: Math.random });
+        // shaken, he won't wander off; with the pointer about he stays with it (and minds it)
+        const stay = uneasy(tr.current!, now) || !!near;
+        const c = decideIdle({ quiet, explored: s.explored, last: s.lastFidget, rand: Math.random, feel: fl, stay });
         if (c.kind === 'fidget') startFidget(s, c.fidget, now);
         else if (c.kind === 'claw') clawRelocate(s, ps, now);
         else if (!startExplore(s, c.kind === 'rest' ? 'rest' : 'explore', ps, now) && !(c.kind === 'rest' && startExplore(s, 'explore', ps, now))) {
@@ -972,6 +1066,8 @@ export function Puppeteer() {
         s.facing = p.x > s.char.x ? 1 : -1; // faces the pest while backing off
       } else if (handled || s.m.mode === 'falling') {
         if (Math.abs(vx) > 30) s.facing = vx > 0 ? 1 : -1;
+      } else if (backing && p) {
+        if (Math.abs(p.x - s.char.x) > 12) s.facing = p.x > s.char.x ? 1 : -1; // edges away, keeping an eye on it
       } else if (Math.abs(s.walk.v) > 2) s.facing = s.walk.v > 0 ? 1 : -1;
       else if (fresh) {
         if (Math.abs(p!.x - s.char.x) > 28) s.facing = p!.x > s.char.x ? 1 : -1;
@@ -1003,7 +1099,15 @@ export function Puppeteer() {
       const looking = free(s.m.mode) && !reduce && fresh && !s.walk.walking && (now - p!.t) / 1000 < LOOK;
       const headY = s.char.y - 28 * scale;
       const aim = own(s.m.mode) && s.m.mode !== 'exploring' && s.look ? { x: s.look.x - window.scrollX, y: s.look.y - window.scrollY } : null;
-      const tiltGoal = looking ? lookAngle(p!.x - s.char.x, p!.y - headY) : aim ? lookAngle(aim.x - s.char.x, aim.y - headY, 0.3) : 0;
+      // at ease with you, he keeps an eye on the pointer when it rests by him (a steady aim: the loop still settles)
+      const gaze = !looking && !reduce && s.m.mode === 'idle' && fl === 'warm' && near && !s.walk.walking ? near.p : null;
+      const tiltGoal = looking
+        ? lookAngle(p!.x - s.char.x, p!.y - headY)
+        : aim
+          ? lookAngle(aim.x - s.char.x, aim.y - headY, 0.3)
+          : gaze
+            ? lookAngle(gaze.x - s.char.x, gaze.y - headY, 0.6)
+            : 0;
       s.tilt = Math.abs(tiltGoal - s.tilt) < 0.002 ? tiltGoal : lerp(s.tilt, tiltGoal, 1 - Math.pow(0.004, dt));
 
       // the idle claw trails behind him on a leash around its resting spot (never at rest over his text);
@@ -1035,6 +1139,12 @@ export function Puppeteer() {
         s.ragW === 0 &&
         Math.abs(s.baseX - baseGoal) < 1e-4; // tight: a looser snap leaves the carriage visibly off by a sub-pixel
       if (s.m.mode === 'dangling') return Math.abs(s.swing) > 1e-4 || !reduce; // sways in the air; reduced motion: still
+      if (settled) {
+        // asleep, trust keeps changing on paper: wake when it next crosses a band (or fear fades)
+        window.clearTimeout(trustTimer);
+        const next = nextChange(tr.current!, now);
+        if (next !== null) trustTimer = window.setTimeout(() => loop.wake(), Math.min(next, 600) * 1000 + 20);
+      }
       return !settled;
     };
 
@@ -1070,6 +1180,7 @@ export function Puppeteer() {
         kick: s.kick,
         amp: s.amp,
         turn,
+        tremble: s.tremble,
       };
       // character pivots on the collar while the claw has him
       const pivot = Math.abs(s.swing) > 1e-4;
@@ -1099,6 +1210,24 @@ export function Puppeteer() {
           },
           get frames() {
             return frames;
+          },
+          /** trust 0..1 (set: also clears fear); `fear` 0..1; `feel` = the band he's in */
+          get trust() {
+            return advance(tr.current!, performance.now()).v;
+          },
+          set trust(v: number) {
+            trustNow(performance.now(), (t) => ({ ...advance(t, performance.now()), v: clamp(v), fear: 0, full: t.full || v >= FULL }));
+            loop.wake();
+          },
+          get fear() {
+            return advance(tr.current!, performance.now()).fear;
+          },
+          set fear(f: number) {
+            trustNow(performance.now(), (t) => ({ ...advance(t, performance.now()), fear: clamp(f) }));
+            loop.wake();
+          },
+          get feel() {
+            return feel(performance.now());
           },
         },
       });
@@ -1140,8 +1269,30 @@ export function Puppeteer() {
         wake();
       }
       if (e.pointerType === 'touch') return;
-      ptr.current = { x: e.clientX, y: e.clientY, t: performance.now() };
+      const t = performance.now();
+      const s = st.current;
+      const d = s ? Math.hypot(e.clientX - s.char.x, e.clientY - (s.char.y - 8 * scale)) : Infinity;
+      const last = sense.last;
+      if (last && !sense.touch && !sense.gone) {
+        // smoothed speed and approach (toward him), ~0.15 s
+        const dt = Math.max(0.008, (t - last.t) / 1000);
+        const a = 1 - Math.exp(-dt / 0.15);
+        sense.speed = lerp(sense.speed, Math.hypot(e.clientX - last.x, e.clientY - last.y) / dt, a);
+        sense.approach = Number.isFinite(d) && Number.isFinite(last.d) ? lerp(sense.approach, (last.d - d) / dt, a) : 0;
+      } else {
+        sense.speed = 0;
+        sense.approach = 0;
+      }
+      sense.last = { x: e.clientX, y: e.clientY, t, d };
+      sense.touch = false;
+      sense.gone = false;
+      ptr.current = { x: e.clientX, y: e.clientY, t };
       attention(e.clientX, e.clientY);
+      wake();
+    };
+    const onOut = (e: MouseEvent) => {
+      if (e.relatedTarget) return;
+      sense.gone = true; // the mouse left the window: he's left alone
       wake();
     };
     const onDown = (e: PointerEvent) => {
@@ -1165,9 +1316,13 @@ export function Puppeteer() {
     const onUp = (e: PointerEvent) => {
       letGo();
       if (e.pointerType !== 'touch' || !down) return;
-      const tap = Math.hypot(e.clientX - down.x, e.clientY - down.y) < 12 && performance.now() - down.t < 600;
+      const isTap = Math.hypot(e.clientX - down.x, e.clientY - down.y) < 12 && performance.now() - down.t < 600;
       down = null;
-      if (!tap) return;
+      if (!isTap) return;
+      const s = st.current;
+      sense.touch = true;
+      sense.last = null;
+      if (s) trustNow(performance.now(), (t) => tap(t, performance.now(), Math.hypot(e.clientX - s.char.x, e.clientY - (s.char.y - 8 * scale))));
       ptr.current = { x: e.clientX, y: e.clientY, t: performance.now() };
       attention(e.clientX, e.clientY);
       wake();
@@ -1191,6 +1346,7 @@ export function Puppeteer() {
     window.addEventListener('pointerup', onUp, { passive: true });
     window.addEventListener('pointercancel', onCancel, { passive: true });
     window.addEventListener('scroll', onScroll, { passive: true });
+    document.addEventListener('mouseout', onOut, { passive: true });
     draw();
     wake();
     return () => {
@@ -1207,6 +1363,8 @@ export function Puppeteer() {
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onCancel);
       window.removeEventListener('scroll', onScroll);
+      document.removeEventListener('mouseout', onOut);
+      window.clearTimeout(trustTimer);
     };
   }, [vp, reduce]);
 
@@ -1214,11 +1372,14 @@ export function Puppeteer() {
   const t = vp.w < 700 ? 12 : 20;
   const l = vp.h * 0.42;
   return (
-    <svg className="pointer-events-none fixed inset-0 z-30 h-full w-full overflow-visible" viewBox={`0 0 ${vp.w} ${vp.h}`} aria-hidden="true">
-      <g ref={tiltRef}>
-        <Character ref={charRef} />
-      </g>
-      <MechArm ref={armRef} l1={l} l2={l} t={t} tool="claw" toolLen={t * 2.6} />
-    </svg>
+    <>
+      <svg className="pointer-events-none fixed inset-0 z-30 h-full w-full overflow-visible" viewBox={`0 0 ${vp.w} ${vp.h}`} aria-hidden="true">
+        <g ref={tiltRef}>
+          <Character ref={charRef} />
+        </g>
+        <MechArm ref={armRef} l1={l} l2={l} t={t} tool="claw" toolLen={t * 2.6} />
+      </svg>
+      <TrustLine ref={lineRef} />
+    </>
   );
 }

@@ -138,7 +138,18 @@
   0% { rotate: 0deg; } 14% { rotate: calc(var(--swing-dir, 1) * 0.55deg); } 34% { rotate: calc(var(--swing-dir, 1) * -0.38deg); }
   54% { rotate: calc(var(--swing-dir, 1) * 0.22deg); } 74% { rotate: calc(var(--swing-dir, 1) * -0.1deg); } 100% { rotate: 0deg; }
 }
-@media (prefers-reduced-motion: reduce) { .char-breathe, .char-armsway, [data-swing] > svg { animation: none; } }
+/* shaken: a fine, uneven tremor (stepped: ~10 repaints/s while it lasts, the stage loop still sleeps) */
+@keyframes tremble {
+  0%, 100% { translate: 0 0; } 17% { translate: 0.35px 0; } 33% { translate: -0.25px 0.1px; }
+  50% { translate: 0.3px -0.1px; } 67% { translate: -0.35px 0; } 83% { translate: 0.15px 0.1px; }
+}
+.char-tremble { animation: tremble 0.6s steps(6) infinite; }
+/* the hidden line (TrustLine): fades in, holds ~6 s, fades away; reduced motion: just there, then gone */
+@keyframes trust-line { 0% { opacity: 0; } 12% { opacity: 1; } 82% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes trust-line-still { 0%, 99.9% { opacity: 1; } 100% { opacity: 0; } }
+.trust-line { animation: trust-line 8s var(--md-sys-motion-easing-standard) forwards; }
+@media (prefers-reduced-motion: reduce) { .trust-line { animation: trust-line-still 8s steps(1, end) forwards; } }
+@media (prefers-reduced-motion: reduce) { .char-breathe, .char-armsway, .char-tremble, [data-swing] > svg { animation: none; } }
 
 @layer base {
   html { overflow-x: clip; scroll-behavior: smooth; scroll-padding-top: 72px; -webkit-text-size-adjust: 100%; }

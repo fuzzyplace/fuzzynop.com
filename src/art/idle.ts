@@ -11,9 +11,20 @@
  */
 import type { Action } from './poses';
 
-export type Fidget = Extract<Action, 'look' | 'scratch' | 'shift' | 'glasses' | 'lookUp' | 'crouch'>;
+export type Fidget = Extract<Action, 'look' | 'scratch' | 'shift' | 'glasses' | 'lookUp' | 'crouch' | 'cower'>;
 export const FIDGETS: readonly Fidget[] = ['look', 'scratch', 'shift', 'glasses', 'lookUp', 'crouch'];
-const FIDGET_WEIGHT: Record<Fidget, number> = { look: 1.4, scratch: 0.8, shift: 1.2, glasses: 1, lookUp: 0.7, crouch: 0.5 };
+const FIDGET_WEIGHT: Record<Fidget, number> = { look: 1.4, scratch: 0.8, shift: 1.2, glasses: 1, lookUp: 0.7, crouch: 0.5, cower: 0 };
+/**
+ * How he feels about the pointer (trust.ts `band`) reweights the fidgets: wary = nervous glances
+ * round; shaken = mostly cowering; warm = easy, looks up (at the pointer: the Puppeteer faces him to it).
+ */
+export type Feel = 'shaken' | 'wary' | 'tolerant' | 'warm';
+const FEEL_WEIGHT: Record<Feel, Partial<Record<Fidget, number>>> = {
+  shaken: { cower: 4, look: 1.6, shift: 0.6, scratch: 0, glasses: 0.4, lookUp: 0, crouch: 0 },
+  wary: { look: 3, glasses: 1.4, shift: 1.4, crouch: 0.2 },
+  tolerant: {},
+  warm: { lookUp: 1.8, glasses: 0.6, look: 0.8 },
+};
 
 export const QUIET = 5; // s without pointer attention before he wanders off on his own
 export const REST_AFTER = 3; // explorations before he looks for a seat
@@ -26,26 +37,29 @@ export type IdleCtx = {
   explored: number; // explorations since he last sat (or since the user was last around)
   last?: Fidget; // the previous fidget (not twice in a row)
   rand: () => number;
+  feel?: Feel; // trust band
+  stay?: boolean; // he won't wander off: still shaken, or the pointer is resting near him
 };
 
 /** A weighted fidget, never the same as `last`. */
-export function pickFidget(rand: () => number, last?: Fidget): Fidget {
-  const pool = FIDGETS.filter((f) => f !== last);
-  const total = pool.reduce((t, f) => t + FIDGET_WEIGHT[f], 0);
+export function pickFidget(rand: () => number, last?: Fidget, feel: Feel = 'tolerant'): Fidget {
+  const w = (f: Fidget) => FEEL_WEIGHT[feel][f] ?? FIDGET_WEIGHT[f];
+  const pool = [...FIDGETS, 'cower' as const].filter((f) => f !== last && w(f) > 0);
+  const total = pool.reduce((t, f) => t + w(f), 0);
   let r = rand() * total;
   for (const f of pool) {
-    r -= FIDGET_WEIGHT[f];
+    r -= w(f);
     if (r <= 0) return f;
   }
   return pool[pool.length - 1];
 }
 
 export function decideIdle(c: IdleCtx): IdleChoice {
-  if (c.quiet < QUIET) return { kind: 'fidget', fidget: pickFidget(c.rand, c.last) };
+  if (c.quiet < QUIET || c.stay) return { kind: 'fidget', fidget: pickFidget(c.rand, c.last, c.feel) };
   const r = c.rand();
   if (r < CLAW_CHANCE) return { kind: 'claw' };
   if (c.explored >= REST_AFTER && r < 0.85) return { kind: 'rest' };
-  if (r > 0.86) return { kind: 'fidget', fidget: pickFidget(c.rand, c.last) }; // a pause between finds
+  if (r > 0.86) return { kind: 'fidget', fidget: pickFidget(c.rand, c.last, c.feel) }; // a pause between finds
   return { kind: 'explore' };
 }
 

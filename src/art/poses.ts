@@ -46,6 +46,7 @@ export type Action =
   | 'read' // hands behind his back, head down
   | 'duck' // something passes close: drops, hands over his head
   | 'land' // follow-through after a jump / fall
+  | 'cower' // shaken: hunched, arms wrapped round himself, a wary glance up
   | 'sit'; // k: 0 standing → 1 sat on the edge, legs dangling
 
 export const SH_L: P2 = [-7, -7];
@@ -86,6 +87,7 @@ export const ACT_DUR: Record<Action, number> = {
   read: 3,
   duck: 0.75,
   land: 0.34,
+  cower: 3.4,
   sit: 0.65,
 };
 /** Tap: when the hand reaches the top of the hop (what he taps reacts then). */
@@ -315,6 +317,21 @@ export function actPose(action: Action | undefined, k: number, b: Body, kick = 0
       o.kneeR += 2.5 * w;
       o.handL = toward(b.handL, hang(SH_L, 15, -0.55), w);
       o.handR = toward(b.handR, hang(SH_R, 15, -0.75), w);
+      break;
+    }
+    case 'cower': {
+      // hunches down, arms wrapped round himself, head low; halfway through a wary glance up and back
+      const w = envelope(k, 0.12, 0.22);
+      const glance = k > 0.45 && k < 0.7 ? envelope((k - 0.45) / 0.25, 0.3, 0.3) : 0;
+      o.dy = 4 * w;
+      o.dx = -1.6 * w;
+      o.head += w * (0.34 - 0.5 * glance);
+      o.elbowL = [lerp(-9, -6, w), lerp(1, 1.5, w)];
+      o.elbowR = [lerp(9, 9.5, w), lerp(1, 0.5, w)];
+      o.handL = [lerp(b.handL[0], 4, w), lerp(b.handL[1], -5, w)]; // hands on the opposite arms
+      o.handR = [lerp(b.handR[0], -3, w), lerp(b.handR[1], -4, w)];
+      o.kneeL += 2 * w;
+      o.kneeR += 2 * w;
       break;
     }
     case 'sit': {
