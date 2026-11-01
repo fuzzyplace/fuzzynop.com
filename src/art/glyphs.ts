@@ -73,8 +73,12 @@ export function parseGlyphKey(key: string): { line: number; i: number } | null {
  * top, descender bottom). baseline: the baseline of its visual row.
  */
 export type GlyphBox = { key: string; line: number; i: number; ch: string; left: number; right: number; top: number; bottom: number; baseline: number };
-/** The character's body, px: w = shoulder-to-shoulder width he needs, h = feet to top of head. */
-export type Body = { w: number; h: number };
+/**
+ * The character's body, px: w = shoulder-to-shoulder width he needs, h = feet to top of head.
+ * Hanging (optional): how far his head rises above his grip (hangUp) and his feet drop below it
+ * (hangDown); without them a hang box is his full height below the grip.
+ */
+export type Body = { w: number; h: number; hangUp?: number; hangDown?: number };
 
 export type Row = { baseline: number; left: number; right: number; glyphs: GlyphBox[] };
 /** A letter's top as a foothold: y = its ink top; free = his whole body fits above it. */
@@ -149,18 +153,24 @@ export function mapTitle(glyphs: GlyphBox[], obstacles: Rect[], body: Body, opts
     run.profile.push({ x0: t.x0, x1: t.x1, y: t.y });
   }
 
-  // hang: grip a row-end letter's outer top corner; his body hangs beside the row, clear of all text
+  // hang: grip a row-end letter's (or a row-end comma's) outer top corner; his body hangs beside the
+  // row, clear of all text
   const hangs: Hang[] = [];
+  const up = body.hangUp ?? 0;
+  const down = body.hangDown ?? body.h;
   rows.forEach((row) => {
     const letters = row.glyphs.filter((g) => LETTER.test(g.ch));
+    const last = row.glyphs[row.glyphs.length - 1];
     const ends: [GlyphBox | undefined, 1 | -1][] = [
-      [letters[letters.length - 1], 1],
+      [last && last.ch === ',' ? last : letters[letters.length - 1], 1],
       [letters[0], -1],
     ];
     for (const [g, side] of ends) {
       if (!g) continue;
       const x = side === 1 ? g.right : g.left;
-      const box: Rect = side === 1 ? { left: x, right: x + body.w, top: g.top, bottom: g.top + body.h } : { left: x - body.w, right: x, top: g.top, bottom: g.top + body.h };
+      const top = g.top - up;
+      const bottom = g.top + down;
+      const box: Rect = side === 1 ? { left: x, right: x + body.w, top, bottom } : { left: x - body.w, right: x, top, bottom };
       if (!blocked(box, g.key)) hangs.push({ key: g.key, x, y: g.top, side });
     }
   });
