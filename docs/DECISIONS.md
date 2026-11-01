@@ -1,6 +1,13 @@
 # Decisions & open assumptions
 
 ## Decisions
+
+**2026-10-31 — v2.3 phases 5–6: pieced-together hexes, link hub, one CTA (Claude)**
+1. **Hex component** (`src/components/HexShards.tsx`, `Honeycomb`): each hex is six triangles cut from the centre. An IntersectionObserver sets `data-assembled` per cell; CSS transitions (staggered by cell index + shard) fly the shards in from scattered, rotated positions and snap them together, then the label fades in. No per-frame JS. Reduced motion: rendered assembled.
+2. **Practice capabilities** use the same component (static variant, not links).
+3. **Link hub** = new paper plate "04 Links / Elsewhere." before Contact. Data in `site.ts` → `hub`. Real `<ul>` of links (honeycomb is layout only). `href: null` → hollow dashed hex, `role="link" aria-disabled="true"`, not focusable. Hover/focus: lifts, turns 30°, label sharpens; 1px orange hex edge on keyboard focus only. Kind (social/sound/work/source) shown as a small mono sub-label.
+4. **One CTA** (`site.cta`, `Cta` in `ui.tsx`): the only filled control on the page — paper on ink, on the last (Contact) plate, marked `data-cta`. Resolution: booking `href` → `mailto` `fallback` → in production a neutral "Say hello · LinkedIn ↗"; in dev a hollow placeholder with a dev badge. The old Contact LinkRow was removed (the hub covers those links).
+5. Contact renumbered 04 → 05.
 **2026-10-31 — v2.3 phase 1: ticker + refs (Claude)**
 1. **One shared rAF ticker** (`src/art/ticker.ts`). Loops return `false` to sleep; scroll, layout (body ResizeObserver + `notifyLayout()`), and `data-printed` mutations wake them. A throwing loop drops out without freezing the stage.
 2. **Ref-based rendering:** `MechArm` / `Character` render once and are posed via `ref.current.set(...)`; attribute writes go through a change-skipping `setAttr`. No React render per frame anywhere.
@@ -47,3 +54,8 @@
 - [ ] Headshot? Default: none — fits the understated direction.
 - [ ] New OG image (current `og.png` is v1 art).
 - [ ] DNS provider for fuzzynop.com (needed for Vercel cutover).
+- [ ] **CTA mechanism** (v2.3 p6): booking link (which service / URL) or email? Until set, production shows "Say hello" → LinkedIn.
+- [ ] **Public contact email** for the CTA `mailto:` fallback — none exists in CONTENT.md, so none is used.
+- [ ] **Hub destinations**: live now = LinkedIn, SoundCloud, Spotify, Mixcloud (CONTENT.md listed Spotify/Mixcloud as "not currently used" — OK to show?). Placeholders "Notes", "Projects", "Sources", "Archive" need URLs or removal.
+- [ ] **Hub plate copy**: eyebrow "Links", title "Elsewhere." are UI labels, not from Approved copy. Keep or rephrase?
+- [ ] Hub kind sub-labels (social / sound / work / source) visible — keep, or labels only?
