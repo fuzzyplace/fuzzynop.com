@@ -84,4 +84,31 @@ describe('ticker', () => {
     expect(seen).toEqual(['a', 'b']);
     expect(tk.size).toBe(2);
   });
+
+  it('runs the frame read phase before any step, and queued reads once, before the steps', () => {
+    const f = fakeEnv();
+    const seen: string[] = [];
+    const tk = createTicker({ ...f.env, read: () => seen.push('read'), inFrame: (on) => seen.push(on ? 'in' : 'out') });
+    const a = tk.loop(() => (seen.push('a'), false));
+    a.wake();
+    tk.measure(() => {
+      seen.push('m');
+      a.wake(); // a read may wake a loop: it runs in the same frame
+    });
+    f.advance(16);
+    expect(seen).toEqual(['read', 'in', 'm', 'a', 'out']);
+    f.advance(16); // nothing queued or awake: no frame
+    expect(seen.length).toBe(5);
+  });
+
+  it('a queued read alone schedules a frame', () => {
+    const f = fakeEnv();
+    const tk = createTicker(f.env);
+    let n = 0;
+    tk.measure(() => n++);
+    expect(f.pending()).toBe(true);
+    f.advance(16);
+    expect(n).toBe(1);
+    expect(f.pending()).toBe(false);
+  });
 });
