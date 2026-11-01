@@ -84,7 +84,7 @@ export function SpiderLeg({ length = 520, t = 14, tone = 'mid', flip = false, de
   );
 }
 
-/** Ink splatter: a blot, satellites, and drips. */
+/** Ink splatter: a blot, satellites, and drips. [data-poi]: the character may wander over to inspect it. */
 export function Splatter({ size = 160, seed = 3, tone = 'near' }: { size?: number; seed?: number; tone?: Tone }) {
   const rand = rng(seed);
   const c = size / 2;
@@ -103,7 +103,7 @@ export function Splatter({ size = 160, seed = 3, tone = 'near' }: { size?: numbe
     blobs.push(<path key={`d${i}`} d={`M${x - 2} ${c} L${x - 1} ${c + len} Q${x} ${c + len + 4} ${x + 1} ${c + len} L${x + 2} ${c} Z`} />);
   }
   return (
-    <svg width={size} height={size * 1.3} viewBox={`0 0 ${size} ${size * 1.3}`} className="max-w-none overflow-visible">
+    <svg width={size} height={size * 1.3} viewBox={`0 0 ${size} ${size * 1.3}`} className="max-w-none overflow-visible" data-poi="splat">
       <g className={toneClass[tone]} filter={toneFilter[tone]}>{blobs}</g>
     </svg>
   );
@@ -138,7 +138,8 @@ export function Ground({ width, height = 90, seed = 5 }: { width: number; height
 /**
  * A hex stepping-stone hung on two wires, like a paper-cut set piece. Its top edge is a perch
  * ([data-ledge]): the character can jump, climb and fall between it and other perches, but the
- * claw never picks it as the reading-line perch.
+ * claw never picks it as the reading-line perch. When he hops up and taps it from below, the
+ * Puppeteer toggles [data-swing] (a / b restarts the CSS swing) and it sways on its wires.
  */
 export function Ledge({ width = 84, height = 26, style }: { width?: number; height?: number; style?: CSSProperties }) {
   const i = height / 2;
