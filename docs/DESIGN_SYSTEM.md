@@ -120,6 +120,28 @@ M3 tokens (`--md-sys-motion-*`, Tailwind `ease-standard`, `ease-emphasized-in`):
 
 States per M3: hover 8% state layer or gray→white text shift; focus = orange ring; disabled 38% opacity.
 
+## Character contracts (v2.5)
+How the page lets the ink character play with it. The page side owns the markup and the physical responses; the stage (`src/art/PuppeteerStage.tsx`) only measures and calls `src/art/targets.ts`. Nothing here changes the page at rest; under `prefers-reduced-motion: reduce` every write is a no-op and no response plays.
+
+| Attribute | Where | Meaning |
+|---|---|---|
+| `data-glyph="<line>:<index>"` | each letter of the hero tagline (aria-hidden spans; the h1 has `aria-label` with the full tagline) | a letter the character can move. Plain inline at rest; `data-glyph-block` (inline-block, kerning restored from `glyphs.ts` KERN) while it moves, `data-glyph-live` while driven per frame |
+| `data-written="1"` | hero h1 | the arm has written the tagline and withdrawn; line clips are cleared. The stunt may start |
+| `data-poke="spin\|lift\|peek\|tug\|rattle\|twitch\|tap"` | hex badges (spin), plate top corners (lift), plate top edge (peek), parked print arm tip (twitch), circuit nodes (tug), CTA door (rattle), footer `0x90` (tap) | a probe target and the response it owns (CSS keyframes in `global.css`, transforms only) |
+| `data-poke-reach="top\|side\|dangle"` | every target | how he gets at it: from above, from beside, or hanging |
+| `data-poke-win` | hex badge (full turn), CTA (door swings open on its hinge, shuts) | it has a bigger "win" response (full trust only) |
+| `data-poke-dir` | plate corner anchors | fixed side (-1 left, +1 right) for that corner |
+| `data-poke-host` | plate root | its parts answer through it; a hovered/focused host blocks pokes on its parts |
+| `data-poked="a\|b"` + `data-poked-kind` + `--poke-dir` | set by `poke()` | toggling a/b restarts the keyframes; `--poke-dir` is the side he's on |
+
+`targets.ts` API:
+- `queryTargets(root?) → PokeTarget[]` (doc px rects; skips unprinted plates and an arm that isn't parked) · `isEngaged(el)` · `poke(el, kind?, dir?) → boolean` · `pokeWin(el, dir?) → boolean`. Never clicks or focuses; refuses while the visitor hovers or focuses the target.
+- Letters: `glyphEl(key)`, `setGlyph(keyOrEl, pose)`, `setGlyphs(poses)`, `resetGlyphs()` (spring home with `--md-sys-motion-easing-spring`), `pokeGlyph(key, 'jiggle'|'flick', dir)`, `poseCss(pose)`.
+- Title terrain: `titleEl()`, `isTitleWritten()`, `measureTitle()`, `titleMap(body, extra?)` (→ `glyphs.ts` `mapTitle`: shelves, letter tops, hang points, safe stand spots, `sag()` ≤ 3px).
+- Pure planners: `stunt.ts` (`siteFor`, `stuntProgram(seed, site, {mobile})`, `beatAt`, `lettersAt`), `probe.ts` (`chooseProbe(targets, state, rand)`).
+
+New target: add `data-poke` + `data-poke-reach` to the element, write its `…-a` / `…-b` keyframes inside the `prefers-reduced-motion: no-preference` block, keep it invisible at rest (no transformed boxes inside a plate at rest: they change how the plate rasterizes), and check a pixel diff.
+
 ## Iconography & imagery
 - Line icons, 1.5px stroke, square caps — Lucide-style or custom SVG. No filled icon sets.
 - Photography: high-contrast B&W, grain ok. No orange overlays.

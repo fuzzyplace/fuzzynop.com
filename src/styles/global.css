@@ -117,6 +117,20 @@
 @media (prefers-reduced-motion: reduce) { .trust-line { animation: trust-line-still 8s steps(1, end) forwards; } }
 @media (prefers-reduced-motion: reduce) { .char-breathe, .char-armsway, .char-tremble, [data-swing] > svg { animation: none; } }
 
+/* ---- v2.5: the hero title's letters (Hero.tsx; driven by src/art/targets.ts) ----
+   At rest a letter is a plain inline span: the line shapes as one run (kerning, find in page).
+   While it moves it carries [data-glyph-block]: an inline-block (transforms need a box) with the
+   pair kerning it lost put back as margins (--kb / --ka, em, from glyphs.ts KERN). While the stage
+   drives it per frame it also carries [data-glyph-live] (no transition); resetGlyphs() drops that
+   and the letter springs home, then drops back to inline. */
+.glyph-word { white-space: nowrap; }
+.glyph[data-glyph-block] { display: inline-block; transform-origin: 50% 100%; margin-left: var(--kb, 0em); margin-right: var(--ka, 0em); }
+.glyph[data-glyph-block] + .glyph[data-glyph-block] { margin-left: 0; } /* the pair's kern is already on the first */
+@media (prefers-reduced-motion: no-preference) {
+  .glyph { transition: transform var(--md-sys-motion-duration-extra-long1) var(--md-sys-motion-easing-spring); }
+  .glyph[data-glyph-live] { transition: none; }
+}
+
 @layer base {
   /* typesetting: balanced headings, no orphans in running copy (plus tie() in src/content/typeset.ts) */
   h1, h2, h3 { text-wrap: balance; }
@@ -237,3 +251,134 @@
   .circuit-root { --r: var(--hr); }
   .circuit-branch { transform: translate(-100%, -50%); }
 }
+
+/* ---- v2.5: probe targets (src/art/targets.ts; contract in docs/DESIGN_SYSTEM.md) ----
+   A target opts in with [data-poke]; poke()/pokeWin() set data-poked-kind, --poke-dir (±1, the
+   side he's on) and toggle data-poked a/b. Each response exists twice (…-a / …-b, identical): a new
+   animation name is what restarts it. Transforms only; nothing at rest; reduced motion: none.
+   Plate parts (corner/edge/arm anchors) are invisible spans before the plate in the DOM, so the
+   plate and its arm answer through sibling selectors and read --poke-dir from the plate root. */
+.plate-anchor { position: absolute; width: 24px; height: 24px; pointer-events: none; }
+.plate-anchor--edge { left: 0; right: 0; top: 0; width: auto; height: 12px; }
+.plate-arm { transform-box: view-box; }
+/* the CTA's door frame: layout-neutral around the one control; the recess behind it exists only
+   once a probe has won (no box at rest: a transformed layer inside the plate would change how the
+   plate rasterizes) and shows only while the door swings open */
+.cta-door { position: relative; display: inline-flex; isolation: isolate; border-radius: var(--md-sys-shape-corner-extra-small); }
+.cta-door[data-poked-win]::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
+  background: var(--md-ref-gray-700); box-shadow: inset 0 0 0 1px var(--md-sys-color-ink), inset 6px 0 0 var(--md-sys-color-ink);
+  transform: scale(0);
+}
+.cta-door > .cta-btn { transform-origin: 0 50%; }
+[data-poke~='spin'] > polygon { transform-box: fill-box; transform-origin: 50% 50%; }
+
+@media (prefers-reduced-motion: no-preference) {
+  /* spin: the hex badge's shell turns 60° (a hex lands on itself) with a little overshoot; win: a full turn */
+  [data-poked-kind='spin'][data-poked='a'] > polygon { animation: poke-spin-a 900ms var(--md-sys-motion-easing-standard); }
+  [data-poked-kind='spin'][data-poked='b'] > polygon { animation: poke-spin-b 900ms var(--md-sys-motion-easing-standard); }
+  [data-poked-kind='spin'][data-poked-win][data-poked='a'] > polygon { animation: poke-spin-win-a 1500ms var(--md-sys-motion-easing-standard); }
+  [data-poked-kind='spin'][data-poked-win][data-poked='b'] > polygon { animation: poke-spin-win-b 1500ms var(--md-sys-motion-easing-standard); }
+
+  /* lift: the torn top corner he picks at rises (the plate pivots on its far bottom corner) */
+  [data-poked-kind='lift'][data-poked='a'] ~ .plate-alive { animation: poke-lift-a 1300ms ease-in-out; }
+  [data-poked-kind='lift'][data-poked='b'] ~ .plate-alive { animation: poke-lift-b 1300ms ease-in-out; }
+  /* peek: the top edge lifts ~6px on his side and holds while he looks under it */
+  [data-poked-kind='peek'][data-poked='a'] ~ .plate-alive { animation: poke-peek-a 2000ms ease-in-out; }
+  [data-poked-kind='peek'][data-poked='b'] ~ .plate-alive { animation: poke-peek-b 2000ms ease-in-out; }
+  /* twitch: the parked print arm flinches away from his poke, then settles */
+  [data-poked-kind='twitch'][data-poked='a'] ~ svg .plate-arm { animation: poke-twitch-a 1100ms ease-out; }
+  [data-poked-kind='twitch'][data-poked='b'] ~ svg .plate-arm { animation: poke-twitch-b 1100ms ease-out; }
+
+  /* tug: a circuit node jolts toward him and back; its hex wobbles */
+  .circuit-node[data-poked-kind='tug'][data-poked='a'] { animation: poke-tug-a 800ms ease-out; }
+  .circuit-node[data-poked-kind='tug'][data-poked='b'] { animation: poke-tug-b 800ms ease-out; }
+  .circuit-node[data-poked-kind='tug'][data-poked='a'] .circuit-hex { animation: poke-wobble-a 800ms ease-out; }
+  .circuit-node[data-poked-kind='tug'][data-poked='b'] .circuit-hex { animation: poke-wobble-b 800ms ease-out; }
+
+  /* rattle: the CTA jolts twice, like a locked door; win: it swings open on its left hinge, then shuts */
+  .cta-door[data-poked-kind='rattle'][data-poked='a'] > .cta-btn { animation: poke-rattle-a 700ms linear; }
+  .cta-door[data-poked-kind='rattle'][data-poked='b'] > .cta-btn { animation: poke-rattle-b 700ms linear; }
+  .cta-door[data-poked-win][data-poked='a'] > .cta-btn { animation: poke-door-a 1800ms ease-in-out; }
+  .cta-door[data-poked-win][data-poked='b'] > .cta-btn { animation: poke-door-b 1800ms ease-in-out; }
+  .cta-door[data-poked-win][data-poked='a']::before { animation: poke-recess-a 1800ms linear; }
+  .cta-door[data-poked-win][data-poked='b']::before { animation: poke-recess-b 1800ms linear; }
+
+  /* tap: the footer's 0x90 hops */
+  [data-poked-kind='tap'][data-poked='a'] { animation: poke-tap-a 600ms ease-out; }
+  [data-poked-kind='tap'][data-poked='b'] { animation: poke-tap-b 600ms ease-out; }
+
+  /* title letters (pokeGlyph): jiggle on the baseline, or a comma flicked round its middle */
+  .glyph[data-poked-kind='jiggle'][data-poked='a'] { animation: glyph-jiggle-a 900ms ease-out; }
+  .glyph[data-poked-kind='jiggle'][data-poked='b'] { animation: glyph-jiggle-b 900ms ease-out; }
+  .glyph[data-poked-kind='flick'][data-poked='a'] { transform-origin: 50% 70%; animation: glyph-flick-a 1100ms ease-out; }
+  .glyph[data-poked-kind='flick'][data-poked='b'] { transform-origin: 50% 70%; animation: glyph-flick-b 1100ms ease-out; }
+}
+
+@keyframes poke-spin-a { 0% { rotate: 0deg; } 60% { rotate: calc(var(--poke-dir, 1) * 68deg); } 80% { rotate: calc(var(--poke-dir, 1) * 57deg); } 100% { rotate: calc(var(--poke-dir, 1) * 60deg); } }
+@keyframes poke-spin-b { 0% { rotate: 0deg; } 60% { rotate: calc(var(--poke-dir, 1) * 68deg); } 80% { rotate: calc(var(--poke-dir, 1) * 57deg); } 100% { rotate: calc(var(--poke-dir, 1) * 60deg); } }
+@keyframes poke-spin-win-a { 0% { rotate: 0deg; } 70% { rotate: calc(var(--poke-dir, 1) * 372deg); } 85% { rotate: calc(var(--poke-dir, 1) * 356deg); } 100% { rotate: calc(var(--poke-dir, 1) * 360deg); } }
+@keyframes poke-spin-win-b { 0% { rotate: 0deg; } 70% { rotate: calc(var(--poke-dir, 1) * 372deg); } 85% { rotate: calc(var(--poke-dir, 1) * 356deg); } 100% { rotate: calc(var(--poke-dir, 1) * 360deg); } }
+
+/* pivot about the far bottom corner: translate to it, rotate, translate back (+ a little rise) */
+@keyframes poke-lift-a {
+  0%, 100% { transform: translate(calc(var(--poke-dir, 1) * -50%), 50%) rotate(0deg) translate(calc(var(--poke-dir, 1) * 50%), -50%); }
+  25% { transform: translate(calc(var(--poke-dir, 1) * -50%), 50%) rotate(calc(var(--poke-dir, 1) * -1.1deg)) translate(calc(var(--poke-dir, 1) * 50%), calc(-50% - 2px)); }
+  45% { transform: translate(calc(var(--poke-dir, 1) * -50%), 50%) rotate(calc(var(--poke-dir, 1) * -0.6deg)) translate(calc(var(--poke-dir, 1) * 50%), calc(-50% - 1px)); }
+  65% { transform: translate(calc(var(--poke-dir, 1) * -50%), 50%) rotate(calc(var(--poke-dir, 1) * -0.8deg)) translate(calc(var(--poke-dir, 1) * 50%), calc(-50% - 1px)); }
+}
+@keyframes poke-lift-b {
+  0%, 100% { transform: translate(calc(var(--poke-dir, 1) * -50%), 50%) rotate(0deg) translate(calc(var(--poke-dir, 1) * 50%), -50%); }
+  25% { transform: translate(calc(var(--poke-dir, 1) * -50%), 50%) rotate(calc(var(--poke-dir, 1) * -1.1deg)) translate(calc(var(--poke-dir, 1) * 50%), calc(-50% - 2px)); }
+  45% { transform: translate(calc(var(--poke-dir, 1) * -50%), 50%) rotate(calc(var(--poke-dir, 1) * -0.6deg)) translate(calc(var(--poke-dir, 1) * 50%), calc(-50% - 1px)); }
+  65% { transform: translate(calc(var(--poke-dir, 1) * -50%), 50%) rotate(calc(var(--poke-dir, 1) * -0.8deg)) translate(calc(var(--poke-dir, 1) * 50%), calc(-50% - 1px)); }
+}
+@keyframes poke-peek-a {
+  0%, 100% { transform: translate(calc(var(--poke-dir, 1) * -50%), 50%) rotate(0deg) translate(calc(var(--poke-dir, 1) * 50%), -50%); }
+  20%, 70% { transform: translate(calc(var(--poke-dir, 1) * -50%), 50%) rotate(calc(var(--poke-dir, 1) * -0.5deg)) translate(calc(var(--poke-dir, 1) * 50%), calc(-50% - 6px)); }
+  85% { transform: translate(calc(var(--poke-dir, 1) * -50%), 50%) rotate(calc(var(--poke-dir, 1) * 0.1deg)) translate(calc(var(--poke-dir, 1) * 50%), calc(-50% + 1px)); }
+}
+@keyframes poke-peek-b {
+  0%, 100% { transform: translate(calc(var(--poke-dir, 1) * -50%), 50%) rotate(0deg) translate(calc(var(--poke-dir, 1) * 50%), -50%); }
+  20%, 70% { transform: translate(calc(var(--poke-dir, 1) * -50%), 50%) rotate(calc(var(--poke-dir, 1) * -0.5deg)) translate(calc(var(--poke-dir, 1) * 50%), calc(-50% - 6px)); }
+  85% { transform: translate(calc(var(--poke-dir, 1) * -50%), 50%) rotate(calc(var(--poke-dir, 1) * 0.1deg)) translate(calc(var(--poke-dir, 1) * 50%), calc(-50% + 1px)); }
+}
+@keyframes poke-twitch-a { 0%, 100% { rotate: 0deg; } 10% { rotate: calc(var(--poke-dir, 1) * 6deg); } 30% { rotate: calc(var(--poke-dir, 1) * -2.5deg); } 50% { rotate: calc(var(--poke-dir, 1) * 1.2deg); } 70% { rotate: calc(var(--poke-dir, 1) * -0.5deg); } }
+@keyframes poke-twitch-b { 0%, 100% { rotate: 0deg; } 10% { rotate: calc(var(--poke-dir, 1) * 6deg); } 30% { rotate: calc(var(--poke-dir, 1) * -2.5deg); } 50% { rotate: calc(var(--poke-dir, 1) * 1.2deg); } 70% { rotate: calc(var(--poke-dir, 1) * -0.5deg); } }
+@keyframes poke-tug-a { 0%, 100% { translate: 0 0; } 20% { translate: calc(var(--poke-dir, 1) * 6px) 0; } 42% { translate: calc(var(--poke-dir, 1) * -2px) 0; } 64% { translate: calc(var(--poke-dir, 1) * 1px) 0; } }
+@keyframes poke-tug-b { 0%, 100% { translate: 0 0; } 20% { translate: calc(var(--poke-dir, 1) * 6px) 0; } 42% { translate: calc(var(--poke-dir, 1) * -2px) 0; } 64% { translate: calc(var(--poke-dir, 1) * 1px) 0; } }
+@keyframes poke-wobble-a { 0%, 100% { rotate: 0deg; } 20% { rotate: calc(var(--poke-dir, 1) * -14deg); } 45% { rotate: calc(var(--poke-dir, 1) * 7deg); } 70% { rotate: calc(var(--poke-dir, 1) * -3deg); } }
+@keyframes poke-wobble-b { 0%, 100% { rotate: 0deg; } 20% { rotate: calc(var(--poke-dir, 1) * -14deg); } 45% { rotate: calc(var(--poke-dir, 1) * 7deg); } 70% { rotate: calc(var(--poke-dir, 1) * -3deg); } }
+@keyframes poke-rattle-a {
+  0%, 34%, 50%, 84%, 100% { translate: 0 0; rotate: 0deg; }
+  8%, 58% { translate: calc(var(--poke-dir, 1) * 3px) 0; rotate: calc(var(--poke-dir, 1) * 0.8deg); }
+  17%, 67% { translate: calc(var(--poke-dir, 1) * -2px) 0; rotate: calc(var(--poke-dir, 1) * -0.6deg); }
+  25%, 75% { translate: calc(var(--poke-dir, 1) * 1px) 0; rotate: calc(var(--poke-dir, 1) * 0.3deg); }
+}
+@keyframes poke-rattle-b {
+  0%, 34%, 50%, 84%, 100% { translate: 0 0; rotate: 0deg; }
+  8%, 58% { translate: calc(var(--poke-dir, 1) * 3px) 0; rotate: calc(var(--poke-dir, 1) * 0.8deg); }
+  17%, 67% { translate: calc(var(--poke-dir, 1) * -2px) 0; rotate: calc(var(--poke-dir, 1) * -0.6deg); }
+  25%, 75% { translate: calc(var(--poke-dir, 1) * 1px) 0; rotate: calc(var(--poke-dir, 1) * 0.3deg); }
+}
+/* the door: a jolt, it gives, swings open ~30° on its left hinge, holds, shuts with a bump */
+@keyframes poke-door-a {
+  0%, 100% { transform: perspective(600px) rotateY(0deg); }
+  8% { transform: perspective(600px) rotateY(-5deg); } 14% { transform: perspective(600px) rotateY(0deg); }
+  32%, 66% { transform: perspective(600px) rotateY(-32deg); }
+  86% { transform: perspective(600px) rotateY(3deg); } 93% { transform: perspective(600px) rotateY(-1deg); }
+}
+@keyframes poke-door-b {
+  0%, 100% { transform: perspective(600px) rotateY(0deg); }
+  8% { transform: perspective(600px) rotateY(-5deg); } 14% { transform: perspective(600px) rotateY(0deg); }
+  32%, 66% { transform: perspective(600px) rotateY(-32deg); }
+  86% { transform: perspective(600px) rotateY(3deg); } 93% { transform: perspective(600px) rotateY(-1deg); }
+}
+@keyframes poke-recess-a { 0%, 99% { transform: none; } 100% { transform: scale(0); } }
+@keyframes poke-recess-b { 0%, 99% { transform: none; } 100% { transform: scale(0); } }
+@keyframes poke-tap-a { 0%, 100% { translate: 0 0; } 25% { translate: 0 -3px; } 50% { translate: 0 0; } 70% { translate: 0 -1px; } }
+@keyframes poke-tap-b { 0%, 100% { translate: 0 0; } 25% { translate: 0 -3px; } 50% { translate: 0 0; } 70% { translate: 0 -1px; } }
+@keyframes glyph-jiggle-a { 0%, 100% { rotate: 0deg; } 15% { rotate: calc(var(--poke-dir, 1) * 4deg); } 35% { rotate: calc(var(--poke-dir, 1) * -3deg); } 55% { rotate: calc(var(--poke-dir, 1) * 2deg); } 75% { rotate: calc(var(--poke-dir, 1) * -1deg); } }
+@keyframes glyph-jiggle-b { 0%, 100% { rotate: 0deg; } 15% { rotate: calc(var(--poke-dir, 1) * 4deg); } 35% { rotate: calc(var(--poke-dir, 1) * -3deg); } 55% { rotate: calc(var(--poke-dir, 1) * 2deg); } 75% { rotate: calc(var(--poke-dir, 1) * -1deg); } }
+@keyframes glyph-flick-a { 0%, 100% { rotate: 0deg; translate: 0 0; } 12% { rotate: calc(var(--poke-dir, 1) * 24deg); translate: calc(var(--poke-dir, 1) * 3px) -2px; } 40% { rotate: calc(var(--poke-dir, 1) * -7deg); translate: 0 0; } 65% { rotate: calc(var(--poke-dir, 1) * 3deg); } 85% { rotate: calc(var(--poke-dir, 1) * -1deg); } }
+@keyframes glyph-flick-b { 0%, 100% { rotate: 0deg; translate: 0 0; } 12% { rotate: calc(var(--poke-dir, 1) * 24deg); translate: calc(var(--poke-dir, 1) * 3px) -2px; } 40% { rotate: calc(var(--poke-dir, 1) * -7deg); translate: 0 0; } 65% { rotate: calc(var(--poke-dir, 1) * 3deg); } 85% { rotate: calc(var(--poke-dir, 1) * -1deg); } }
