@@ -35,7 +35,7 @@ Every screen balances two voices:
 
 | Machine | Organic |
 |---|---|
-| Geist Mono labels, telemetry readouts (`// 01 — RECORD`, `0x90`) | Instrument Serif display type, italics for emphasis |
+| Share Tech Mono labels, telemetry readouts (`// 01 — RECORD`, `0x90`) | Chakra Petch display type (cyberpunk HUD) |
 | Hairline 64px grid, sharp corners (0–4px) | One soft element per view: serif italic, a dot, generous negative space |
 | Hex / NOP motifs, coordinate stamps | Grain/noise overlay at ≤ 4% opacity |
 | Precise, linear reveals | Emphasized-decelerate easing — things *settle*, not snap |
@@ -73,7 +73,7 @@ Text on dark: use 100–500 only (600 and below fail AA for text — borders/dec
 **Contrast (verified, `npm run tokens:contrast`):** on-surface 18.1:1 · on-surface-variant 8.1:1 · secondary 5.9:1 · on-secondary-container 10.1:1 · accent 6.9:1 (glyph/line use) · outline 3.9:1 (UI).
 
 ## Typography
-Fonts (Google Fonts, `display=swap`): **Instrument Serif** (organic display), **Geist** (machine sans, Vercel's typeface), **Geist Mono** (telemetry).
+Fonts (Google Fonts, `display=swap`): **Chakra Petch** (display, cyberpunk HUD — Z 2026-11-01), **Geist** (machine sans), **Share Tech Mono** (telemetry).
 
 | M3 role | Utility | Family | Notes |
 |---|---|---|---|

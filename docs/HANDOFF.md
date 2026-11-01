@@ -6,6 +6,43 @@
 
 ---
 
+## Current state (v2.4) — read this first (updated 2026-11-01, end of cloud session)
+Branch `claude/v2.3-living-stage-x605vc`. `npm run check` passes (117 tests). Vercel preview project: `fuzzynop-redesign-preview` (STDClub team; Vercel login required).
+
+**Main story is LOCKED: "the experiment is you", with "security is a feeling" as its heart.** See `docs/NARRATIVE.md` → "Main story — LOCKED". Every further decision should follow from it.
+
+**Done since the prototype**
+- **Story applied:**
+  - Fixed hero "What would / happen if_" (variants removed).
+  - The interlude is now EXP. 04's hypothesis; EXP. 04's result is "Running."
+  - EXP. 05 (title `_`, result "Pending_") holds the CTA and the circuit tree; Links and Contact plates removed.
+  - "Soon" links are hidden in production.
+  - Nav is Log · Next.
+  - Share text and `public/og.png` read "What would happen if_".
+- **Fonts:** Chakra Petch display, Share Tech Mono labels, Geist body (Z chose "D · cyberpunk HUD").
+- **Design and copy review fixes:**
+  - Focus ring on paper, solid nav strip, mobile nav, screen-reader names.
+  - Dead v2.3 code removed; CONTENT.md records v2.4 copy.
+- **Character polish:**
+  - Headroom below the header everywhere; held clear of plate text when there's no perch.
+  - Visits circuit-tree nodes; the duck works.
+  - Trust verified in a browser; hidden-line placement fixed.
+  - Plates now finish printing by mid-screen.
+
+**Next up / waiting on Z**
+- Sign off the story-derived lines: EXP. 04 "Running.", EXP. 05 title "_" (sr: "Next"), "Pending_".
+- Page title order: "FuzzyNop — Josh Schwartz" vs "Josh Schwartz — FuzzyNop".
+- Calendly / socials / art / email URLs (they show only in dev until real).
+- CTA label inside EXP. 05 ("Say hello · LinkedIn" until Calendly exists).
+- **Tuning (see DECISIONS):**
+  - Print timing (he's held more mid-page).
+  - Mid-plate sitting pose.
+  - Duck rarity.
+  - Trust pace.
+- Not yet tested: touch path, Safari/Firefox (container queries), Lighthouse.
+
+<details><summary>Earlier: v2.4 prototype notes</summary>
+
 ## Current state (v2.4 prototype) — 2026-11-01
 Branch `claude/v2.3-living-stage-x605vc`. `npm run check` passes (111 tests). Preview deploys from this branch via the Vercel project `fuzzynop-redesign-preview`; Vercel login required.
 
@@ -33,6 +70,8 @@ Branch `claude/v2.3-living-stage-x605vc`. `npm run check` passes (111 tests). Pr
 - **Mixcloud:** it's shown live, but CONTENT.md says "not currently used".
 
 **Where decisions live:** `docs/NARRATIVE.md` (story, tone, approved v2.4 lines) and `docs/DECISIONS.md` (decision log and open assumptions).
+
+</details>
 
 ## 0. Before anything
 1. `mv _claude .claude` (Claude config staged there; it couldn't be written remotely). Restart Claude Code so `/check`, `/new-section`, `/design-review`, `/content-audit`, `/ship` and the two subagents load.
