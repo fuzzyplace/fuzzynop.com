@@ -19,7 +19,7 @@ Run once from the repo root: `mv _claude .claude` (Claude config is staged as `_
 ## Stack
 - Vite + React 19 + TypeScript (strict)
 - Tailwind CSS v4 via `@tailwindcss/vite`; theme maps to M3-style CSS variables in `src/styles/tokens.css`
-- `motion` (Framer Motion) for animation; Three.js only if a section earns it (lazy-load)
+- Animation runs on one shared ticker (`src/art/ticker.ts`: read phase then writes, loops sleep when settled); no animation library. Three.js only if a section earns it (lazy-load)
 - `@vercel/analytics` for analytics
 - Hosting: Vercel (framework preset: Vite, output `dist/`)
 
