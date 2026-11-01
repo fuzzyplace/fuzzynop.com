@@ -38,8 +38,58 @@ export const nav = [
 
 export const hero = {
   eyebrow: 'Josh Schwartz — FuzzyNop',
+  /** v2.3 tagline, kept for `?hero=classic` comparison in previews. */
   tagline: ['Red Teamer,', 'Team Builder,', 'Professional Bogeyman'],
+  /** v2.4 (docs/NARRATIVE.md): an open question, left with the cursor blinking. Z's own phrasing. */
+  question: ['What would', 'happen if'],
+  /** `?hero=rotate`: the three questions Z asks, cycled. */
+  questions: [
+    ['What would', 'happen if'],
+    ['What could', 'be'],
+    ['Why does it', 'happen that way'],
+  ],
 };
+
+/**
+ * v2.4 experiment log (docs/NARRATIVE.md). Titles, fragments and results approved by Z in the
+ * 2026-11-01 interview; fragments are condensed from the approved copy, nothing invented.
+ */
+export type Experiment = { n: string; id: string; title: string; fragments: string[]; areas?: string[]; result: string[] };
+export const experiments: Experiment[] = [
+  {
+    n: '01',
+    id: 'before',
+    title: 'Break the story they trust.',
+    fragments: ['Red teaming.', 'Hacker. Executive.'],
+    result: ['They felt less safe.', 'They were safer.'],
+  },
+  {
+    n: '02',
+    id: 'practice',
+    title: 'Build the people who break it.',
+    fragments: ['Building and leading teams.', 'Leading at the top.'],
+    result: ['The trust held.', 'The systems didn’t.'],
+  },
+  {
+    n: '03',
+    id: 'make',
+    title: 'Make something that feels safe.',
+    fragments: ['Interfaces, rituals, small systems.', 'Art and community.'],
+    result: ['Inconclusive.', 'Repeating.'],
+  },
+  {
+    n: '04',
+    id: 'now',
+    title: '?',
+    fragments: [],
+    areas: ['Consciousness', 'Wellness for hackers', 'AI safety', 'Cyborg psychology'],
+    result: ['Pending'],
+  },
+];
+export const log = { eyebrow: 'Exp.', resultLabel: 'Result' };
+
+/** Appears once, only when the character fully trusts the visitor (docs/NARRATIVE.md). Approved by Z. */
+export const trust = { hidden: ['Nothing here is secure.', 'He feels safe anyway.'] };
 
 export const interlude = {
   question: 'What happens when humans and machines meet?',

@@ -19,15 +19,15 @@ Status: **direction approved, wording draft.** Lines marked *draft* need Z's sig
 |---|---|---|
 | Hero | `What would happen if_`: the arm writes it, the cursor is left blinking. Eyebrow stays "Josh Schwartz — FuzzyNop". | direction approved |
 | EXP. 01 | **Break the story they trust.** Red teaming. Hacker. Executive. **Result:** they felt less safe. They were safer. | approved (preview chosen) |
-| EXP. 02 | **Build the people who break it.** Building and leading teams. Leading at the top. **Result:** *draft* | title draft |
-| EXP. 03 | **Make something that feels safe.** Interfaces, rituals, small systems. Art and community. **Result:** *draft* | title draft |
+| EXP. 02 | **Build the people who break it.** Building and leading teams. Leading at the top. **Result:** the trust held. The systems didn't. | approved (Z, round 4) |
+| EXP. 03 | **Make something that feels safe.** Interfaces, rituals, small systems. Art and community. **Result:** inconclusive. Repeating. | approved (Z, round 4) |
 | EXP. 04 | **?** Consciousness · Wellness for hackers · AI safety · Cyborg psychology. **Result:** pending_ | approved (preview chosen) |
 | Interlude | The through-line question can stay as the ink plate, or become EXP. 04's hypothesis. | open |
 | End | Circuit tree (below), then the footer egg. | approved |
 
 ## Security as a feeling, as interaction (approved: "yes + a hidden line")
 The character starts wary of the cursor (backs off, swats). A calm, patient cursor slowly earns trust: he stops swatting, approaches, eventually sits beside it. Grabbing or chasing him spikes fear; he's shaken for a while and the trust recovers slowly. Never explained. The visitor plays the bogeyman until they choose not to.
-- **Hidden line:** appears once, only when he fully trusts you. Wording *draft*, to agree with Z. It's the one place the arms/human-and-machine metaphor is acknowledged (the agreed easter egg).
+- **Hidden line:** appears once, only when he fully trusts you: "Nothing here is secure. He feels safe anyway." (approved, Z round 4) It's the one place the arms/human-and-machine metaphor is acknowledged (the agreed easter egg).
 
 ## Collaboration: the circuit tree
 Who should feel invited: offensive security people (red teamers, bug bounty hunters); security-industry people who need help moving products forward and creating a vibe; people who need help building a team; plus art & immersive work, hacker wellness, AI safety / cyborg psychology, security culture.
@@ -38,8 +38,7 @@ Shape: one root node (Z) sends out circuit-trace branches that end in hex nodes.
 - **URLs:** none supplied yet beyond the allowed list. Calendly, socials, art/projects and a public email are marked `soon` until Z provides them.
 
 ## Open for the next interview round
-1. Results for EXP. 02 and EXP. 03.
-2. Hidden trust line wording.
+1. ~~Results for EXP. 02 / 03~~ and ~~hidden line~~: decided in round 4.
 3. Interlude: keep as its own plate, or fold into EXP. 04?
 4. Calendly / socials / art / email URLs.
-5. Hero: exact form of the open question (`What would happen if_` vs. rotating: what would happen if / what could be / why does it happen that way).
+5. Hero (Z: "need to see a prototype"): the preview build lets Z switch `?hero=fixed|rotate` and `?interlude=keep|fold`. Exact form of the open question (`What would happen if_` vs. rotating: what would happen if / what could be / why does it happen that way).
