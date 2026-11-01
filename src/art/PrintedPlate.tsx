@@ -12,13 +12,18 @@ import { useSize } from './useSize';
  * Exposes data-perch / data-printed so the Puppeteer can set the character down on it, and, while
  * printing, data-printing + data-arm ("baseX baseY tipX tipY", px from the plate's top-left) so he can watch it.
  *
- * Scroll progress uses motion's offset convention (['start 0.95', 'end 0.7']) on cached
+ * Scroll progress uses motion's offset convention (['start 0.95', 'end 0.7'], capped so the top is
+ * done by mid-viewport) on cached
  * geometry; scroll events are coalesced into one ticker frame that writes through refs.
  */
 const OVER = 240; // space above the plate the arm works in
 const SIDE = 44; // gutter for the rail
 const START = 0.95; // progress 0: plate top at 95% of the viewport
 const END = 0.7; // progress 1: plate bottom at 70% of the viewport
+// ...or sooner: a plate is done printing by the time its top edge reaches the middle of the viewport
+// (progress 0.86 ≈ top at 50%), so a tall plate's heading isn't still unprinted under the header and
+// its top edge is a perch while there's room for the character below the header.
+const TOP_DONE = 0.43;
 const BLEED = 28; // reveal-clip overhang so the backing paper layers aren't chopped
 
 type Props = {
@@ -55,7 +60,7 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
   const progress = () => {
     const { top, height, vh } = geo.current;
     const from = top - START * vh;
-    const to = top + height - END * vh;
+    const to = Math.min(top + height - END * vh, top - TOP_DONE * vh);
     return to > from ? clamp((window.scrollY - from) / (to - from)) : 1;
   };
 

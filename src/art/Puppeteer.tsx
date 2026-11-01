@@ -4,6 +4,7 @@ import { Character, STRIDE, type Action, type CharacterHandle, type Pose } from 
 import { choosePoi, collectPois, remember, type Poi, type Scene, type SceneSurface } from './explore';
 import { KICK, SIT_FOR, decideIdle, idleDelay, kickAt, kickDelay, type Fidget } from './idle';
 import { ACT_DUR, FLIP, TAP_AT, TAP_HOP, TURN } from './poses';
+import { holdSpot } from './hold';
 import { MechArm, type ArmHandle } from './MechArm';
 import { clamp, easeInOut, lerp, type Pt } from './geometry';
 import { LIMITS, planRoute, sampleMove, type Move, type Surface } from './navigate';
@@ -73,6 +74,8 @@ const DWELL = 0.7; // s the pointer rests over another plate before he sets off 
 const GRAB_HAND = 0.16; // s: the claw snaps onto him when you press
 const GRAVITY = 2200; // px/s², falls
 const HEADER = 64; // px of fixed header at the top of the viewport
+const TALL = 70; // character units from the top of his head (hair) to his feet
+const CLEAR = 12; // px kept between the header and the top of his head
 const ATTEND = 6; // px of pointer travel that means the user is around (his own whims stop)
 const EXPLORE_PACE = 0.72; // exploring walk speed vs. his usual
 const SIT_REST = 2.5; // s the pointer rests beside him (fully trusted) before he sits down by it
@@ -178,6 +181,9 @@ export function Puppeteer() {
     const scale = vp.w < 700 ? 1.3 : 1.85;
     const cfg = { ...WALK, cycle: 2 * STRIDE * scale }; // distance per gait cycle that keeps the planted foot still
     const reach = (FEET - COLLAR.y) * scale; // collar → feet, px
+    // a perch is only somewhere to put him if all of him fits below the fixed header: its top (his
+    // feet) at least his full height plus a margin under it. Every placement goes through `visible`.
+    const headroom = HEADER + CLEAR + TALL * scale;
     let cache: Perch[] = [];
     const home = (i: number) => clampTo(cache[i].width * cache[i].f, cache[i].ext);
     const measure = () => {
@@ -225,7 +231,9 @@ export function Puppeteer() {
     const armIdle = (now: number, what: Parameters<typeof idleDelay>[0] = 'settled') => {
       const s = st.current;
       if (!s || reduce) return;
-      const wait = idleDelay(what, (now - attnAt) / 1000, Math.random);
+      // the pointer resting by him (or still shaken): he's minding it, so fidgets come at the slower pace
+      const minding = !!company(s, ptr.current) || uneasy(tr.current!, now);
+      const wait = idleDelay(what, minding ? 0 : (now - attnAt) / 1000, Math.random);
       s.idleAt = now + wait * 1000;
       wakeIn(wait);
     };
@@ -330,7 +338,7 @@ export function Puppeteer() {
       const sx = window.scrollX;
       const sy = window.scrollY;
       const feet = s.char.y + FEET * scale;
-      const vis = cache.map((c, i) => ({ c, i, top: c.top - sy, l: c.left - sx + c.ext.lo, r: c.left - sx + c.ext.hi })).filter((q) => q.c.el.dataset.printed !== '0' && q.top > 0 && q.top < vp.h);
+      const vis = cache.map((c, i) => ({ c, i, top: c.top - sy, l: c.left - sx + c.ext.lo, r: c.left - sx + c.ext.hi })).filter((q) => q.c.el.dataset.printed !== '0' && q.top >= headroom && q.top < vp.h);
       const below = vis.filter((q) => q.top >= feet - 4);
       const under = below.filter((q) => s.char.x >= q.l - 20 && s.char.x <= q.r + 20).sort((a, b) => a.top - b.top)[0];
       const off = (q: (typeof vis)[number]) => Math.max(0, q.l - s.char.x, s.char.x - q.r);
@@ -394,14 +402,13 @@ export function Puppeteer() {
       wakeIn((s.sitUntil - now) / 1000);
     };
     /** The scene for explore.ts: usable surfaces, decor and headings in document px (measured now: rare). */
-    const scene = (ps: Seen[], here: number): Scene => {
+    const scene = (ps: Seen[]): Scene => {
       const sx = window.scrollX;
       const sy = window.scrollY;
       const view = { left: sx, right: sx + vp.w, top: sy, bottom: sy + vp.h };
-      // he only wanders onto surfaces with room for all of him below the header (his own excepted)
-      const headroom = HEADER + (FEET + 44) * scale;
+      // he only wanders onto surfaces with room for all of him below the header (`visible`)
       const surfaces = cache.map((c, i): SceneSurface | null =>
-        ps[i].ok && ps[i].visible && (i === here || ps[i].top > headroom)
+        ps[i].ok && ps[i].visible
           ? { left: c.left + c.ext.lo, right: c.left + c.ext.hi, y: c.top, bottom: c.top + c.height, x0: c.left, x1: c.left + c.width, ledge: c.ledge, plate: c.el.dataset.printed !== undefined }
           : null,
       );
@@ -427,7 +434,7 @@ export function Puppeteer() {
     };
     /** Pick a point of interest and set off for it. False = nowhere to go. */
     const startExplore = (s: State, mood: 'explore' | 'rest', ps: Seen[], now: number) => {
-      const sc = scene(ps, s.idx);
+      const sc = scene(ps);
       const S: Surface[] = sc.surfaces.map((q) => q ?? { left: Infinity, right: -Infinity, y: Infinity });
       const from = { s: s.idx, x: cache[s.idx].left + s.walk.x };
       const routes = new Map<string, Move[]>();
@@ -515,6 +522,20 @@ export function Puppeteer() {
       go(s, { type: 'take', plan: options[Math.floor(Math.random() * options.length)] }, now);
     };
 
+    /** Where the claw holds him with nowhere to set him down: clear of every plate (hold.ts); cached per scroll / layout. */
+    let holdMemo: { key: string; at: Pt } | null = null;
+    const holdAt = (sx: number, sy: number): Pt => {
+      const key = `${sx},${sy},${cache.length},${cache[0]?.top}`;
+      if (holdMemo && holdMemo.key === key && !dirty) return holdMemo.at;
+      const plates = cache
+        .filter((c) => !c.ledge && c.height > 0)
+        .map((c) => ({ left: c.left - sx, right: c.left - sx + c.width, top: c.top - sy, bottom: c.top - sy + c.height }))
+        .filter((b) => b.bottom > 0 && b.top < vp.h);
+      const at = holdSpot({ vw: vp.w, vh: vp.h, minTop: HEADER + CLEAR, plates, up: 48 * scale, down: (FEET + 6) * scale, half: 22 * scale, pref: { x: vp.w * (vp.w < 700 ? 0.78 : 0.86), y: vp.h * 0.34 } });
+      holdMemo = { key, at };
+      return at;
+    };
+
     let frames = 0; // dev: frames run (to check the loop sleeps when he's settled)
     const frame = (now: number, dt: number) => {
       if (import.meta.env.DEV) frames++;
@@ -531,7 +552,7 @@ export function Puppeteer() {
           left: p.left - sx,
           pt: { x: p.left - sx + p.width * p.f, y: top - FEET * scale },
           top,
-          visible: top > 70 && top < vp.h - 8,
+          visible: top >= headroom && top < vp.h - 8,
           bottom: top + p.height,
         };
       });
@@ -633,15 +654,14 @@ export function Puppeteer() {
         if (t.full && !lineShown.current && afoot(md) && s.idx >= 0) {
           // the first time he fully trusts you: the hidden line, above him (once a session; TrustLine guards it)
           lineShown.current = true;
-          const half = Math.min(120, vp.w / 2 - 16);
-          lineRef.current?.show(clamp(s.char.x, 16 + half, vp.w - 16 - half), Math.max(s.char.y - 50 * scale, HEADER + 72));
+          lineRef.current?.show({ x: s.char.x, head: s.char.y - (TALL - FEET) * scale, feet: s.char.y + FEET * scale, gap: 10, half: 14 * scale, top: HEADER + CLEAR });
         }
       }
       const fl = feel(now);
       s.tremble = fl === 'shaken' && !reduce;
-      const heldPt = { x: vp.w * (vp.w < 700 ? 0.78 : 0.86), y: vp.h * 0.34 };
-      heldPt.x += Math.sin(now / 1400) * 18;
-      heldPt.y += Math.cos(now / 1100) * 10;
+      const heldPt = { ...holdAt(sx, sy) };
+      heldPt.x += Math.sin(now / 1400) * 6;
+      heldPt.y += Math.cos(now / 1100) * 4;
 
       // ---- the page decides: scroll / perch lost (urgent; interrupts anything but the user's hand / a fall) ----
       const byHand = s.m.plan?.kind === 'hand';
@@ -762,7 +782,7 @@ export function Puppeteer() {
           if (j < 0) s.wantFail = -1;
           if (j >= 0) wakeIn(DWELL);
         } else if (j >= 0 && j !== s.wantFail && now - s.wantSince > DWELL * 1000) {
-          const ok = ps.map((q) => q.ok && q.top > -vp.h * 0.5 && q.top < vp.h * 1.5);
+          const ok = ps.map((q, i) => (q.ok && q.visible) || i === s.idx); // never via a surface tucked under the header
           const S = surfaces(ok);
           const tx = clampTo(p.x - ps[j].left, cache[j].ext) + cache[j].left;
           const route = planRoute(S, { s: s.idx, x: cache[s.idx].left + s.walk.x }, { s: j, x: tx }, lim);
