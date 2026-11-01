@@ -13,6 +13,7 @@ import { afoot, free, held, initial, own, transition, type Ev, type Machine, typ
 import { createRagdoll, primeRagdoll, stepRagdoll, type RagPose, type Ragdoll } from './ragdoll';
 import { onLayout, setAttr, ticker, view as viewport } from './ticker';
 import { TrustLine, type TrustLineHandle } from './TrustLine';
+import { createStunt, type StuntView } from './stuntDriver'; // ---- stunt hook ----
 import {
   FAR,
   FULL,
@@ -306,6 +307,16 @@ export function PuppeteerStage() {
       cache.map((c, i) =>
         ok[i] ? { left: c.left + c.ext.lo, right: c.left + c.ext.hi, y: c.top, bottom: c.top + c.height, x0: c.left, x1: c.left + c.width } : { left: Infinity, right: -Infinity, y: Infinity },
       );
+
+    // ---- stunt hook: the title stunt (stuntDriver.ts), once per page load ----
+    const stunt = createStunt({ scale, feet: FEET, tall: TALL, collar: COLLAR, cycle: cfg.cycle, headroom: HEADER + CLEAR }, () => loop.wake());
+    const heroGround = () => cache.findIndex((c) => !c.ledge && !!c.el.closest('#top'));
+    const stuntView = (s: State, gi: number): StuntView => {
+      const { sx, sy, w, h } = viewport();
+      const g = gi >= 0 ? cache[gi] : null;
+      const p = ptr.current;
+      return { sx, sy, vw: w, vh: h, char: s.char, facing: s.shown, pointer: p && !(sense.gone && !sense.touch) ? { x: p.x, y: p.y } : null, ground: g ? { top: g.top, left: g.left, lo: g.ext.lo, hi: g.ext.hi } : null };
+    };
 
     // timers wake the sleeping loop (idle relocation, end of the follow hold) instead of keeping it awake
     const timers = new Set<number>();
@@ -1015,6 +1026,27 @@ export function PuppeteerStage() {
       heldPt.x += Math.sin(now / 1400) * 6;
       heldPt.y += Math.cos(now / 1100) * 4;
 
+      // ---- stunt hook: start it (free on the hero ground, title written) / a scroll ends it ----
+      if (mode() === 'stunt' && stunt.scrolled(sy)) {
+        stunt.stop(); // letters spring home; the page decides where he goes (below)
+        s.idx = -1;
+      } else if (!reduce) {
+        const gi = heroGround();
+        const onGround = gi >= 0 && mode() === 'idle' && s.idx === gi;
+        const eligible = onGround && !s.act && !s.walk.walking && s.stepGoal === null && !s.turnPending && !pressed && !holding && now - s.m.since > 600;
+        const sv = stuntView(s, gi);
+        if (stunt.want(now, sv, eligible)) {
+          if (go(s, { type: 'stunt' }, now)) {
+            s.act = null;
+            s.goal = null;
+            stunt.begin(now, sv);
+          }
+        } else if (onGround && stunt.pending(now)) {
+          s.idleAt = Math.max(s.idleAt, now + 400); // it's coming: no wandering off first
+          if (!eligible && now - s.m.since <= 600) wakeIn(0.65);
+        }
+      }
+
       // ---- the page decides: scroll / perch lost (urgent; interrupts anything but the user's hand / a fall) ----
       const byHand = s.m.plan?.kind === 'hand';
       if (mode() !== 'falling' && !byHand) {
@@ -1554,6 +1586,46 @@ export function PuppeteerStage() {
       s.hoverX = Math.abs(hoverGoal - s.hoverX) < 0.01 ? hoverGoal : lerp(s.hoverX, hoverGoal, 1 - Math.pow(reaching ? 0.002 : 0.12, dt));
       const baseGoal = reaching ? s.char.x : s.hoverX - 10;
       s.baseX = lerp(s.baseX, baseGoal, 1 - Math.pow(reaching ? 0.005 : 0.02, dt));
+      // ---- stunt hook: he's on the title (the driver says where and how); hand him back when it ends ----
+      if (s.m.mode === 'stunt') {
+        const gi = heroGround();
+        const f = stunt.step(now, dt, stuntView(s, gi));
+        if ('done' in f) {
+          stunt.stop();
+          if (f.done === 'ground' && gi >= 0) {
+            s.idx = gi;
+            s.walk = { x: clampTo(f.x - cache[gi].left, cache[gi].ext), v: 0, phase: s.walk.phase, walking: false };
+            s.anchored = false;
+            s.char = perchPos(gi, s.walk.x);
+            go(s, { type: 'done' }, now);
+            armIdle(now);
+          } else {
+            s.idx = -1; // the claw comes for him and sets him back down in the light
+            go(s, { type: 'take', plan: { kind: 'carry', why: 'enter', to: Math.max(0, gi), x: home(Math.max(0, gi)) } }, now);
+          }
+        } else {
+          s.char = f.char;
+          s.facing = s.shown = f.facing;
+          s.turnAt = 0;
+          s.action = f.action;
+          s.actionK = f.actionK;
+          s.kick = f.kick;
+          s.amt = f.amt;
+          s.walk = { ...s.walk, phase: f.phase, v: 0 };
+          s.grip = f.grip;
+          s.swing = f.swing;
+          s.swingV = 0;
+          s.tilt = f.tilt;
+          s.squash = f.squash;
+          s.rag = null;
+          s.ragW = 0;
+        }
+      } else if (stunt.active) {
+        // something took him mid-stunt (a press, the page): letters home, and no jump back to the ground
+        stunt.stop();
+        if (stunt.last) s.char = { ...stunt.last };
+        if (s.m.mode === 'grabbed' && s.m.plan?.kind !== 'hand') s.idx = -1;
+      }
       draw();
 
       // settled: idle and still, everything at rest, claw arrived → sleep until something changes
@@ -1607,7 +1679,8 @@ export function PuppeteerStage() {
       const turn = s.turnAt ? { k: clamp((performance.now() - s.turnAt) / 1000 / TURN), hop: s.turnHop } : undefined;
       const pose: Pose = {
         swing: 0,
-        dangle,
+        dangle: s.m.mode === 'stunt' && stunt.frame ? stunt.frame.dangle : dangle, // ---- stunt hook ----
+        stunt: s.m.mode === 'stunt' ? stunt.frame?.stunt : undefined, // ---- stunt hook ----
         facing: s.shown,
         squash: s.squash,
         phase: s.walk.phase,
@@ -1690,6 +1763,18 @@ export function PuppeteerStage() {
           },
           /** what he did and when: turning points, flinches, greetings, pats, fidgets */
           events,
+          // ---- stunt hook (dev) ----
+          /** play the title stunt again (optionally with this seed) next time he's free on the hero ground */
+          stunt: (seed?: number) => {
+            stunt.force(seed);
+            loop.wake();
+          },
+          get stuntFrame() {
+            return stunt.frame;
+          },
+          get stuntInfo() {
+            return stunt.info;
+          },
           /** back to a wary stranger (also forgets the session copy) */
           reset() {
             try {
@@ -1733,7 +1818,7 @@ export function PuppeteerStage() {
     const onHim = (x: number, y: number) => {
       const s = st.current;
       const md = s?.m.mode;
-      if (!s || reduce || !(afoot(md!) || md === 'landing' || md === 'falling')) return false;
+      if (!s || reduce || !(afoot(md!) || md === 'landing' || md === 'falling' || md === 'stunt')) return false; // ---- stunt hook: you can catch him mid-stunt ----
       return Math.abs(x - s.char.x) < 18 * scale && y > s.char.y - 45 * scale && y < s.char.y + FEET * scale;
     };
 
@@ -1863,6 +1948,7 @@ export function PuppeteerStage() {
       window.clearTimeout(lingerTimer);
       save(performance.now(), true);
       unlightNode();
+      stunt.destroy(); // ---- stunt hook ----
     };
   }, [vp, reduce]);
 
