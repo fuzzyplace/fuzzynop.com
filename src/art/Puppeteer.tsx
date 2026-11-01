@@ -80,6 +80,7 @@ const ATTEND = 6; // px of pointer travel that means the user is around (his own
 const EXPLORE_PACE = 0.72; // exploring walk speed vs. his usual
 const SIT_REST = 2.5; // s the pointer rests beside him (fully trusted) before he sits down by it
 const SIT_BESIDE: [number, number] = [40, 70]; // s he stays sat by it if it doesn't move
+const FACE_GAP = 0.7; // s after an about-face before he turns to the pointer again
 const NODE_LIT = 1.6; // s a circuit node's trace stays lit after he taps the edge above it
 const NODE_TAP = 0.45; // progress of his crouch at which his hand meets the edge
 
@@ -148,6 +149,7 @@ type State = {
   side: 1 | -1; // which side of the pointer he keeps to (hysteresis for keepGap)
   sitWake: number; // pointer timestamp a sit-beside wake was set for
   tremble: boolean;
+  faceAt: number; // ms his last about-face started
 };
 /** A fall in document px: start, initial velocity, landing (char origin), duration. */
 type Fall = { x0: number; y0: number; vx: number; vy: number; x1: number; y1: number; T: number; to: number };
@@ -672,6 +674,7 @@ export function Puppeteer() {
           side: 1,
           sitWake: 0,
           tremble: false,
+          faceAt: 0,
         };
         armIdle(now);
       }
@@ -1132,7 +1135,8 @@ export function Puppeteer() {
         if (Math.abs(p.x - s.char.x) > 12) s.facing = p.x > s.char.x ? 1 : -1; // edges away, keeping an eye on it
       } else if (Math.abs(s.walk.v) > 2) s.facing = s.walk.v > 0 ? 1 : -1;
       else if (fresh) {
-        if (Math.abs(p!.x - s.char.x) > 28) s.facing = p!.x > s.char.x ? 1 : -1;
+        // toward the pointer, but not round and round after one darting back and forth across him
+        if (Math.abs(p!.x - s.char.x) > 28 && now - s.faceAt > FACE_GAP * 1000) s.facing = p!.x > s.char.x ? 1 : -1;
       } else if (!p && !s.ignoreBefore) s.facing = s.char.x < vp.w / 2 ? 1 : -1;
       // the about-face: facing flips instantly partway through a short pivot (head first, weight, a step
       // across — or a little hop when he's standing). Held, falling or reduced motion: just flips.
@@ -1142,6 +1146,7 @@ export function Puppeteer() {
         if (!pivots) s.shown = s.facing;
         else {
           s.turnAt = now;
+          s.faceAt = now;
           s.turnTo = s.facing;
           s.turnHop = s.amt < 0.25 && !s.action;
         }
