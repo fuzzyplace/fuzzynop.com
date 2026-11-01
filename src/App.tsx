@@ -131,7 +131,7 @@ export default function App() {
       <footer className="relative bg-ink">
         <div className="shell flex flex-col gap-2 py-8 md:flex-row md:justify-between">
           <p className="type-label-small text-secondary">© {new Date().getFullYear()} {site.name}</p>
-          <p className="type-label-small normal-case text-secondary">{site.footerEgg}</p>
+          <p className="type-label-small normal-case text-secondary" data-poke="tap" data-poke-reach="top">{site.footerEgg}</p>
         </div>
       </footer>
 

@@ -15,6 +15,8 @@
  */
 
 export type Rect = { left: number; top: number; right: number; bottom: number };
+/** A letter's pose: px offsets (+y = down), degrees (+ = clockwise), pivot as a fraction of its box (default bottom centre). */
+export type GlyphPose = { x?: number; y?: number; rot?: number; ox?: number; oy?: number };
 
 /**
  * Pair kerning of the display face (Chakra Petch 400) in em, for the pairs in the tagline, measured

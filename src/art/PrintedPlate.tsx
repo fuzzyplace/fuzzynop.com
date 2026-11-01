@@ -14,6 +14,12 @@ import { useSize } from './useSize';
  * printing, data-printing + data-arm ("baseX baseY tipX tipY", px from the plate's top-left) so he can watch it
  * (data-arm stays while the arm retracts off the finished plate, so he can duck it).
  *
+ * Probe targets for the character (src/art/targets.ts, global.css "poke"): the root is the poke host;
+ * invisible anchors mark the two top torn corners (`lift`: the paper corner lifts), the top edge
+ * (`peek`: the edge lifts so he can look under it) and, once the art is built, the parked print
+ * arm's tip (`twitch`: the arm flinches away). The anchors come before the plate in the DOM so the
+ * plate and arm can answer through sibling selectors; they take no space and paint nothing.
+ *
  * Scroll progress uses motion's offset convention (['start 0.95', 'end 0.7'], capped so the top is
  * done by mid-viewport) on cached
  * geometry; scroll events are coalesced into one ticker frame that writes through refs.
@@ -204,6 +210,10 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
   const t = Math.min(20, Math.max(12, w * 0.022));
   const l = Math.max(120, OVER * 0.6);
   const ox = SIDE;
+  // where the arm parks once the plate is printed (draw(): back = 1), overlay px: its base pivots the
+  // twitch, its tip is what he pokes
+  const park = { x: side === 'right' ? ox + w - 70 : ox + 70, y: OVER * 0.1 + l * 1.15 };
+  const parkBase = { x: clamp(park.x + (side === 'right' ? 80 : -80), ox - 10, ox + w + 10), y: OVER * 0.1 };
 
   // torn-paper cut-out: seeded per plate, regenerated only when the plate resizes
   const autoId = useId();
@@ -221,11 +231,16 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
       id={id}
       className={`relative ${className}`}
       data-perch={perch}
+      data-poke-host=""
       onFocus={() => {
         forced.current = true;
         draw.current();
       }}
     >
+      <span className="plate-anchor left-0 top-0" data-poke="lift" data-poke-reach="top" data-poke-dir="-1" aria-hidden="true" />
+      <span className="plate-anchor right-0 top-0" data-poke="lift" data-poke-reach="top" data-poke-dir="1" aria-hidden="true" />
+      <span className="plate-anchor plate-anchor--edge" data-poke="peek" data-poke-reach="top" aria-hidden="true" />
+      {live && w > 0 && <span className="plate-anchor" style={{ left: park.x - SIDE - 12, top: park.y - OVER - 12 }} data-poke="twitch" data-poke-reach="dangle" aria-hidden="true" />}
       <div ref={ref} className="plate-shadow plate-alive" style={{ '--plate-rot': `${layout.rot.toFixed(2)}deg` } as CSSProperties}>
         <div ref={clip} className="relative isolate">
           {layout.layers.map((ly, i) => (
@@ -261,7 +276,9 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
             <line ref={postL} x1={ox - 14} x2={ox - 14} y1={0} strokeWidth={t * 0.3} />
             <line ref={postR} x1={ox + w + 14} x2={ox + w + 14} y1={0} strokeWidth={t * 0.3} />
           </g>
-          <MechArm ref={armRef} l1={l} l2={l} t={t} toolLen={t * 3.2} rail={{ x1: ox - 22, x2: ox + w + 22 }} />
+          <g className="plate-arm" style={{ transformOrigin: `${parkBase.x}px ${parkBase.y}px` }}>
+            <MechArm ref={armRef} l1={l} l2={l} t={t} toolLen={t * 3.2} rail={{ x1: ox - 22, x2: ox + w + 22 }} />
+          </g>
         </svg>
       )}
     </div>

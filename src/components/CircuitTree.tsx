@@ -75,11 +75,13 @@ export function CircuitTree({ data = defaultData, label, className = '' }: { dat
 
   const node = (n: LeafNode) => {
     const handlers = { onPointerEnter: enter(n.id), onPointerLeave: leave(n.id), onFocus: enter(n.id), onBlur: leave(n.id) };
+    // a probe target: the character tugs a node and it jolts toward him (global.css, `poke-tug`)
+    const probe = { 'data-poke': 'tug', 'data-poke-reach': 'side' };
     const lit = active === n.id ? ' is-lit' : '';
     return (
       <li key={n.id}>
         {n.live ? (
-          <a href={n.link.href!} target="_blank" rel="noopener noreferrer" className={`circuit-node${lit}`} style={pos(n.id)} data-poi="node" {...handlers}>
+          <a href={n.link.href!} target="_blank" rel="noopener noreferrer" className={`circuit-node${lit}`} style={pos(n.id)} data-poi="node" {...probe} {...handlers}>
             <LeafHex live r={h.hexR} />
             <span className="type-title-small circuit-node-label text-on-paper">
               {n.link.label}
@@ -87,7 +89,7 @@ export function CircuitTree({ data = defaultData, label, className = '' }: { dat
             </span>
           </a>
         ) : (
-          <span className={`circuit-node circuit-node--soon${lit}`} style={pos(n.id)} {...handlers}>
+          <span className={`circuit-node circuit-node--soon${lit}`} style={pos(n.id)} {...probe} {...handlers}>
             <LeafHex live={false} r={h.hexR} />
             <span className="circuit-node-label text-on-paper-variant">
               <span className="type-title-small">{n.link.label}</span> <span className="type-label-small" aria-hidden="true">{data.statusLabel.soon}</span>
