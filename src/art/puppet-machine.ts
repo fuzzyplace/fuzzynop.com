@@ -7,12 +7,30 @@
  *   idle | walking ⇄ swatting (the pointer buzzing round him like a fly)
  *   press on him → grabbed → carried(hand: the claw follows the pointer) → release → falling → idle
  *   idle | walking → hopping (his own route: walk / jump / climb / fall between perches) → idle
+ *   idle → fidget (an on-the-spot idle animation, or what he does at a point of interest) → idle
+ *   idle → exploring (his own route to a point of interest, when the pointer's been quiet) → idle
+ *   idle → sitting (legs over an edge) → idle
  *
  * `take` is the claw deciding to handle him; its `plan` says why and where. While he's already
  * being handled, only the page (scroll / perch lost) may interrupt — the claw's own whims
  * (edge reset, idle relocation) wait their turn. While the user holds him (`hand`), nothing does.
+ * His own whims (exploring, fidgets, sitting) yield to the user at once (`attend`: the pointer
+ * moved, a tap, a scroll), to a press on him, and to the page; never to the claw's whims.
  */
-export type Mode = 'idle' | 'walking' | 'swatting' | 'grabbed' | 'carried' | 'dragged' | 'landing' | 'dangling' | 'falling' | 'hopping';
+export type Mode =
+  | 'idle'
+  | 'walking'
+  | 'swatting'
+  | 'grabbed'
+  | 'carried'
+  | 'dragged'
+  | 'landing'
+  | 'dangling'
+  | 'falling'
+  | 'hopping'
+  | 'exploring'
+  | 'fidget'
+  | 'sitting';
 export type Why = 'scroll' | 'lost' | 'edge' | 'relocate' | 'press' | 'enter';
 export type Plan = {
   kind: 'carry' | 'tour' | 'drag' | 'hand'; // hand = the claw follows the pointer until release
@@ -31,7 +49,12 @@ export type Ev =
   | { type: 'pester' } // pointer buzzing close around him
   | { type: 'clear' } // it went away
   | { type: 'release' } // pointer up while the claw holds him by hand
-  | { type: 'hop' }; // he set off on a route of his own to another perch
+  | { type: 'hop' } // he set off on a route of his own to another perch
+  | { type: 'explore' } // he set off for a point of interest
+  | { type: 'fidget' } // he started an on-the-spot animation
+  | { type: 'done' } // it finished
+  | { type: 'sit' } // he sat down
+  | { type: 'attend' }; // the user is back (pointer moved, tap, scroll): his own whims stop
 
 /** The page itself (scroll, a perch disappearing) outranks the claw's own ideas. */
 export const urgent = (why: Why) => why === 'scroll' || why === 'lost';
@@ -48,7 +71,20 @@ export function transition(m: Machine, ev: Ev, now: number): Machine {
       if (ev.type === 'move') return to('walking');
       if (ev.type === 'pester') return to('swatting');
       if (ev.type === 'hop') return to('hopping', null);
+      if (ev.type === 'explore') return to('exploring', null);
+      if (ev.type === 'fidget') return to('fidget', null);
+      if (ev.type === 'sit') return to('sitting', null);
       if (ev.type === 'take') return to('grabbed', ev.plan);
+      return m;
+    case 'exploring':
+    case 'fidget':
+    case 'sitting':
+      if (ev.type === 'attend') return to('idle', null);
+      if (ev.type === 'pester') return to('swatting', null);
+      if (m.mode === 'exploring' && ev.type === 'arrived') return to('idle', null);
+      if (m.mode === 'fidget' && ev.type === 'done') return to('idle', null);
+      if (m.mode === 'fidget' && ev.type === 'sit') return to('sitting', null);
+      if (ev.type === 'take' && (urgent(ev.plan.why) || ev.plan.why === 'press')) return to('grabbed', ev.plan); // the claw's whims wait
       return m;
     case 'walking':
       if (ev.type === 'stop') return to('idle');
@@ -93,5 +129,9 @@ export function transition(m: Machine, ev: Ev, now: number): Machine {
 
 /** Claw has him (grip closed or closing). */
 export const held = (mode: Mode) => mode === 'grabbed' || mode === 'carried' || mode === 'dragged' || mode === 'dangling';
-/** Standing on a perch under his own power. */
+/** Standing on a perch under his own power, minding the pointer. */
 export const free = (mode: Mode) => mode === 'idle' || mode === 'walking' || mode === 'swatting';
+/** Busy with his own whims (on a perch, or on his way to one). */
+export const own = (mode: Mode) => mode === 'exploring' || mode === 'fidget' || mode === 'sitting';
+/** On (or travelling between) perches under his own power: not held, not falling. */
+export const afoot = (mode: Mode) => free(mode) || own(mode) || mode === 'hopping';

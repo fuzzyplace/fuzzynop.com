@@ -122,7 +122,23 @@
 /* the character breathes: ~1px rise of the upper body, stepped so it repaints ~3×/s, not every frame */
 @keyframes breathe { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-0.6px); } }
 .char-breathe { animation: breathe 4.4s steps(7) infinite; }
-@media (prefers-reduced-motion: reduce) { .char-breathe { animation: none; } }
+/* a faint idle arm sway, stepped and out of phase with the breath (the stage loop can still sleep) */
+@keyframes armsway { 0%, 100% { rotate: 0deg; } 50% { rotate: 2.4deg; } }
+.char-armsway { transform-box: view-box; animation: armsway 5.2s steps(9) infinite; }
+.char-armsway--front { animation-duration: 6.1s; animation-delay: -1.7s; animation-direction: reverse; }
+/* a hung hex stone he taps swings on its wires: pivot far above (where the wires meet the ceiling), damped */
+@keyframes ledge-swing {
+  0% { rotate: 0deg; } 14% { rotate: calc(var(--swing-dir, 1) * 0.55deg); } 34% { rotate: calc(var(--swing-dir, 1) * -0.38deg); }
+  54% { rotate: calc(var(--swing-dir, 1) * 0.22deg); } 74% { rotate: calc(var(--swing-dir, 1) * -0.1deg); } 100% { rotate: 0deg; }
+}
+[data-swing] > svg { transform-origin: 50% -1400px; }
+[data-swing='a'] > svg { animation: ledge-swing 2.4s ease-in-out; }
+[data-swing='b'] > svg { animation: ledge-swing-b 2.4s ease-in-out; } /* same swing, new name restarts it */
+@keyframes ledge-swing-b {
+  0% { rotate: 0deg; } 14% { rotate: calc(var(--swing-dir, 1) * 0.55deg); } 34% { rotate: calc(var(--swing-dir, 1) * -0.38deg); }
+  54% { rotate: calc(var(--swing-dir, 1) * 0.22deg); } 74% { rotate: calc(var(--swing-dir, 1) * -0.1deg); } 100% { rotate: 0deg; }
+}
+@media (prefers-reduced-motion: reduce) { .char-breathe, .char-armsway, [data-swing] > svg { animation: none; } }
 
 @layer base {
   html { overflow-x: clip; scroll-behavior: smooth; scroll-padding-top: 72px; -webkit-text-size-adjust: 100%; }

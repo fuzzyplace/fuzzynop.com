@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { initial, transition, type Ev, type Machine, type Plan } from './puppet-machine';
+import { afoot, free, held, initial, own, transition, type Ev, type Machine, type Plan } from './puppet-machine';
 
 const plan = (p: Partial<Plan> = {}): Plan => ({ kind: 'carry', why: 'edge', to: 0, x: 100, ...p });
 const run = (m: Machine, evs: Ev[]) => evs.reduce((acc, ev, i) => transition(acc, ev, i + 1), m);
@@ -88,5 +88,47 @@ describe('puppet machine: pester, hand, fall, hop', () => {
     expect(transition(m, { type: 'take', plan: plan({ why: 'relocate' }) }, 9)).toBe(m);
     expect(transition(m, { type: 'take', plan: plan({ why: 'scroll' }) }, 9).mode).toBe('grabbed');
     expect(transition(m, { type: 'arrived' }, 9).mode).toBe('idle');
+  });
+
+  it('his own whims: idle → exploring → idle → fidget → idle; idle → sitting', () => {
+    let m = run(initial(0, null), [{ type: 'explore' }]);
+    expect(m.mode).toBe('exploring');
+    m = run(m, [{ type: 'arrived' }, { type: 'fidget' }]);
+    expect(m.mode).toBe('fidget');
+    expect(transition(m, { type: 'done' }, 9).mode).toBe('idle');
+    expect(transition(initial(0, null), { type: 'sit' }, 1).mode).toBe('sitting');
+  });
+
+  it('the user outranks his whims: pointer, press, scroll, a pest', () => {
+    for (const mode of ['explore', 'fidget', 'sit'] as const) {
+      const m = transition(initial(0, null), { type: mode }, 1);
+      expect(own(m.mode)).toBe(true);
+      expect(transition(m, { type: 'attend' }, 2).mode).toBe('idle');
+      expect(transition(m, { type: 'take', plan: plan({ kind: 'hand', why: 'press', to: -1 }) }, 2).mode).toBe('grabbed');
+      expect(transition(m, { type: 'take', plan: plan({ why: 'scroll' }) }, 2).mode).toBe('grabbed');
+      expect(transition(m, { type: 'pester' }, 2).mode).toBe('swatting');
+    }
+  });
+
+  it("the claw's whims don't interrupt his", () => {
+    for (const mode of ['explore', 'fidget', 'sit'] as const) {
+      const m = transition(initial(0, null), { type: mode }, 1);
+      expect(transition(m, { type: 'take', plan: plan({ why: 'relocate' }) }, 2)).toBe(m);
+      expect(transition(m, { type: 'take', plan: plan({ why: 'edge' }) }, 2)).toBe(m);
+    }
+  });
+
+  it('whims only start from idle', () => {
+    const walking = transition(initial(0, null), { type: 'move' }, 1);
+    for (const ev of [{ type: 'explore' }, { type: 'fidget' }, { type: 'sit' }] as Ev[]) expect(transition(walking, ev, 2)).toBe(walking);
+    const carried = run(initial(0, null), [{ type: 'take', plan: plan() }, { type: 'gripped' }]);
+    expect(transition(carried, { type: 'explore' }, 9)).toBe(carried);
+  });
+
+  it('mode groups', () => {
+    expect(free('exploring')).toBe(false);
+    expect(afoot('exploring') && afoot('sitting') && afoot('hopping') && afoot('idle')).toBe(true);
+    expect(afoot('carried') || afoot('falling')).toBe(false);
+    expect(held('sitting')).toBe(false);
   });
 });
