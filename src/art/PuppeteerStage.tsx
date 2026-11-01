@@ -56,6 +56,9 @@ import { WALK, clampTo, lookAngle, perchExtent, settledWalk, stepWalk, type Exte
  * interest measures decor once, every few seconds at most). The loop sleeps once he's idle and
  * settled — sitting still counts — and timers wake it for the next fidget / kick / decision; scroll,
  * layout, print-state and pointer input wake it too.
+ *
+ * Loaded on demand: `Puppeteer` (Puppeteer.tsx) mounts this after the first paint, when the main
+ * thread goes idle, so the hero's text paints first.
  */
 const TRANSIT = 1.25; // s, scroll carry
 const GRAB = 0.32; // s for the claw to close on his collar
@@ -160,7 +163,7 @@ type Seen = { ok: boolean; left: number; pt: Pt; top: number; visible: boolean; 
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
-export function Puppeteer() {
+export function PuppeteerStage() {
   const reduce = useReducedMotion();
   const [vp, setVp] = useState({ w: 0, h: 0 });
   const st = useRef<State | null>(null);

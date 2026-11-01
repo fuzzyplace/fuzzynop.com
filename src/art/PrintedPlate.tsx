@@ -1,9 +1,10 @@
 import { useReducedMotion } from './reducedMotion';
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { cutLayout, hashSeed, tornPath } from './cutout';
 import { MechArm, type ArmHandle } from './MechArm';
 import { clamp, easeInOut, lerp } from './geometry';
-import { docTop, onLayout, setAttr, ticker, view } from './ticker';
+import { docTop, measure, onLayout, peekView, setAttr, ticker, view, whenIdle } from './ticker';
 import { useSize } from './useSize';
 
 /**
@@ -26,6 +27,7 @@ const END = 0.7; // progress 1: plate bottom at 70% of the viewport
 // its top edge is a perch while there's room for the character below the header.
 const TOP_DONE = 0.43;
 const BLEED = 28; // reveal-clip overhang so the backing paper layers aren't chopped
+const NEAR = 1.5; // viewports: a plate this close to the screen gets its full art at once
 
 type Props = {
   id?: string;
@@ -52,23 +54,36 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
   const forced = useRef(false);
   const lastInset = useRef('');
   const geo = useRef({ top: 0, height: 0, vh: 1 });
+  const ready = useRef(false); // geo measured at least once
+  const sized = useRef(''); // the w×h a measurement has been queued for
+  // The plate's art (torn cut-out paths, gantry + arm overlay) is built lazily: when the main thread
+  // is idle after the first paint, one plate per idle period, or at once (before the frame paints)
+  // when the plate comes near the screen. Until then it's unprinted (hidden) below the fold, so
+  // nothing visible changes; the text is in the DOM from the start.
+  const [live, setLive] = useState(false);
+  const wake = useRef<(() => void) | null>(null);
 
-  const measure = () => {
+  // layout reads happen in a ticker read phase or a ResizeObserver callback, never during a commit
+  const remeasure = () => {
     const el = ref.current;
     if (!el) return;
     geo.current = { top: docTop(el), height: el.clientHeight, vh: document.documentElement.clientHeight };
+    ready.current = true;
   };
-  const progress = () => {
+  // `sy`: from the frame's read phase in the loop; during a commit, the last read (a queued
+  // re-measure redraws with fresh values before the frame paints)
+  const progress = (sy = view().sy) => {
+    if (!ready.current) return 0; // not measured yet: unprinted (hidden) until the first read
     const { top, height, vh } = geo.current;
     const from = top - START * vh;
     const to = Math.min(top + height - END * vh, top - TOP_DONE * vh);
-    return to > from ? clamp((view().sy - from) / (to - from)) : 1;
+    return to > from ? clamp((sy - from) / (to - from)) : 1;
   };
 
   const drawn = useRef(-1); // progress of the last drawn frame
-  const draw = useRef<() => void>(() => {});
-  draw.current = () => {
-    const prog = reduce || forced.current ? 1 : progress();
+  const draw = useRef<(sy?: number) => void>(() => {});
+  draw.current = (sy?: number) => {
+    const prog = reduce || forced.current ? 1 : progress(sy);
     drawn.current = prog;
     const pr = clamp(prog / 0.86); // printing
     const back = clamp((prog - 0.86) / 0.14); // retract
@@ -116,11 +131,51 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
     armRef.current?.set({ base, tip, bend: dir === 1 ? -1 : 1, hot: printing ? 1 : 0, railY: beamY });
   };
 
-  // every render (mount, resize): re-measure and redraw before paint
+  // every render (mount, resize): redraw before paint; a new size queues a re-measure for the
+  // next frame's read phase (it lands before that frame paints)
   useLayoutEffect(() => {
-    measure();
-    draw.current();
+    const key = `${w}x${h}`;
+    if (sized.current !== key) {
+      sized.current = key;
+      measure(() => {
+        remeasure();
+        drawn.current = -1;
+        wake.current?.();
+      });
+    }
+    draw.current(peekView().sy);
   });
+
+  // build the art when idle, or as soon as the plate is near the viewport (checked per scroll frame)
+  useEffect(() => {
+    if (live) return;
+    let done = false;
+    const go = (sync: boolean) => {
+      if (done) return;
+      done = true;
+      if (sync) flushSync(() => setLive(true));
+      else setLive(true);
+    };
+    const near = ticker.loop(() => {
+      if (!ready.current) return true; // not measured yet: check again next frame
+      const { top, height } = geo.current;
+      const v = view();
+      if (top < v.sy + v.h * (1 + NEAR) && top + height > v.sy - v.h * NEAR) go(true); // committed before this frame paints
+      return false;
+    });
+    const check = () => near.wake();
+    const offIdle = whenIdle(() => go(false));
+    window.addEventListener('scroll', check, { passive: true });
+    const offLayout = onLayout(check);
+    check();
+    return () => {
+      done = true;
+      near.stop();
+      offIdle();
+      offLayout();
+      window.removeEventListener('scroll', check);
+    };
+  }, [live]);
 
   useEffect(() => {
     if (reduce) return;
@@ -129,17 +184,20 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
       if ((forced.current ? 1 : progress()) !== drawn.current) draw.current();
       return false; // one frame per wake: scroll/layout events are coalesced
     });
-    const wake = () => loop.wake();
+    const onWake = () => loop.wake();
+    wake.current = onWake;
     const offLayout = onLayout(() => {
-      measure();
+      remeasure();
       drawn.current = -1; // geometry changed: redraw on the next frame
-      wake();
+      onWake();
     });
-    window.addEventListener('scroll', wake, { passive: true });
+    window.addEventListener('scroll', onWake, { passive: true });
+    if (ready.current) onWake();
     return () => {
+      wake.current = null;
       loop.stop();
       offLayout();
-      window.removeEventListener('scroll', wake);
+      window.removeEventListener('scroll', onWake);
     };
   }, [reduce]);
 
@@ -152,9 +210,9 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
   const s0 = seed ?? hashSeed(id ?? `${autoId}-${side}-${tone}`);
   const layout = useMemo(() => cutLayout(s0), [s0]);
   const cut = useMemo(() => {
-    const path = (sd: number) => (w > 0 && h > 0 ? `path("${tornPath(w, h, sd)}")` : undefined);
+    const path = (sd: number) => (live && w > 0 && h > 0 ? `path("${tornPath(w, h, sd)}")` : undefined);
     return { face: path(s0), layers: layout.layers.map((ly) => path(ly.seed)) };
-  }, [w, h, s0, layout]);
+  }, [live, w, h, s0, layout]);
   const layerTone = tone === 'paper' ? ['bg-gray-600', 'bg-ink'] : ['bg-gray-700', 'bg-gray-400'];
 
   return (
@@ -187,7 +245,7 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
         </div>
       </div>
 
-      {w > 0 && (
+      {live && w > 0 && (
         <svg
           className="pointer-events-none absolute overflow-visible"
           style={{ left: -SIDE, top: -OVER, width: w + SIDE * 2, height: h + OVER }}
