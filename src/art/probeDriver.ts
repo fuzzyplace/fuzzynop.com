@@ -42,6 +42,8 @@ const FIDGETS = new Set<string>(['look', 'scratch', 'shift', 'glasses', 'lookUp'
 
 /** What his hand does to each kind of target. */
 export const MOVE: Record<ProbeKind, ProbeMove> = { spin: 'prod', tug: 'tug', lift: 'pick', peek: 'lift', rattle: 'rattle', twitch: 'prod', tap: 'knock' };
+/** The everyday activity (explore.ts / idle.ts) each probe most resembles: not straight after it. */
+const LIKE: Record<ProbeKind, string> = { spin: 'tap', tug: 'crouch', lift: 'crouch', peek: 'peek', rattle: 'watch', twitch: 'watch', tap: 'crouch' };
 /** How he gets at each kind: from a surface, or held beside it by the claw. */
 export const APPROACH: Record<ProbeKind, 'stand' | 'heist'> = { spin: 'heist', tug: 'heist', rattle: 'heist', lift: 'stand', peek: 'stand', twitch: 'stand', tap: 'stand' };
 
@@ -312,6 +314,7 @@ export function createProbeDriver(ctx: StageCtx) {
   };
   const noteWhim = (w: string) => {
     whims = noteRecent(whims, w, 5);
+    ctx.note(`whim:${w}`, performance.now());
   };
 
   /** Probe targets on screen now, as probe.ts sees them (document px). */
@@ -328,6 +331,7 @@ export function createProbeDriver(ctx: StageCtx) {
       const given = poked.get(t.id);
       let bias = t.el.closest('footer') ? 1.25 : 1;
       if (pv && Math.hypot(cx(r) - pv.x, cy(r) - pv.y) < NEAR_CURSOR) bias *= 0.25;
+      if (whims.slice(0, 2).includes(LIKE[t.kind])) bias *= 0.3; // just did something much like it
       list.push({ pt: t, pr: { id: t.id, kind: t.kind, rect: r, reach: t.reach, winnable: t.winnable, lastPoked: given ?? null, bias } });
     }
     return { all, list, at: now / 1000 };
