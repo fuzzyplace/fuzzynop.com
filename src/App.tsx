@@ -4,9 +4,9 @@ import { Depth, HexLattice, SpiderLeg, Splatter } from './art/Decor';
 import { PrintedPlate } from './art/PrintedPlate';
 import { Puppeteer } from './art/Puppeteer';
 import { CircuitTree } from './components/CircuitTree';
-import { Experiment } from './components/Experiment';
+import { Chapter } from './components/Chapter';
 import { Cta } from './components/ui';
-import { experiments, interlude, log, nav, next, site, ui } from './content/site';
+import { before, contact, elsewhere, interlude, nav, now, practice, site, ui } from './content/site';
 import { Hero } from './sections/Hero';
 
 /*
@@ -46,8 +46,7 @@ export default function App() {
         <Hero />
 
         <div className="shell relative pb-40">
-          {/* ---- The experiment log (docs/NARRATIVE.md) ---- */}
-          {/* EXP. 01 */}
+          {/* ---- 01 Before ---- */}
           <div className="plate-slot relative grid lg:grid-cols-12">
             <Depth depth={0.7} className="-left-48 -top-40">
               <HexLattice cols={8} rows={7} r={40} tone="far" seed={21} />
@@ -55,42 +54,47 @@ export default function App() {
             <Depth depth={0.15} className="-right-10 top-1/3 hidden lg:block">
               <Splatter size={170} seed={31} />
             </Depth>
-            <PrintedPlate id={experiments[0].id} side="right" className="mx-6 lg:col-span-7 lg:mx-0">
-              <Experiment exp={experiments[0]} />
+            <PrintedPlate id={before.id} side="right" className="mx-6 lg:col-span-7 lg:mx-0">
+              <Chapter ch={before} />
             </PrintedPlate>
           </div>
 
-          {/* EXP. 02 */}
+          {/* ---- 02 Practice ---- */}
           <div className="plate-slot relative grid lg:grid-cols-12">
             <Depth depth={0.4} className="-top-72 left-[8%] hidden md:block">
               <SpiderLeg length={620} t={18} tone="mid" delay={2} />
             </Depth>
-            <PrintedPlate id={experiments[1].id} side="left" className="mx-6 lg:col-span-6 lg:col-start-6 lg:mx-0">
-              <Experiment exp={experiments[1]} />
+            <PrintedPlate id={practice.id} side="left" className="mx-6 lg:col-span-7 lg:col-start-6 lg:mx-0">
+              <Chapter ch={practice} />
             </PrintedPlate>
           </div>
 
-          {/* EXP. 03 */}
+          {/* ---- The question: the through-line ---- */}
+          <div className="plate-slot relative">
+            <Depth depth={-0.2} className="-left-6 -top-24">
+              <Splatter size={240} seed={44} />
+            </Depth>
+            <PrintedPlate side="right" tone="ink" perch={0.12} className="mx-6 lg:mx-0">
+              <p className="type-body-large text-on-surface-variant">{interlude.lead}</p>
+              <p className="type-display-medium mt-6 max-w-[18ch] text-on-surface">{interlude.question}</p>
+              <p className="type-headline-medium mt-6 text-on-surface-variant">{interlude.followUp}</p>
+            </PrintedPlate>
+          </div>
+
+          {/* ---- 03 Now ---- */}
           <div className="plate-slot relative grid lg:grid-cols-12">
             <Depth depth={0.6} className="-right-56 -top-32">
               <HexLattice cols={7} rows={8} r={44} tone="far" seed={57} />
             </Depth>
-            <PrintedPlate id={experiments[2].id} side="right" className="mx-6 lg:col-span-7 lg:col-start-2 lg:mx-0">
-              <Experiment exp={experiments[2]} />
-            </PrintedPlate>
-          </div>
-
-          {/* EXP. 04 — in progress */}
-          <div className="plate-slot relative grid lg:grid-cols-12">
             <Depth depth={0.3} className="-top-80 right-[12%] hidden md:block">
               <SpiderLeg length={540} t={15} tone="near" flip delay={3.5} />
             </Depth>
-            <PrintedPlate id={experiments[3].id} side="left" className="mx-6 lg:col-span-7 lg:col-start-5 lg:mx-0">
-              <Experiment exp={experiments[3]} hypothesis={[interlude.question, interlude.followUp]} />
+            <PrintedPlate id={now.id} side="right" className="mx-6 lg:col-span-7 lg:col-start-2 lg:mx-0">
+              <Chapter ch={now} />
             </PrintedPlate>
           </div>
 
-          {/* EXP. 05 — the next run, with the visitor: the ways to start it */}
+          {/* ---- 04 Contact: the one call to action + the circuit tree ---- */}
           <div className="plate-slot relative grid lg:grid-cols-12">
             <Depth depth={0.5} className="-left-40 -top-24">
               <HexLattice cols={6} rows={6} r={38} tone="far" seed={63} />
@@ -98,11 +102,14 @@ export default function App() {
             <Depth depth={0.2} className="-right-10 top-10 hidden lg:block">
               <Splatter size={150} seed={72} />
             </Depth>
-            <PrintedPlate id={next.id} side="right" className="mx-6 lg:col-span-8 lg:col-start-3 lg:mx-0">
-              <Experiment exp={next}>
-                <Cta cta={site.cta} />
-                <CircuitTree className="mt-10" label={log.linksLabel} />
-              </Experiment>
+            <PrintedPlate id={contact.id} side="left" className="mx-6 lg:col-span-8 lg:col-start-4 lg:mx-0">
+              <Chapter ch={contact}>
+                <div className="mt-8">
+                  <Cta cta={site.cta} />
+                </div>
+                <p className="type-label-medium mt-14 text-on-paper-variant">{elsewhere.label}</p>
+                <CircuitTree className="mt-6" label={elsewhere.label} />
+              </Chapter>
             </PrintedPlate>
           </div>
         </div>

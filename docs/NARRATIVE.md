@@ -51,3 +51,18 @@ Shape: one root node (Z) sends out circuit-trace branches that end in hex nodes.
 - **Never say** "you are the experiment". Restraint keeps it from becoming a gimmick.
 - **Decided by the story:** fixed hero "What would / happen if_" (rotate/classic removed); interlude folded into EXP. 04 as its hypothesis; Links + Contact merged into EXP. 05 (title is a blank cursor `_`, CTA + circuit tree inside); "soon" links hidden in production; nav Log · Next; share text and OG image = "What would happen if_".
 - **New lines derived from the story (Z to sign off):** EXP. 04 result "Running."; EXP. 05 title "_" (screen readers: "Next"), result "Pending_".
+
+
+## Copy style — LOCKED (Z, 2026-11-01): quiet first person
+Z's voice, plain sentences, understated — like his original approved paragraphs. No riddles, no lab-notebook framing in the copy. A newcomer should understand in 30 seconds who Z is, what he does, and how to reach him.
+
+## Structure (follows from the style; supersedes the experiment-log layout)
+The "experiment log" device (EXP. 0N, Result lines, `?`, `_`) is retired from the copy. The page is clear chapters; the *playful* layer lives in behaviour, not words: the hero question with its blinking cursor, the ink figure (explores, learns to trust a calm cursor, gets shaken when grabbed — security is a feeling), the once-only hidden line, the circuit tree, the 0x90 footer egg.
+1. **Hero** — "What would / happen if_" + one line: "Red teamer, team builder, professional bogeyman. These days, working where humans and machines meet."
+2. **01 Before — Hacker. Executive.** Approved paragraphs + NEW: "Most of the work was breaking the stories people told themselves about being safe. They felt less safe afterwards. They were safer."
+3. **02 Practice — I create things.** Approved paragraph + "What I do" list.
+4. **The question** (ink plate) — "The through-line of my whole career has been the same question:" + the two approved questions.
+5. **03 Now — These days.** "I'm working at the intersection of" + the four areas.
+6. **04 Contact — Say hello.** NEW: "If you break things for a living, need help building a team, or are making something where people and machines meet, I'd like to hear about it." + CTA ("Message me · LinkedIn" until Calendly/email exist) + "Elsewhere" circuit tree.
+
+Lines marked NEW need Z's sign-off; everything else is approved copy or Z's tagline.

@@ -9,7 +9,7 @@ export const site = {
   handle: 'FuzzyNop',
   url: 'https://fuzzynop.com',
   description:
-    'Josh Schwartz — FuzzyNop. What would happen if_',
+    'Josh Schwartz (FuzzyNop). Red teamer, team builder, professional bogeyman. These days, working where humans and machines meet.',
   footerEgg: '0x90 0x90 0x90 — nothing happened here',
   /**
    * The one call to action (HANDOFF §3.5). Mechanism TBD by Z (docs/DECISIONS.md).
@@ -20,73 +20,88 @@ export const site = {
     label: 'Book time',
     href: null as string | null,
     fallback: null as string | null,
-    neutral: { label: 'Say hello', via: 'LinkedIn', href: LINKEDIN },
+    neutral: { label: 'Message me', via: 'LinkedIn', href: LINKEDIN },
   },
 };
 
 /** v2.4: the log replaces Before / Practice / Now. Labels are UI, not claims (open assumption). */
 export const nav = [
-  { id: 'exp-01', label: 'Log' },
-  { id: 'exp-05', label: 'Next' },
+  { id: 'before', label: 'Before' },
+  { id: 'practice', label: 'Practice' },
+  { id: 'now', label: 'Now' },
+  { id: 'contact', label: 'Contact' },
 ] as const;
 
 export const hero = {
   eyebrow: 'Josh Schwartz — FuzzyNop',
-  /** v2.4 (docs/NARRATIVE.md): an open question, left with the cursor blinking. Z's own phrasing. */
+  /** Z's own question, left with the cursor blinking (docs/NARRATIVE.md). */
   question: ['What would', 'happen if'],
+  /** Who, in one line: the v2.3 tagline + the approved "these days" line. */
+  lede: 'Red teamer, team builder, professional bogeyman. These days, working where humans and machines meet.',
 };
 
 /**
- * v2.4 experiment log (docs/NARRATIVE.md). Titles, fragments and results approved by Z in the
- * 2026-11-01 interview; fragments are condensed from the approved copy, nothing invented.
+ * The page, in Z's voice: quiet first person, plain sentences (copy style locked 2026-11-01).
+ * Paragraphs are Z's approved copy (docs/CONTENT.md); lines marked NEW are drafted from the
+ * 2026-11-01 interview and await Z's sign-off.
  */
-export type Experiment = { n: string; id: string; title: string; srTitle?: string; fragments: string[]; areas?: string[]; result: string[]; pending?: true };
-export const experiments: Experiment[] = [
-  {
-    n: '01',
-    id: 'exp-01',
-    title: 'Break the story they trust.',
-    fragments: ['Red teaming.', 'Hacker. Executive.'],
-    result: ['They felt less safe.', 'They were safer.'],
-  },
-  {
-    n: '02',
-    id: 'exp-02',
-    title: 'Build the people who break it.',
-    fragments: ['Building and leading teams.', 'Leading at the top.'],
-    result: ['The trust held.', 'The systems didn’t.'],
-  },
-  {
-    n: '03',
-    id: 'exp-03',
-    title: 'Make something that feels safe.',
-    fragments: ['Interfaces, rituals, small systems.', 'Art and community.'],
-    result: ['Inconclusive.', 'Repeating.'],
-  },
-  {
-    n: '04',
-    id: 'exp-04',
-    title: '?',
-    fragments: [],
-    areas: ['Consciousness', 'Wellness for hackers', 'AI safety', 'Cyborg psychology'],
-    result: ['Running.'],
-  },
-];
-/**
- * EXP. 05 — the next run, with the visitor (main story, docs/NARRATIVE.md). Title is a blank cursor;
- * the CTA and the circuit tree are the ways to start it.
- */
-export const next: Experiment = {
-  n: '05',
-  id: 'exp-05',
-  title: '_',
-  srTitle: 'Next',
-  fragments: [],
-  result: ['Pending'],
-  pending: true, // result ends in a blinking cursor
+export type Chapter = { n: string; id: string; eyebrow: string; title: string; body: string[]; lede?: string; list?: string[]; listLabel?: string };
+
+export const before: Chapter = {
+  n: '01',
+  id: 'before',
+  eyebrow: 'Before',
+  title: 'Hacker. Executive.',
+  body: [
+    'I spent my career as a hacker and an executive. Red teaming, building teams, leading at the top.',
+    // NEW (interview: security is a feeling; the bogeyman; EXP. 01 result approved in round 1)
+    'Most of the work was breaking the stories people told themselves about being safe. They felt less safe afterwards. They were safer.',
+    'I retired from that world, and what came after wasn’t a pivot so much as a return: to art, to community, to the questions underneath all of it.',
+  ],
 };
 
-export const log = { eyebrow: 'Exp.', resultLabel: 'Result', untitled: 'Untitled', linksLabel: 'Links' }; // untitled: sr name for EXP. 04's '?'; linksLabel: the circuit nav's name
+export const practice: Chapter = {
+  n: '02',
+  id: 'practice',
+  eyebrow: 'Practice',
+  title: 'I create things.',
+  body: [
+    'Not as a job title, but as a way of thinking. Interfaces, rituals, small systems that sit at the edge of code and consciousness.',
+    'I lead projects and I lead people, and I care about both in the same way.',
+  ],
+  listLabel: 'What I do',
+  list: ['Red teaming', 'Building and leading teams', 'Interfaces, rituals, small systems', 'Art and community'],
+};
+
+export const interlude = {
+  lead: 'The through-line of my whole career has been the same question:',
+  question: 'What happens when humans and machines meet?',
+  followUp: 'And how do we stay human in the process?',
+};
+
+export const now: Chapter = {
+  n: '03',
+  id: 'now',
+  eyebrow: 'Now',
+  title: 'These days.',
+  body: [],
+  lede: 'I’m working at the intersection of',
+  list: ['Consciousness', 'Wellness for hackers', 'AI safety', 'Cyborg psychology'],
+};
+
+export const contact: Chapter = {
+  n: '04',
+  id: 'contact',
+  eyebrow: 'Contact',
+  title: 'Say hello.',
+  body: [
+    // NEW (interview: who should feel invited)
+    'If you break things for a living, need help building a team, or are making something where people and machines meet, I’d like to hear about it.',
+  ],
+};
+
+/** Name of the circuit-tree nav (screen readers) and its small visible label. */
+export const elsewhere = { label: 'Elsewhere' };
 
 /** UI labels (not claims). */
 export const ui = { skip: 'Skip to content', mark: 'FZNP', markName: 'FuzzyNop', primaryNav: 'Primary' };
@@ -94,10 +109,6 @@ export const ui = { skip: 'Skip to content', mark: 'FZNP', markName: 'FuzzyNop',
 /** Appears once, only when the character fully trusts the visitor (docs/NARRATIVE.md). Approved by Z. */
 export const trust = { hidden: ['Nothing here is secure.', 'He feels safe anyway.'] };
 
-export const interlude = {
-  question: 'What happens when humans and machines meet?',
-  followUp: 'And how do we stay human in the process?',
-};
 
 
 

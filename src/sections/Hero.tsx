@@ -163,6 +163,7 @@ export function Hero() {
             </span>
           ))}
         </h1>
+        <p className="type-body-large mt-8 max-w-[44ch] text-on-surface-variant">{hero.lede}</p>
       </div>
 
       {/* the arm */}

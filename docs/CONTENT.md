@@ -15,24 +15,21 @@ Copy lives in `src/content/site.ts`. Only publish what's in "Approved copy" belo
 >
 > The through-line of my whole career has been the same question: what happens when humans and machines meet, and how do we stay human in the process?
 
-## How it maps to the site (v2.4 — see docs/NARRATIVE.md)
+## How it maps to the site (copy style: quiet first person — see docs/NARRATIVE.md)
 | Where | Copy | Source / status |
 |---|---|---|
-| Identity | Josh Schwartz — FuzzyNop | Z |
-| Hero | "What would / happen if_" (blinking cursor) | Z interview 2026-11-01. Preview-only alternatives: rotate set ("What could / be_", "Why does it / happen that way_") and the v2.3 tagline "Red Teamer, / Team Builder, / Professional Bogeyman". Final form pending Z |
-| EXP. 01 | **Break the story they trust.** Red teaming. / Hacker. Executive. — Result: They felt less safe. / They were safer. | Z interview (preview chosen) |
-| EXP. 02 | **Build the people who break it.** Building and leading teams. / Leading at the top. — Result: The trust held. / The systems didn’t. | Z interview round 4 |
-| EXP. 03 | **Make something that feels safe.** Interfaces, rituals, small systems. / Art and community. — Result: Inconclusive. / Repeating. | Z interview round 4 |
-| EXP. 04 | **?** Consciousness · Wellness for hackers · AI safety · Cyborg psychology — Result: Pending_ | Z interview (preview chosen) |
-| Interlude (ink plate) | "What happens when humans and machines meet?" / "And how do we stay human in the process?" | Z (through-line). Open: keep as its own plate or fold into EXP. 04 |
-| Hidden trust line | "Nothing here is secure." / "He feels safe anyway." Shown once, never explained | Z interview round 4 |
-| Circuit tree | Root FZNP; branches **Work** / **Make**; nodes LinkedIn, Book time, SoundCloud, Spotify, Mixcloud, Art, Interactive projects, Socials, Email; status tag "soon" | Branch names: Z interview. Plate header "Links / Elsewhere." pending Z |
-| Contact | "Say hello." CTA "Book time" (Calendly URL TODO) → fallback "Say hello · LinkedIn" | Z; CTA mechanism pending |
+| Identity / title | Josh Schwartz — FuzzyNop | Z |
+| Hero | "What would / happen if_" + "Red teamer, team builder, professional bogeyman. These days, working where humans and machines meet." | Z's question; tagline + "these days" line are Z's |
+| 01 Before | "Hacker. Executive." + approved paragraphs 1–2, plus "Most of the work was breaking the stories people told themselves about being safe. They felt less safe afterwards. They were safer." | approved; middle paragraph NEW (from interview) |
+| 02 Practice | "I create things." + approved paragraph; list: Red teaming · Building and leading teams · Interfaces, rituals, small systems · Art and community | approved |
+| The question | "The through-line of my whole career has been the same question:" / "What happens when humans and machines meet?" / "And how do we stay human in the process?" | approved |
+| 03 Now | "These days." / "I’m working at the intersection of" + Consciousness · Wellness for hackers · AI safety · Cyborg psychology | approved |
+| 04 Contact | "Say hello." + "If you break things for a living, need help building a team, or are making something where people and machines meet, I’d like to hear about it." CTA "Message me · LinkedIn" (→ "Book time" once Calendly exists) | body NEW; CTA label UI |
+| Elsewhere | Circuit tree: Work (LinkedIn), Make (SoundCloud, Spotify, Mixcloud); "soon" items hidden in production | Z (branch names) |
+| Hidden trust line | "Nothing here is secure." / "He feels safe anyway." | Z interview |
 | Footer | `0x90 0x90 0x90 — nothing happened here` | v1 |
-| Meta / share | Title "FuzzyNop — Josh Schwartz"; description (v2.3 wording); og:description = the through-line question; og.png = v1 art | Pending Z: wording and a new OG image |
-| UI labels (not claims) | Nav Log / Now / Links / Contact; "Exp.", "Result", "Skip to content", "Primary" | Assumed; pending Z |
-
-Superseded v2.3 mapping (Before / Practice / Now plates) is no longer rendered; the approved paragraphs above remain the source the fragments were condensed from.
+| Meta / share | Title "Josh Schwartz — FuzzyNop"; description = hero line; OG image "What would happen if_" | derived |
+| UI labels | Nav Before / Practice / Now / Contact; "What I do", "Elsewhere", "Skip to content" | UI |
 
 ## Allowed links (own profiles only)
 - LinkedIn https://www.linkedin.com/in/joshuaaschwartz/
