@@ -1,4 +1,4 @@
-import { useReducedMotion } from 'motion/react';
+import { useReducedMotion } from './reducedMotion';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Character, STRIDE, type Action, type CharacterHandle, type Pose } from './Character';
 import { choosePoi, collectPois, remember, type Poi, type Scene, type SceneSurface } from './explore';
@@ -10,7 +10,7 @@ import { clamp, easeInOut, lerp, type Pt } from './geometry';
 import { LIMITS, planRoute, sampleMove, type Move, type Surface } from './navigate';
 import { afoot, free, held, initial, own, transition, type Ev, type Machine, type Plan } from './puppet-machine';
 import { createRagdoll, primeRagdoll, stepRagdoll, type RagPose, type Ragdoll } from './ragdoll';
-import { onLayout, setAttr, ticker } from './ticker';
+import { onLayout, setAttr, ticker, view as viewport } from './ticker';
 import { TrustLine, type TrustLineHandle } from './TrustLine';
 import { FAR, FULL, SWAT_COST, advance, band, classify, initTrust, keepGap, nextChange, nudge, observe, pesterDist, scare, tap, uneasy, type Band, type Cond, type Trust } from './trust';
 import { WALK, clampTo, lookAngle, perchExtent, settledWalk, stepWalk, type Extent, type WalkState } from './walk';
@@ -191,8 +191,7 @@ export function Puppeteer() {
     let cache: Perch[] = [];
     const home = (i: number) => clampTo(cache[i].width * cache[i].f, cache[i].ext);
     const measure = () => {
-      const sx = window.scrollX;
-      const sy = window.scrollY;
+      const { sx, sy } = viewport();
       const s = st.current;
       const prev = s && s.idx >= 0 ? cache[s.idx] : undefined;
       cache = Array.from(document.querySelectorAll<HTMLElement>('[data-perch]')).map((el) => {
@@ -342,8 +341,7 @@ export function Puppeteer() {
 
     // let go: pick the printed perch under him (or the nearest one) and throw him at it in document space
     const startFall = (s: State) => {
-      const sx = window.scrollX;
-      const sy = window.scrollY;
+      const { sx, sy } = viewport();
       const feet = s.char.y + FEET * scale;
       const vis = cache.map((c, i) => ({ c, i, top: c.top - sy, l: c.left - sx + c.ext.lo, r: c.left - sx + c.ext.hi })).filter((q) => q.c.el.dataset.printed !== '0' && q.top >= headroom && q.top < vp.h);
       const below = vis.filter((q) => q.top >= feet - 4);
@@ -391,7 +389,7 @@ export function Puppeteer() {
         if (Math.abs(near.p.x - s.char.x) > 12) s.facing = near.p.x > s.char.x ? 1 : -1;
       } else if (f === 'lookUp' && Math.abs(s.hoverX - s.char.x) > 20) s.facing = s.hoverX > s.char.x ? 1 : -1; // toward the claw
       play(s, f, now);
-      if (near && f !== 'look') s.look = { x: near.p.x + window.scrollX, y: near.p.y + window.scrollY };
+      if (near && f !== 'look') s.look = { x: near.p.x + viewport().sx, y: near.p.y + viewport().sy };
     };
     /** Fully trusted, the pointer resting beside him: he sits down by it. */
     const sitBeside = (s: State, p: Pointer, now: number) => {
@@ -399,7 +397,7 @@ export function Puppeteer() {
       s.goal = null;
       if (Math.abs(p.x - s.char.x) > 8) s.facing = p.x > s.char.x ? 1 : -1;
       play(s, 'sit', now);
-      s.look = { x: p.x + window.scrollX, y: p.y + window.scrollY };
+      s.look = { x: p.x + viewport().sx, y: p.y + viewport().sy };
       s.seatFrom = s.seat;
       s.seatTo = 0;
       s.sitUntil = now + rand(SIT_BESIDE[0], SIT_BESIDE[1]) * 1000;
@@ -410,8 +408,7 @@ export function Puppeteer() {
     };
     /** The scene for explore.ts: usable surfaces, decor and headings in document px (measured now: rare). */
     const scene = (ps: Seen[]): Scene => {
-      const sx = window.scrollX;
-      const sy = window.scrollY;
+      const { sx, sy } = viewport();
       const view = { left: sx, right: sx + vp.w, top: sy, bottom: sy + vp.h };
       // he only wanders onto surfaces with room for all of him below the header (`visible`)
       const surfaces = cache.map((c, i): SceneSurface | null =>
@@ -512,7 +509,7 @@ export function Puppeteer() {
     const arrive = (s: State, now: number) => {
       const poi = s.goal;
       if (!poi || s.idx < 0) return;
-      const sx = window.scrollX;
+      const sx = viewport().sx;
       const me = s.char.x + sx;
       if (poi.face) s.facing = poi.face;
       else if (poi.look && Math.abs(poi.look.x - me) > 12) s.facing = poi.look.x > me ? 1 : -1;
@@ -582,8 +579,7 @@ export function Puppeteer() {
         measure(); // coalesced: at most one layout read per wake
         dirty = false;
       }
-      const sy = window.scrollY;
-      const sx = window.scrollX;
+      const { sx, sy } = viewport();
       const ps: Seen[] = cache.map((p) => {
         const top = p.top - sy;
         return {
@@ -742,7 +738,7 @@ export function Puppeteer() {
         } else {
           if (mode() === 'exploring' && mv) {
             s.idx = mv.onto;
-            s.walk = { ...s.walk, x: clampTo(s.char.x + window.scrollX - cache[mv.onto].left, cache[mv.onto].ext), v: 0, walking: false };
+            s.walk = { ...s.walk, x: clampTo(s.char.x + viewport().sx - cache[mv.onto].left, cache[mv.onto].ext), v: 0, walking: false };
             s.route = null;
           }
           go(s, { type: 'attend' }, now);
@@ -878,8 +874,7 @@ export function Puppeteer() {
 
       // ---- a print arm swinging close past him: duck ----
       if (!reduce && (free(mode()) || mode() === 'fidget') && now > s.duckUntil) {
-        const sx = window.scrollX;
-        const sy = window.scrollY;
+        const { sx, sy } = viewport();
         const head = { x: s.char.x + sx, y: s.char.y + sy - 14 * scale };
         cache.forEach((c, i) => {
           const a = c.el.dataset.arm; // printing, or swinging back up off the finished plate
@@ -976,7 +971,7 @@ export function Puppeteer() {
           const u = clamp(t / f.T);
           const x = f.x0 + (f.x1 - f.x0) * u + f.vx * f.T * u * (1 - u) * 0.5;
           const y = f.y0 + f.vy * Math.min(t, f.T) + (GRAVITY * Math.min(t, f.T) ** 2) / 2;
-          s.char = { x: x - window.scrollX, y: (u >= 1 ? f.y1 : y) - window.scrollY };
+          s.char = { x: x - viewport().sx, y: (u >= 1 ? f.y1 : y) - viewport().sy };
           s.grip = Math.max(0, s.grip - dt * 6);
           ragdoll = true;
           if (u >= 1) {
@@ -1012,7 +1007,7 @@ export function Puppeteer() {
           }
           const smp = sampleMove(mv, t, 40 * (scale / 1.85));
           const prevPhase = s.walk.phase;
-          s.char = { x: smp.p.x - window.scrollX, y: smp.p.y - FEET * scale - window.scrollY };
+          s.char = { x: smp.p.x - viewport().sx, y: smp.p.y - FEET * scale - viewport().sy };
           const dir = mv.to.x >= mv.from.x ? 1 : -1;
           if (Math.abs(mv.to.x - mv.from.x) > 1) s.facing = dir;
           if (smp.action === 'walk') s.walk = { ...s.walk, v: dir * (m.mode === 'exploring' ? limX : lim).speed, phase: (prevPhase + Math.abs(s.char.x - prevX) / cfg.cycle) % 1 };
@@ -1165,7 +1160,7 @@ export function Puppeteer() {
       // a glance at the pointer for a moment after it moves, while he stands still
       const looking = free(s.m.mode) && !reduce && fresh && !s.walk.walking && (now - p!.t) / 1000 < LOOK;
       const headY = s.char.y - 28 * scale;
-      const aim = own(s.m.mode) && s.m.mode !== 'exploring' && s.look ? { x: s.look.x - window.scrollX, y: s.look.y - window.scrollY } : null;
+      const aim = own(s.m.mode) && s.m.mode !== 'exploring' && s.look ? { x: s.look.x - viewport().sx, y: s.look.y - viewport().sy } : null;
       // at ease with you, he keeps an eye on the pointer when it rests by him (a steady aim: the loop still settles)
       const gaze = !looking && !reduce && s.m.mode === 'idle' && fl === 'warm' && near && !s.walk.walking ? near.p : null;
       const tiltGoal = looking

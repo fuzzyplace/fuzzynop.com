@@ -1,22 +1,75 @@
-import { motion, useReducedMotion, useScroll, useTransform } from 'motion/react';
-import { useRef, type CSSProperties, type ReactNode } from 'react';
-import { hexPoints, rng } from './geometry';
+import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react';
+import { clamp, hexPoints, rng } from './geometry';
+import { useReducedMotion } from './reducedMotion';
+import { docTop, onLayout, ticker, view } from './ticker';
 
 /** Tone = depth. far: gray + blur (fog swallows it). mid: near-black. near: pure ink, rough edge. */
 type Tone = 'far' | 'mid' | 'near';
 const toneClass: Record<Tone, string> = { far: 'fill-silhouette-far stroke-silhouette-far', mid: 'fill-silhouette-mid stroke-silhouette-mid', near: 'fill-ink stroke-ink' };
 const toneFilter: Record<Tone, string> = { far: 'url(#far)', mid: 'url(#ink)', near: 'url(#ink-heavy)' };
 
+/**
+ * Parallax: every <Depth> on the page, moved by one ticker step per scroll frame.
+ * Geometry is cached (measured on layout changes only); the step reads the frame's scroll
+ * position from `view()` and writes a transform only when it changes, so off-screen layers
+ * (progress pinned at 0 or 1) cost nothing.
+ */
+type Layer = { el: HTMLDivElement; depth: number; top: number; height: number; vh: number; y: string };
+const layers = new Set<Layer>();
+const shift = (ly: Layer, sy: number) => {
+  // scroll progress from the layer's top at the viewport bottom to its bottom at the viewport top
+  const p = clamp((sy - (ly.top - ly.vh)) / Math.max(1, ly.height + ly.vh));
+  return ly.depth * 140 * (1 - 2 * p);
+};
+const place = (ly: Layer, sy: number) => {
+  const y = `translateY(${shift(ly, sy).toFixed(3)}px)`;
+  if (y !== ly.y) ly.el.style.transform = ly.y = y;
+};
+const measureLayer = (ly: Layer) => {
+  ly.top = docTop(ly.el);
+  ly.height = ly.el.clientHeight;
+  ly.vh = document.documentElement.clientHeight;
+};
+const parallax = ticker.loop(() => {
+  const { sy } = view();
+  layers.forEach((ly) => place(ly, sy));
+  return false; // one frame per scroll / layout wake
+});
+let parallaxOn = false;
+const startParallax = () => {
+  if (parallaxOn) return;
+  parallaxOn = true;
+  window.addEventListener('scroll', () => parallax.wake(), { passive: true });
+  onLayout(() => {
+    layers.forEach(measureLayer);
+    parallax.wake();
+  });
+};
+
 /** Parallax wrapper: depth > 0 moves slower than the page (further away). */
 export function Depth({ depth, className = '', children }: { depth: number; className?: string; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
-  const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] });
-  const y = useTransform(scrollYProgress, [0, 1], reduce ? [0, 0] : [depth * 140, -depth * 140]);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (reduce) {
+      el.style.transform = 'none';
+      return;
+    }
+    const ly: Layer = { el, depth, top: 0, height: 0, vh: 0, y: '' };
+    measureLayer(ly);
+    place(ly, view().sy);
+    layers.add(ly);
+    startParallax();
+    return () => {
+      layers.delete(ly);
+    };
+  }, [depth, reduce]);
   return (
-    <motion.div ref={ref} style={{ y }} className={`pointer-events-none absolute ${className}`} aria-hidden="true">
+    <div ref={ref} className={`pointer-events-none absolute ${className}`} aria-hidden="true">
       {children}
-    </motion.div>
+    </div>
   );
 }
 

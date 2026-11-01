@@ -1,9 +1,9 @@
-import { useReducedMotion } from 'motion/react';
+import { useReducedMotion } from './reducedMotion';
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
 import { cutLayout, hashSeed, tornPath } from './cutout';
 import { MechArm, type ArmHandle } from './MechArm';
 import { clamp, easeInOut, lerp } from './geometry';
-import { docTop, onLayout, setAttr, ticker } from './ticker';
+import { docTop, onLayout, setAttr, ticker, view } from './ticker';
 import { useSize } from './useSize';
 
 /**
@@ -62,12 +62,14 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
     const { top, height, vh } = geo.current;
     const from = top - START * vh;
     const to = Math.min(top + height - END * vh, top - TOP_DONE * vh);
-    return to > from ? clamp((window.scrollY - from) / (to - from)) : 1;
+    return to > from ? clamp((view().sy - from) / (to - from)) : 1;
   };
 
+  const drawn = useRef(-1); // progress of the last drawn frame
   const draw = useRef<() => void>(() => {});
   draw.current = () => {
     const prog = reduce || forced.current ? 1 : progress();
+    drawn.current = prog;
     const pr = clamp(prog / 0.86); // printing
     const back = clamp((prog - 0.86) / 0.14); // retract
     const printed = pr >= 1;
@@ -123,12 +125,14 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
   useEffect(() => {
     if (reduce) return;
     const loop = ticker.loop(() => {
-      draw.current();
+      // a plate far from the viewport (progress pinned at 0 or 1) has nothing new to draw
+      if ((forced.current ? 1 : progress()) !== drawn.current) draw.current();
       return false; // one frame per wake: scroll/layout events are coalesced
     });
     const wake = () => loop.wake();
     const offLayout = onLayout(() => {
       measure();
+      drawn.current = -1; // geometry changed: redraw on the next frame
       wake();
     });
     window.addEventListener('scroll', wake, { passive: true });

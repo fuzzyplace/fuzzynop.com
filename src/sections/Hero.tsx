@@ -1,10 +1,10 @@
-import { useReducedMotion } from 'motion/react';
+import { useReducedMotion } from '../art/reducedMotion';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { hero } from '../content/site';
 import { Depth, Ground, HexLattice, Ledge, SpiderLeg, Splatter } from '../art/Decor';
 import { MechArm, type ArmHandle } from '../art/MechArm';
 import { clamp, easeInOut, lerp, type Pt } from '../art/geometry';
-import { notifyLayout, ticker } from '../art/ticker';
+import { notifyLayout, ticker, view } from '../art/ticker';
 import { useSize } from '../art/useSize';
 
 /** The arm writes the tagline line by line, then withdraws and idles. */
@@ -43,7 +43,7 @@ export function Hero() {
   // Draw one frame of the hero at `time` (s since load) — tagline reveal + arm pose. DOM writes only.
   const draw = useRef<(time: number) => void>(() => {});
   draw.current = (time: number) => {
-    const scrollY = reduce ? 0 : window.scrollY;
+    const scrollY = reduce ? 0 : view().sy; // the frame's read phase: no forced layout after other loops' writes
     // reveal fraction per line
     const q = text.map((_, i) => (reduce ? 1 : clamp((time - DELAY - i * PER_LINE - PER_LINE * TRAVEL) / (PER_LINE * (1 - TRAVEL)))));
     q.forEach((v, i) => {
@@ -96,7 +96,10 @@ export function Hero() {
   });
   useEffect(() => {
     if (reduce) return;
-    const near = () => window.scrollY < window.innerHeight * 1.2;
+    const near = () => {
+      const v = view();
+      return v.sy < v.h * 1.2;
+    };
     const loop = ticker.loop((now) => {
       if (!near()) return false;
       time.current = (now - start.current) / 1000;
