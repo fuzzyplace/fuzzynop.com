@@ -238,7 +238,8 @@ export function stuntProgram(seed: number, site: StuntSite, opts: { mobile?: boo
         if (ok) beat('flick', v, 1.2, cur, site.comma, [{ fx: 'flick', keys: [site.comma!], amp: 22, dir: 1 }]);
         break;
       case 'swing': {
-        const g = cur.at === 'hang' && site.swing.includes(cur.key) ? cur.key : pick(r, site.swing);
+        const now = cur as Station; // (TS can't see `beat` move him)
+        const g = now.at === 'hang' && site.swing.includes(now.key) ? now.key : pick(r, site.swing);
         ok = travel({ at: 'hang', key: g }, v);
         if (ok) beat('swing', v, 2, cur, g, [{ fx: 'swing', keys: [g], amp: 4, dir: dir() }]);
         break;
@@ -257,7 +258,7 @@ export function stuntProgram(seed: number, site: StuntSite, opts: { mobile?: boo
       cur = at;
     }
   }
-  if (cur.at === 'hang') beat('release', null, 0.7, ground);
+  if ((cur as Station).at === 'hang') beat('release', null, 0.7, ground);
 
   const first = body.find((b) => b.glyph)?.glyph ?? null;
   const intro: Draft[] = [
