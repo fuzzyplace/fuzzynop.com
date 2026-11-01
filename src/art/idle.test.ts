@@ -55,4 +55,25 @@ describe('idle', () => {
     expect(kickAt(1)).toBe(0);
     expect(Math.abs(kickAt(0.1))).toBeGreaterThan(Math.abs(kickAt(0.85)));
   });
+
+  it('trust colours the fidgets: shaken he mostly cowers, wary he glances round, never cowers otherwise', () => {
+    const r = rng(21);
+    const count = (feel: 'shaken' | 'wary' | 'tolerant' | 'warm') => {
+      const n = new Map<string, number>();
+      for (let i = 0; i < 600; i++) {
+        const f = pickFidget(r, undefined, feel);
+        n.set(f, (n.get(f) ?? 0) + 1);
+      }
+      return n;
+    };
+    expect(count('shaken').get('cower')!).toBeGreaterThan(300);
+    expect(count('shaken').get('scratch')).toBeUndefined();
+    expect(count('tolerant').get('cower')).toBeUndefined();
+    expect(count('wary').get('look')!).toBeGreaterThan(count('tolerant').get('look')!);
+  });
+
+  it('he stays put (fidgets only) while asked to, however quiet it is', () => {
+    const r = rng(4);
+    for (let i = 0; i < 100; i++) expect(decideIdle({ quiet: 60, explored: 9, rand: r, stay: true }).kind).toBe('fidget');
+  });
 });

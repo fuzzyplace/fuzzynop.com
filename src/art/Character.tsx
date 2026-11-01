@@ -37,6 +37,7 @@ export type Pose = {
   kick?: number; // sitting: -1..1 swing of the dangling shins
   amp?: number; // tap: hop height scale
   turn?: { k: number; hop: boolean }; // mid about-face, k 0..1 (facing already flipped once k ≥ FLIP)
+  tremble?: boolean; // shaken: a fine stepped CSS tremor (`char-tremble`), so the stage loop can still sleep
 };
 export type CharacterHandle = { set: (x: number, y: number, scale: number, pose: Pose) => void };
 
@@ -66,6 +67,7 @@ const armPath = (sh: P2, hand: P2, elbow?: P2) =>
 export function Character({ ref }: { ref?: Ref<CharacterHandle> }) {
   const el = useRef({
     root: null as SVGGElement | null,
+    shake: null as SVGGElement | null,
     legL: null as SVGPathElement | null,
     legR: null as SVGPathElement | null,
     armL: null as SVGPathElement | null,
@@ -81,7 +83,8 @@ export function Character({ ref }: { ref?: Ref<CharacterHandle> }) {
   useImperativeHandle(
     ref,
     () => ({
-      set(x, y, scale, { swing, dangle, facing, squash, phase = 0, walk = 0, tilt = 0, rag, action, actionK = 0, kick = 0, amp = 1, turn }) {
+      set(x, y, scale, { swing, dangle, facing, squash, phase = 0, walk = 0, tilt = 0, rag, action, actionK = 0, kick = 0, amp = 1, turn, tremble = false }) {
+        setAttr(el.shake, 'class', tremble ? 'char-tremble' : null);
         const legA = dangle * 0.35; // legs drift apart while carried
         const g = gait(phase, walk, STRIDE);
         const bob = g.bob;
@@ -154,42 +157,44 @@ export function Character({ ref }: { ref?: Ref<CharacterHandle> }) {
 
   return (
     <g ref={(e) => void (el.root = e)}>
-      <g filter="url(#ink)">
-        {/* legs */}
-        <path ref={(e) => void (el.legL = e)} className="fill-ink" />
-        <path ref={(e) => void (el.legR = e)} className="fill-ink" />
-        <g ref={(e) => void (el.body = e)}>
-          <g className="char-breathe">
-            {/* torso — blazer silhouette */}
-            <path d="M-8 -9 C-9 -4,-7 4,-6 6 L7 6 C8 2,9 -4,8 -9 C5 -11,-5 -11,-8 -9 Z" className="fill-ink" />
-            {/* arms */}
-            <g className="char-armsway" style={{ transformOrigin: '-7px -7px' }}>
-              <path ref={(e) => void (el.armL = e)} className="stroke-ink" fill="none" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-            </g>
-            <g className="char-armsway char-armsway--front" style={{ transformOrigin: '7px -7px' }}>
-              <path ref={(e) => void (el.armR = e)} className="stroke-ink" fill="none" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-            </g>
-            {/* neck */}
-            <rect x="-2.5" y="-14" width="5" height="6" className="fill-ink" />
-            <g ref={(e) => void (el.head = e)}>
-              {/* head: skull, short sides, textured quiff, nose, beard */}
-              <path
-                className="fill-ink"
-                d="M-9 -18 C-12 -24,-11 -32,-6 -35 L-8 -37 L-4 -37.5 L-6 -40 L-1 -39 L-2 -42.5 L3 -40 L3.5 -43 L7 -39.5 L9.5 -41 L10 -36.5 C11.5 -34,11.5 -31,11 -28 L13 -24.5 L11 -23.5 C11.5 -21,11 -19.5,10.5 -18.5 C10.5 -16,9 -13.5,6 -12.5 C2 -11.5,-2 -13,-4 -14.5 L-6 -16 Z"
-              />
-              {/* beard stubble breaking the jaw line */}
-              <path d="M10 -16 L11.4 -15.4 M8 -13.2 L9 -12 M5 -12.4 L5.5 -11 M2 -12.2 L2 -10.9" className="stroke-ink" strokeWidth="0.9" strokeLinecap="round" />
+      <g ref={(e) => void (el.shake = e)}>
+        <g filter="url(#ink)">
+          {/* legs */}
+          <path ref={(e) => void (el.legL = e)} className="fill-ink" />
+          <path ref={(e) => void (el.legR = e)} className="fill-ink" />
+          <g ref={(e) => void (el.body = e)}>
+            <g className="char-breathe">
+              {/* torso — blazer silhouette */}
+              <path d="M-8 -9 C-9 -4,-7 4,-6 6 L7 6 C8 2,9 -4,8 -9 C5 -11,-5 -11,-8 -9 Z" className="fill-ink" />
+              {/* arms */}
+              <g className="char-armsway" style={{ transformOrigin: '-7px -7px' }}>
+                <path ref={(e) => void (el.armL = e)} className="stroke-ink" fill="none" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+              </g>
+              <g className="char-armsway char-armsway--front" style={{ transformOrigin: '7px -7px' }}>
+                <path ref={(e) => void (el.armR = e)} className="stroke-ink" fill="none" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+              </g>
+              {/* neck */}
+              <rect x="-2.5" y="-14" width="5" height="6" className="fill-ink" />
+              <g ref={(e) => void (el.head = e)}>
+                {/* head: skull, short sides, textured quiff, nose, beard */}
+                <path
+                  className="fill-ink"
+                  d="M-9 -18 C-12 -24,-11 -32,-6 -35 L-8 -37 L-4 -37.5 L-6 -40 L-1 -39 L-2 -42.5 L3 -40 L3.5 -43 L7 -39.5 L9.5 -41 L10 -36.5 C11.5 -34,11.5 -31,11 -28 L13 -24.5 L11 -23.5 C11.5 -21,11 -19.5,10.5 -18.5 C10.5 -16,9 -13.5,6 -12.5 C2 -11.5,-2 -13,-4 -14.5 L-6 -16 Z"
+                />
+                {/* beard stubble breaking the jaw line */}
+                <path d="M10 -16 L11.4 -15.4 M8 -13.2 L9 -12 M5 -12.4 L5.5 -11 M2 -12.2 L2 -10.9" className="stroke-ink" strokeWidth="0.9" strokeLinecap="round" />
+              </g>
             </g>
           </g>
         </g>
-      </g>
-      {/* glasses — rectangular frames catch the light (unfiltered; same bob / breath / tilt as the head) */}
-      <g ref={(e) => void (el.bodyG = e)}>
-        <g className="char-breathe">
-          <g ref={(e) => void (el.headG = e)}>
-            <rect x="4.6" y="-30.2" width="6.6" height="4.6" rx="0.9" fill="none" className="stroke-gray-300" strokeWidth="1.1" />
-            <path d="M4.6 -28.4 L-3 -29.2" className="stroke-gray-500" strokeWidth="0.9" />
-            <path d="M6 -29.2 L7.6 -29.2" className="stroke-gray-100" strokeWidth="0.7" strokeLinecap="round" />
+        {/* glasses — rectangular frames catch the light (unfiltered; same bob / breath / tilt as the head) */}
+        <g ref={(e) => void (el.bodyG = e)}>
+          <g className="char-breathe">
+            <g ref={(e) => void (el.headG = e)}>
+              <rect x="4.6" y="-30.2" width="6.6" height="4.6" rx="0.9" fill="none" className="stroke-gray-300" strokeWidth="1.1" />
+              <path d="M4.6 -28.4 L-3 -29.2" className="stroke-gray-500" strokeWidth="0.9" />
+              <path d="M6 -29.2 L7.6 -29.2" className="stroke-gray-100" strokeWidth="0.7" strokeLinecap="round" />
+            </g>
           </g>
         </g>
       </g>
