@@ -6,6 +6,15 @@
 2. Chosen over baking roughness into geometry or dropping octaves because it keeps the approved look pixel-for-pixel in practice (edge-only sub-pixel diffs) and keeps the moving "boil".
 3. Next lever if needed: split PrintedPlate's gantry posts into their own filtered groups.
 
+**2026-10-31 — v2.3 phase 2: character walks toward the pointer (Claude, prototype)**
+1. **Walk logic is pure** (`src/art/walk.ts`, tested): perch extent (margin 36 px, optional `data-perch-span` half-width), accel-limited steering (60 px/s cruise, 110 px/s², stops within 20 px, restarts only past 34 px so he doesn't jitter), gait driven by distance walked (never time) so the planted foot stays still.
+2. **Gait:** each foot is planted half the cycle and swings forward lifted (knee bends) the other half; body bobs ~1 unit on an inner group with the hips following, so feet stay the anchor. Arms counter-swing. Turning is a ~0.2 s scale-through-zero (reads as a paper cut-out turning edge-on).
+3. **Perches now have width.** He walks along the perch's top edge within its extent; landing on a new perch resets him to its `data-perch` point. Puppeteer's carry-on-scroll is unchanged. His local state (`walk`, `amt`, `turn`, `tilt`, `anchored`) is separate from carry state for the phase-3 state machine.
+4. **Pointer:** passive `pointermove` (mouse/pen) into a ref + wake; touch = last tap (short press that didn't scroll). Reduced motion: no walking, no tilt, no breathing; he only turns to face the pointer.
+5. **Idle:** breathing is a stepped CSS animation (`.char-breathe`, ~3 repaints/s) so the loop can still sleep when he's settled; head glances toward the pointer for 1.8 s after it moves (keeps the loop awake only for that window).
+6. **Claw:** idle claw trails behind him with an eased hover point and carriage, on a leash around its old rest spot (±220 px desktop, ±30 px narrow) so it never comes to rest over hero text; elbow side has hysteresis (no pop).
+7. **Hero ground:** desktop walk span limited to ±260 px around the perch point (the pool of light); full width on narrow screens.
+
 **2026-10-31 — v2.3 phase 1: ticker + refs (Claude)**
 1. **One shared rAF ticker** (`src/art/ticker.ts`). Loops return `false` to sleep; scroll, layout (body ResizeObserver + `notifyLayout()`), and `data-printed` mutations wake them. A throwing loop drops out without freezing the stage.
 2. **Ref-based rendering:** `MechArm` / `Character` render once and are posed via `ref.current.set(...)`; attribute writes go through a change-skipping `setAttr`. No React render per frame anywhere.
@@ -44,6 +53,11 @@
 
 ## Open assumptions — Z to confirm
 - [x] ~~Phase 1 kept the `#ink` rough edge on the moving hero arm even though it costs ~half the frame rate on desktop. OK to swap in a cheaper edge on moving arms?~~ Resolved without a visual change: rail split onto its own filter layer → 60 fps with the same edge (2026-10-31).
+
+- [ ] Phase 2 walk: 60 px/s and the stride length feel right? He follows the cursor constantly (no "interest" threshold or delay) — OK, or should he only follow after the pointer rests?
+- [ ] Hero: he only walks within the pool of light on desktop (±260 px). Alternative: move the pool with him (costs a large repaint per frame).
+- [ ] Idle claw trails behind him on a leash rather than following anywhere. OK until phase 3 redoes arm behaviour?
+- [ ] Phase 1 kept the `#ink` rough edge on the moving hero arm even though it costs ~half the frame rate on desktop. OK to swap in a cheaper edge on moving arms (subtle visual change) in a later phase?
 - [ ] Character likeness — quiff/glasses/beard read right? Beanie variant as an easter egg?
 - [ ] Want the character to *do* anything at the contact plate (wave, sit)?
 - [ ] Contact links: LinkedIn + SoundCloud labeled "Sound". Add/remove?
