@@ -132,3 +132,19 @@ describe('puppet machine: pester, hand, fall, hop', () => {
     expect(held('sitting')).toBe(false);
   });
 });
+
+// ---- stunt ----
+describe('stunt mode', () => {
+  const plan: Plan = { kind: 'carry', why: 'enter', to: 0, x: 10 };
+  it('starts only from idle; a press, the page or the claw ends it; done = idle', () => {
+    const s = transition(initial(0, null), { type: 'stunt' }, 1);
+    expect(s.mode).toBe('stunt');
+    expect(transition({ mode: 'walking', plan: null, since: 0 }, { type: 'stunt' }, 1).mode).toBe('walking');
+    expect(transition(s, { type: 'attend' }, 2)).toBe(s); // the pointer moving doesn't stop it
+    expect(transition(s, { type: 'pester' }, 2)).toBe(s);
+    expect(transition(s, { type: 'take', plan: { kind: 'hand', why: 'press', to: -1, x: 0 } }, 2).mode).toBe('grabbed');
+    expect(transition(s, { type: 'take', plan }, 2)).toMatchObject({ mode: 'grabbed', plan });
+    expect(transition(s, { type: 'done' }, 2).mode).toBe('idle');
+    expect(afoot('stunt') || held('stunt') || own('stunt') || free('stunt')).toBe(false);
+  });
+});

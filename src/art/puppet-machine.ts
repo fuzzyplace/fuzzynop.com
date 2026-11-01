@@ -18,6 +18,7 @@
  * moved, a tap, a scroll), to a press on him, and to the page; never to the claw's whims.
  */
 export type Mode =
+  | StuntMode // ---- stunt ---- (block at the end of this file)
   | 'idle'
   | 'walking'
   | 'swatting'
@@ -40,6 +41,7 @@ export type Plan = {
 };
 export type Machine = { mode: Mode; plan: Plan | null; since: number };
 export type Ev =
+  | StuntEv // ---- stunt ----
   | { type: 'move' } // he started walking
   | { type: 'stop' } // he came to rest
   | { type: 'take'; plan: Plan }
@@ -66,6 +68,7 @@ export const initial = (now: number, plan: Plan | null): Machine =>
 export function transition(m: Machine, ev: Ev, now: number): Machine {
   const to = (mode: Mode, plan: Plan | null = m.plan): Machine => ({ mode, plan, since: now });
   const byHand = m.plan?.kind === 'hand'; // the user has him: the page doesn't get a say until release
+  if (m.mode === 'stunt' || ev.type === 'stunt') return stuntTransition(m, ev, now); // ---- stunt ----
   switch (m.mode) {
     case 'idle':
       if (ev.type === 'move') return to('walking');
@@ -135,3 +138,19 @@ export const free = (mode: Mode) => mode === 'idle' || mode === 'walking' || mod
 export const own = (mode: Mode) => mode === 'exploring' || mode === 'fidget' || mode === 'sitting';
 /** On (or travelling between) perches under his own power: not held, not falling. */
 export const afoot = (mode: Mode) => free(mode) || own(mode) || mode === 'hopping';
+
+// ---- stunt ----
+/**
+ * The title stunt (stunt.ts, played by stuntDriver.ts): once per page load, from standing idle on the
+ * hero ground. Not his whim (the pointer moving doesn't stop it), but any `take` does: a press on him,
+ * the page (scroll), or the claw fetching him when it's over. `done`: he finished on the ground.
+ */
+export type StuntMode = 'stunt';
+export type StuntEv = { type: 'stunt' };
+function stuntTransition(m: Machine, ev: Ev, now: number): Machine {
+  if (m.mode === 'idle' && ev.type === 'stunt') return { mode: 'stunt', plan: null, since: now };
+  if (m.mode !== 'stunt') return m;
+  if (ev.type === 'done') return { mode: 'idle', plan: null, since: now };
+  if (ev.type === 'take') return { mode: 'grabbed', plan: ev.plan, since: now };
+  return m;
+}

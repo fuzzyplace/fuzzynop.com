@@ -213,7 +213,7 @@ export function stuntProgram(seed: number, site: StuntSite, opts: { mobile?: boo
   const played: Variation[] = [];
   for (const v of chosen) {
     const mark = body.length;
-    const at = cur;
+    const at: Station = cur;
     let ok = true;
     switch (v) {
       case 'walk':
