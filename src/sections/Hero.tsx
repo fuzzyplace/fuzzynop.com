@@ -1,6 +1,7 @@
 import { useReducedMotion } from 'motion/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { hero } from '../content/site';
+import { variants } from '../content/variants';
 import { Depth, Ground, HexLattice, Ledge, SpiderLeg, Splatter } from '../art/Decor';
 import { MechArm, type ArmHandle } from '../art/MechArm';
 import { clamp, easeInOut, lerp, type Pt } from '../art/geometry';
@@ -12,6 +13,12 @@ const DELAY = 0.6;
 const PER_LINE = 1.15;
 const TRAVEL = 0.22; // share of each line spent moving to its start
 const RETRACT = 0.9;
+const HOLD = 4.5; // ?hero=rotate: s a question stays written
+const ERASE = 0.7; // s to wipe it before the next one
+
+/** Which lines the arm writes: the open question (default), the three questions in turn, or the v2.3 tagline. */
+const SETS = variants.hero === 'classic' ? [hero.tagline] : variants.hero === 'rotate' ? hero.questions : [hero.question];
+const ASK = variants.hero !== 'classic'; // a question ends in a blinking cursor
 
 type Box = { x: number; y: number; w: number; h: number };
 
@@ -22,12 +29,16 @@ export function Hero() {
   const { w, h } = useSize(ref);
   const reduce = useReducedMotion();
   const [boxes, setBoxes] = useState<Box[]>([]);
-  const n = hero.tagline.length;
+  const [qi, setQi] = useState(0); // which question (rotate) — changes every few seconds, not per frame
+  const text = SETS[qi];
+  const n = text.length;
   const writeEnd = DELAY + n * PER_LINE;
+  const cycleAt = useRef(0); // clock time the current question started
 
   useLayoutEffect(() => {
     const host = ref.current?.getBoundingClientRect();
     if (!host) return;
+    lines.current.length = n;
     setBoxes(
       lines.current.map((el) => {
         const r = el!.getBoundingClientRect();
@@ -35,14 +46,22 @@ export function Hero() {
       }),
     );
     notifyLayout(); // the ground perch moves with w (groundH) without resizing the body
-  }, [w, h]);
+  }, [w, h, qi]);
 
   // Draw one frame of the hero at `time` (s since load) — tagline reveal + arm pose. DOM writes only.
   const draw = useRef<(time: number) => void>(() => {});
-  draw.current = (time: number) => {
+  draw.current = (clock: number) => {
     const scrollY = reduce ? 0 : window.scrollY;
+    // rotate: each question is written, held, wiped, then the next one is written
+    let time = clock - cycleAt.current;
+    if (SETS.length > 1 && !reduce && time > writeEnd + RETRACT + HOLD + ERASE) {
+      cycleAt.current = clock;
+      time = 0;
+      setQi((i) => (i + 1) % SETS.length);
+    }
+    const wipe = SETS.length > 1 && !reduce ? clamp((time - writeEnd - RETRACT - HOLD) / ERASE) : 0;
     // reveal fraction per line
-    const q = hero.tagline.map((_, i) => (reduce ? 1 : clamp((time - DELAY - i * PER_LINE - PER_LINE * TRAVEL) / (PER_LINE * (1 - TRAVEL)))));
+    const q = text.map((_, i) => (reduce ? 1 : clamp((time - DELAY - i * PER_LINE - PER_LINE * TRAVEL) / (PER_LINE * (1 - TRAVEL))) * (1 - wipe)));
     q.forEach((v, i) => {
       const el = lines.current[i];
       if (el) el.style.clipPath = `inset(-10% ${((1 - v) * 100).toFixed(2)}% -10% 0)`;
@@ -143,7 +162,7 @@ export function Hero() {
       <div className="shell relative z-10 pb-44 pt-40">
         <p className="type-label-medium text-gray-300">{hero.eyebrow}</p>
         <h1 className="type-display-large mt-6 text-on-surface">
-          {hero.tagline.map((line, i) => (
+          {text.map((line, i) => (
             <span
               key={line}
               ref={(el) => {
@@ -152,6 +171,11 @@ export function Hero() {
               className="block w-fit py-1"
             >
               {line}
+              {ASK && i === n - 1 && (
+                <span className="caret" aria-hidden="true">
+                  _
+                </span>
+              )}
             </span>
           ))}
         </h1>

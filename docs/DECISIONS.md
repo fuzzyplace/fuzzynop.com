@@ -107,3 +107,5 @@
 - [ ] **Sitting**: only on hung stones and plate ends, legs over the outside edge. Also on the hero ground's grass (legs folded)?
 - [ ] **Header headroom**: he won't wander onto a surface whose top is within ~190 px of the viewport top (his head would go under the fixed header). Plates the claw sets him on near the top are unchanged — want the reading-line pick to avoid those too?
 - [ ] **Watching the printer** only happens when a plate is left half-printed (printing is tied to scroll, and a scroll stops his whims). OK, or should plates finish printing on their own once you stop?
+- [ ] **v2.4 prototype (narrative):** nav labels became Log / Now / Links / Contact (UI labels, not claims). Hub and Contact plates still carry hex badges 04 / 05, which now read against EXP. 04. Drop their numbers or relabel?
+- [ ] **v2.4 prototype:** hero variants for review: `?hero=fixed` (default, "What would / happen if_"), `?hero=rotate` (three questions, ~10 s each), `?hero=classic` (v2.3 tagline). `?interlude=fold` moves the humans-and-machines question into EXP. 04 as its hypothesis.

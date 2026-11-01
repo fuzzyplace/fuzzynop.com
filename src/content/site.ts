@@ -29,10 +29,11 @@ export const site = {
   },
 };
 
+/** v2.4: the log replaces Before / Practice / Now. Labels are UI, not claims (open assumption). */
 export const nav = [
-  { id: 'before', label: 'Before' },
-  { id: 'practice', label: 'Practice' },
+  { id: 'before', label: 'Log' },
   { id: 'now', label: 'Now' },
+  { id: 'links', label: 'Links' },
   { id: 'contact', label: 'Contact' },
 ] as const;
 
