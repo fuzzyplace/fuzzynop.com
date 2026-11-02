@@ -2,7 +2,7 @@
 
 Prepared 2026-11-02 on `claude/v2.8-launch`. Nothing here has been run yet. Background and day-to-day use: `docs/DEPLOY_VERCEL.md`.
 
-**The one thing to know:** `main` serves the live v1 site through GitHub Pages today (`CNAME` = `fuzzynop.com`). Merging the v2 PR into `main` **is** the cutover moment. GitHub Pages rebuilds from `main` on every push, and v2's raw source is not a static site (its `index.html` points at `/src/main.tsx`), so the moment v2 lands on `main` Pages would serve a blank page. Step 3 freezes v1 on its own branch first so that never reaches a visitor.
+**The one thing to know:** `main` serves the live v1 site through GitHub Pages today (`CNAME` = `fuzzynop.com`). Merging the v2 PR (`release/v2` → `main`) **is** the cutover moment. GitHub Pages rebuilds from `main` on every push, and v2's raw source is not a static site (its `index.html` points at `/src/main.tsx`), so the moment v2 lands on `main` Pages would serve a blank page. Step 3 freezes v1 on its own branch first so that never reaches a visitor.
 
 ---
 
@@ -21,7 +21,7 @@ Prepared 2026-11-02 on `claude/v2.8-launch`. Nothing here has been run yet. Back
 ---
 
 ## Pre-launch QA (on the Vercel preview of the PR branch)
-Run all of these against the preview URL before step 4. Tick in the PR.
+Run all of these against the preview of `release/v2` before step 4. Tick in the PR.
 
 **Build and content**
 - [ ] `npm run check` passes on the PR branch (typecheck, tests incl. the no-dash copy test, token contrast, build).

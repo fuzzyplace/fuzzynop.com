@@ -7,7 +7,7 @@
 ---
 
 ## Current state (v2.8, launch prep) — read this first (updated 2026-11-02)
-Branch `claude/v2.8-launch` (on top of `claude/v2.3-living-stage-x605vc`). `npm run check` passes (248 tests). Vercel preview project: `fuzzynop-redesign-preview` (STDClub team; Vercel login required). **Launch is prepared, not performed: see [`docs/LAUNCH.md`](LAUNCH.md)** for the ordered cutover, DNS records, QA list and what's needed from Z. `main` still serves v1 on GitHub Pages, so merging into `main` is the cutover.
+Branch **`release/v2`** (canonical; contains everything, including the former `claude/v2.*` branches, which are safe to delete). Launch PR: `release/v2` → `main`. `npm run check` passes (248 tests). Vercel preview project: `fuzzynop-redesign-preview` (STDClub team; Vercel login required). **Launch is prepared, not performed: see [`docs/LAUNCH.md`](LAUNCH.md)** for the ordered cutover, DNS records, QA list and what's needed from Z. `main` still serves v1 on GitHub Pages, so merging into `main` is the cutover.
 
 **The page now** (copy and order in `docs/CONTENT.md` → "How it maps to the site")
 - Hero: the arm writes "Team Builder, / Red Teamer, / Professional Bogeyman", every letter its own span so he can play on it. Then Past (white), Present (black), the "Setting the vibe" pop-out (white), Future (black), Contact (white) with the CTA and the link tree. Footer `0x90 0x90 0x90 · nothing happened here`.

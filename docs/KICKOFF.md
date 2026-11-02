@@ -6,7 +6,7 @@ You're picking up **fuzzynop.com**, a portfolio for Josh Schwartz ("Z"). It has 
 1. Get the site to a **done state Z is happy with**, and make it a better, more delightful experience along the way.
 2. Turn what we build into a **reusable design system + Claude skill** so others can make their own "living stage" sites.
 
-Branch: `claude/v2.3-living-stage-x605vc`. Commit small, push often, and run `npm run check` before every commit.
+Branch: `release/v2` (canonical; PR `release/v2` → `main` is the launch). Commit small, push often, and run `npm run check` before every commit.
 
 ## 0. Orient (≤ 15 min, then report back in 10 lines)
 Read in this order:

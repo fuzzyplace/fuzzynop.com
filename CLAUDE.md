@@ -67,7 +67,7 @@ legacy/v1/             # previous hand-written site — reference only, never ed
 - Test in a real scroll: `scripts/screenshot.mjs` scrolls with mouse.wheel; also check `prefers-reduced-motion`.
 
 ## Workflow
-- Branch per change: `claude/<short-desc>`. Small commits. `npm run check` must pass.
+- **Canonical branch: `release/v2`** (the finished v2 site). Work in short-lived `claude/<short-desc>` branches off it, merge back, delete after. Open PR: `release/v2` → `main`; merging it is the launch cutover (see `docs/LAUNCH.md`). Small commits. `npm run check` must pass.
 - Slash commands: `/check`, `/new-section <Name>`, `/design-review`, `/content-audit`, `/ship`.
 - Subagents: `design-reviewer` (tokens/a11y/aesthetic/orange budget), `content-editor` (voice, sourcing, no name-drops).
 - When unsure, make the best reasonable assumption, keep building, and log it in `docs/DECISIONS.md` → "Open assumptions". Z reviews in batches.
