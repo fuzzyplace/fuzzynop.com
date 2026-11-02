@@ -148,22 +148,28 @@ export const ticker = createTicker({
  * (requestIdleCallback with a timeout, so it also runs on a main thread that's never quite idle).
  * Returns a cancel function.
  */
-type IdleFn = (cb: () => void, opts?: { timeout: number }) => number;
+type IdleFn = (cb: (d?: IdleDeadline) => void, opts?: { timeout: number }) => number;
 const idleQueue: (() => void)[] = [];
 let idleBusy = false;
 let painted = false;
+let idleRan = 0;
+const IDLE_MIN_MS = 8; // a job needs at least this much of an idle period (unless it timed out)
 const pumpIdle = () => {
   if (idleBusy || !idleQueue.length) return;
   idleBusy = true;
   const ric: IdleFn = window.requestIdleCallback ?? ((cb) => window.setTimeout(cb, 120));
-  const run = () =>
-    ric(
-      () => {
+  // the first job may push in after 1.5 s; the rest wait longer for a truly idle period, so a busy
+  // (or throttled) main thread doesn't get them back to back as long tasks
+  const run = (): void =>
+    void ric(
+      (d) => {
+        if (d && !d.didTimeout && d.timeRemaining() < IDLE_MIN_MS) return run();
         idleBusy = false;
+        idleRan++;
         idleQueue.shift()?.();
         pumpIdle();
       },
-      { timeout: 1500 },
+      { timeout: idleRan ? 4000 : 1500 },
     );
   if (painted) run();
   else
