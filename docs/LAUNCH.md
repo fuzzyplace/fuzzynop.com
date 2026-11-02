@@ -75,6 +75,16 @@ Run all of these against the preview of `release/v2` before step 4. Tick in the 
 4. Wait for the production deployment to be **Ready**, then open the project's production URL (`<project>.vercel.app`) and do a quick scroll. Don't touch DNS until this looks right.
 
 ### 5. Move DNS (right after step 4)
+
+**Your actual setup (checked live 2026-11-02):** DNS is hosted at **GoDaddy** (nameservers `ns75/ns76.domaincontrol.com`). Today: four GitHub Pages `A` records on `@`, no `AAAA`, `www` is a `CNAME` to `fuzzynop.com`, no `CAA`. Mail is **Google Workspace** (5 `MX` records to `aspmx...google.com`) plus `TXT` SPF `v=spf1 include:_spf.google.com ~all` and a `google-site-verification` record. **Do not touch the MX or TXT records.**
+
+In GoDaddy: My Products → `fuzzynop.com` → **DNS** → Manage DNS:
+1. Edit the four `A` records for `@` (`185.199.108-111.153`): delete three of them and change the remaining one's value to the Vercel apex IP shown in Vercel → Domains (usually `76.76.21.21`). TTL 600 (GoDaddy's minimum is 600 s / "Custom").
+2. Edit the `CNAME` `www` (currently `fuzzynop.com`) to the value Vercel shows for www (usually `cname.vercel-dns.com`).
+3. Save. Leave every `MX` and `TXT` record exactly as it is.
+4. A day before, lower the TTL of the `@` A records and `www` CNAME to the minimum so the switch and any rollback are quick.
+
+Generic reference (any provider):
 At the DNS provider for `fuzzynop.com`:
 
 **Remove** (GitHub Pages):
