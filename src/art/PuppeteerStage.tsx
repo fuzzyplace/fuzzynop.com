@@ -12,9 +12,9 @@ import { LIMITS, planRoute, sampleMove, type Move, type Surface } from './naviga
 import { PRESS, afoot, free, held, initial, own, transition, type Ev, type Machine } from './puppet-machine';
 import { START as NEEDS0, WHIM_GAP, choose, grow, nextIn, satisfy, type Activity, type Cursor as BrainCursor, type Needs } from './desires';
 import { INSIDE, freeSpaces, type Rect as Box } from './interior';
-import { canTrick, lettersAt, meAt, planTrick, TRICKS, type LBox, type LetterProgram, type Trick } from './letterPlay';
+import { canTrick, endLetters as endLettersOf, lettersAt, meAt, planTrick, TRICKS, type LBox, type LetterProgram, type Trick } from './letterPlay';
 import { chooseDest, hopPhase, startHop, type Hop, type Spot } from './teleport';
-import { resetGlyphs, setGlyph, titleEl, titleMap } from './targets';
+import { measureTitle, resetGlyphs, setGlyph, titleEl, titleMap } from './targets';
 import { createRagdoll, primeRagdoll, stepRagdoll, type RagPose, type Ragdoll } from './ragdoll';
 import { onLayout, setAttr, ticker, view as viewport } from './ticker';
 import { TrustLine, type TrustLineHandle } from './TrustLine';
@@ -170,6 +170,7 @@ type Act = {
 type Tele = {
   hop: Hop;
   fromDoc: Pt; // where he was (document px, his origin)
+  fromPin: { pin: Pin; top: number } | null; // he went from a sticky plate: his ink rides it (its document top then)
   kFrom: number;
   to: { id: string; x: number } | null; // perch id + x along it (null: resolved when he re-forms)
   poi: Poi | null; // a probe / activity goal on arrival
@@ -303,7 +304,16 @@ type Perch = {
   wall: -1 | 0 | 1;
   lie: boolean;
   title: boolean;
+  pin: Pin | null; // on a sticky plate: its document top follows the scroll while it's pinned
+  top0: number; // `top` as measured (pin.t0 is the plate's document top then)
 };
+/**
+ * A sticky plate (`.plate-pin`) as measured: native sticky puts its document top at
+ * clamp(scrollY + stick, lo, hi), so a frame can place it (and everything on it) with no layout read.
+ */
+type Pin = { stick: number; lo: number; hi: number; t0: number };
+/** Somewhere he may be: anything that isn't a plate, or a plate that's whole (pinned or not; data-assembled). */
+const standable = (el: HTMLElement) => el.dataset.printed === undefined || el.dataset.assembled === '1';
 type Pointer = { x: number; y: number; t: number };
 /** A perch as seen this frame (viewport px). */
 type Seen = { ok: boolean; left: number; pt: Pt; top: number; visible: boolean; onX: boolean; bottom: number };
@@ -366,21 +376,46 @@ export function PuppeteerStage() {
       });
       return { text, titles };
     };
+    /** A sticky plate's document top at scroll `sy` (what native sticky does). */
+    const pinTop = (pin: Pin, sy: number) => clamp(sy + pin.stick, pin.lo, pin.hi);
+    /** Surfaces on sticky plates follow the scroll (a pinned plate stays put on screen, so he does). No layout reads. */
+    const ridePins = (sy: number) => {
+      for (const c of cache) if (c.pin) c.top = c.top0 + (pinTop(c.pin, sy) - c.pin.t0);
+    };
     const measure = () => {
       const { sx, sy } = viewport();
       const s = st.current;
       const prev = s && s.idx >= 0 ? cache[s.idx] : undefined;
+      const pins = new Map<HTMLElement, Pin>();
+      const pinOf = (el: HTMLElement): Pin | null => {
+        const pe = el.closest<HTMLElement>('.plate-pin');
+        if (!pe) return null;
+        let pin = pins.get(pe);
+        if (pin === undefined) {
+          const cs = getComputedStyle(pe);
+          const track = pe.parentElement;
+          if (cs.position !== 'sticky' || !track) return null;
+          const r = pe.getBoundingClientRect();
+          const tr = track.getBoundingClientRect();
+          const tcs = getComputedStyle(track);
+          const lo = tr.top + sy + parseFloat(tcs.paddingTop || '0');
+          const hi = tr.bottom + sy - parseFloat(tcs.paddingBottom || '0') - r.height;
+          pin = { stick: parseFloat(cs.top) || 0, lo, hi: Math.max(lo, hi), t0: r.top + sy };
+          pins.set(pe, pin);
+        }
+        return pin;
+      };
       const base: Perch[] = Array.from(document.querySelectorAll<HTMLElement>('[data-perch]')).map((el, i) => {
         const r = el.getBoundingClientRect();
         const f = parseFloat(el.dataset.perch ?? '0.5');
         const half = parseFloat(el.dataset.perchSpan ?? '');
         const ext = perchExtent(r.width, MARGIN, half > 0 ? { center: r.width * f, half } : undefined);
-        return { el, id: el.id || `p${i}`, left: r.left + sx, top: r.top + sy, width: r.width, height: r.height, f, ext, ledge: el.dataset.ledge !== undefined, k: 1, nook: false, spot: false, host: -1, wall: 0, lie: false, title: false };
+        return { el, id: el.id || `p${i}`, left: r.left + sx, top: r.top + sy, width: r.width, height: r.height, f, ext, ledge: el.dataset.ledge !== undefined, k: 1, nook: false, spot: false, host: -1, wall: 0, lie: false, title: false, pin: pinOf(el), top0: r.top + sy };
       });
       // the free space inside each assembled paper plate (an ink plate would swallow his silhouette)
       const nooks: Perch[] = [];
       base.forEach((c, i) => {
-        if (c.el.dataset.printed !== '1' || c.el.dataset.printing === '1' || c.el.dataset.pinned === '1' || !c.el.querySelector('.plate-face.plate-paper')) return;
+        if (c.el.dataset.assembled !== '1' || c.el.dataset.printing === '1' || !c.el.querySelector('.plate-face.plate-paper')) return;
         const face = c.el.querySelector<HTMLElement>('.plate-face') ?? c.el;
         const fr = face.getBoundingClientRect();
         const plate = { left: fr.left + sx, right: fr.right + sx, top: fr.top + sy, bottom: fr.bottom + sy };
@@ -388,10 +423,16 @@ export function PuppeteerStage() {
         const found = freeSpaces(plate, text, { inset: 14, pad: INSIDE_PAD, w: 30 * szIn, h: (TALL + 3) * szIn, lieW: 76 * szIn, titles });
         found.forEach((n, j) => {
           const width = n.right - n.left;
-          nooks.push({ el: c.el, id: `${c.id}:n${Math.round(n.left - plate.left)}:${Math.round(n.y - plate.top)}`, left: n.left, top: n.y, width, height: 0, f: 0.5, ext: { lo: 0, hi: width }, ledge: false, k: kIn, nook: true, spot: false, host: i, wall: n.wall, lie: n.lie, title: n.title });
+          nooks.push({ el: c.el, id: `${c.id}:n${Math.round(n.left - plate.left)}:${Math.round(n.y - plate.top)}`, left: n.left, top: n.y, width, height: 0, f: 0.5, ext: { lo: 0, hi: width }, ledge: false, k: kIn, nook: true, spot: false, host: i, wall: n.wall, lie: n.lie, title: n.title, pin: c.pin, top0: n.y });
           void j;
         });
       });
+      // spots were placed at some scroll: re-base the ones on a sticky plate to now
+      for (const q of spots) {
+        if (q.pin) q.top = q.top0 + (pinTop(q.pin, sy) - q.pin.t0);
+        q.pin = pinOf(q.el);
+        q.top0 = q.top; // a fresh pin's t0 is where it is now
+      }
       cache = [...base, ...nooks, ...spots];
       if (!s) return;
       // keep him on the same surface (by id), or the nearest nook in the same plate
@@ -420,7 +461,9 @@ export function PuppeteerStage() {
     /** A one-off standing place (document px, feet), at size factor k. Returns its perch id. */
     const addSpot = (x: number, y: number, k: number, el: HTMLElement): string => {
       const id = `spot:${Math.round(x)}:${Math.round(y)}`;
-      spots = [...spots.filter((q) => q.id !== id && (st.current?.pid === q.id || st.current?.tele?.to?.id === q.id)), { el, id, left: x, top: y, width: 0, height: 0, f: 0, ext: { lo: 0, hi: 0 }, ledge: false, k, nook: true, spot: true, host: -1, wall: 0, lie: false, title: false }];
+      const pin = cache.find((c) => c.el === el && c.pin)?.pin ?? null;
+      const top0 = pin ? y - (pinTop(pin, viewport().sy) - pin.t0) : y;
+      spots = [...spots.filter((q) => q.id !== id && (st.current?.pid === q.id || st.current?.tele?.to?.id === q.id)), { el, id, left: x, top: y, width: 0, height: 0, f: 0, ext: { lo: 0, hi: 0 }, ledge: false, k, nook: true, spot: true, host: -1, wall: 0, lie: false, title: false, pin, top0 }];
       measure();
       return id;
     };
@@ -433,6 +476,7 @@ export function PuppeteerStage() {
     const lim = { ...LIMITS, jumpUp: LIMITS.jumpUp * k185, gap: LIMITS.gap * k185, reach: LIMITS.reach * k185, climbSpeed: LIMITS.climbSpeed * k185 };
     const limX = { ...lim, speed: lim.speed * EXPLORE_PACE }; // an amble, not an errand
     let attnAt = performance.now(); // the user was last around (pointer moved, tap, scroll)
+    let freshAt = 0; // ms a plate last came together (somewhere new to be: if he's away, he comes sooner)
     let nearAt = 0; // the user last came close to him (his own whims stop)
     // walking routes are between real surfaces only: nooks and spots are reached by teleport
     const surfaces = (ok: boolean[]): Surface[] =>
@@ -613,7 +657,7 @@ export function PuppeteerStage() {
       const feet = s.char.y + FEET * sz;
       const vis = cache
         .map((c, i) => ({ c, i, top: c.top - sy, l: c.left - sx + c.ext.lo, r: c.left - sx + c.ext.hi }))
-        .filter((q) => !q.c.nook && q.c.el.dataset.printed !== '0' && q.c.el.dataset.pinned !== '1' && q.top >= headroomK(1) && q.top < vp.h);
+        .filter((q) => !q.c.nook && standable(q.c.el) && q.top >= headroomK(1) && q.top < vp.h);
       const below = vis.filter((q) => q.top >= feet - 4);
       const under = below.filter((q) => s.char.x >= q.l - 20 && s.char.x <= q.r + 20).sort((a, b) => a.top - b.top)[0];
       const off = (q: (typeof vis)[number]) => Math.max(0, q.l - s.char.x, s.char.x - q.r);
@@ -673,7 +717,7 @@ export function PuppeteerStage() {
      * Run off into ink and gather himself at `to` (perch index + document x), or wherever is best near
      * your attention when `to` is null. `then` runs once he's re-formed (and shaken himself off).
      */
-    const teleport = (s: State, now: number, o: { to?: { i: number; x: number } | null; ps?: Seen[]; prefer?: 'inside' | 'outside'; only?: (c: Perch) => boolean; poi?: Poi | null; then?: ((now: number) => void) | null; greet?: boolean; why: string }): boolean => {
+    const teleport = (s: State, now: number, o: { to?: { i: number; x: number } | null; ps?: Seen[]; prefer?: 'inside' | 'outside'; only?: (c: Perch) => boolean; poi?: Poi | null; then?: ((now: number) => void) | null; greet?: boolean; nowhere?: boolean; why: string }): boolean => {
       let to = o.to ?? null;
       if (!to && o.ps) {
         const { sx, sy } = viewport();
@@ -684,18 +728,23 @@ export function PuppeteerStage() {
           recentDest = [d.id, ...recentDest].slice(0, 4);
         }
       }
-      if (!to || !cache[to.i]) return false;
       const { sx, sy } = viewport();
-      const c = cache[to.i];
-      const fromDoc = { x: s.char.x + sx, y: s.char.y + sy };
+      const c = to ? cache[to.i] : undefined;
       const seen = !s.hidden && s.char.y > HEADER && s.char.y < vp.h + 40 && s.char.x > -40 && s.char.x < vp.w + 40 && s.m.mode !== 'falling';
-      const toPt = { x: to.x, y: c.top };
+      // nowhere on screen to go: if he's in sight he still runs off into ink (and waits out of sight)
+      if (!to || !c) {
+        if (!o.nowhere || !seen || reduce) return false;
+      }
+      const fromDoc = { x: s.char.x + sx, y: s.char.y + sy };
+      const here = s.idx >= 0 ? cache[s.idx] : undefined;
+      const fromPin = here?.pin && !s.hidden ? { pin: here.pin, top: pinTop(here.pin, sy) } : null;
+      const toPt = to && c ? { x: to.x, y: c.top } : fromDoc;
       if (!go(s, { type: 'vanish' }, now)) return false;
       const hop = startHop(now, Math.hypot(toPt.x - fromDoc.x, toPt.y - fromDoc.y), reduce);
       if (!seen && !reduce) hop.out = 0; // nobody sees him go: he just turns up
-      s.tele = { hop, fromDoc, kFrom: s.k, to: { id: c.id, x: clampTo(to.x - c.left, c.ext) }, poi: o.poi ?? null, then: o.then ?? null, greet: !!o.greet, swapped: false, shook: false, why: o.why };
+      s.tele = { hop, fromDoc, fromPin, kFrom: s.k, to: to && c ? { id: c.id, x: clampTo(to.x - c.left, c.ext) } : null, poi: o.poi ?? null, then: o.then ?? null, greet: !!o.greet, swapped: false, shook: false, why: o.why };
       if (o.poi) s.goal = o.poi;
-      note(`teleport:${o.why}:${c.id}`, now);
+      note(`teleport:${o.why}:${c?.id ?? 'nowhere'}`, now);
       return true;
     };
     // ---- his own ideas: fidgets, points of interest, sitting ----
@@ -1083,7 +1132,8 @@ export function PuppeteerStage() {
     };
 
     // ---- letter play (letterPlay.ts) ----
-    type LetterSite = { at: { i: number; x: number } | null; spot: Pt | null; facing: 1 | -1; word: LBox[]; els: Map<string, HTMLElement>; k: number };
+    /** `ceil`: the highest a moved letter may go (document px; under the header), if it matters there. */
+    type LetterSite = { at: { i: number; x: number } | null; spot: Pt | null; facing: 1 | -1; word: LBox[]; els: Map<string, HTMLElement>; k: number; ceil?: number };
     /** A title's letters as words (by the gaps between them), from their elements. */
     const wordsOf = (els: HTMLElement[], key: (el: HTMLElement) => string, sx: number, sy: number): { word: LBox[]; els: Map<string, HTMLElement> }[] => {
       const out: { word: LBox[]; els: Map<string, HTMLElement> }[] = [];
@@ -1138,6 +1188,46 @@ export function PuppeteerStage() {
             if (stand.y - TALL * scale < sy + HEADER + CLEAR || stand.x > sx + vp.w - 30) continue;
             if (canTrick('spin', w.word, me)) out.push({ at: null, spot: { x: stand.x, y: stand.y }, facing: -1, word: w.word, els: w.els, k: 1 });
           }
+          // on a line's letters (a short one), beside a taller letter of the same word: the part of the
+          // word on that side of him is in reach (the letters under his feet stay put)
+          const half = 11 * scale;
+          const seen = new Set<string>();
+          // his whole silhouette while he reaches (an arm out toward the word, hair) stays off the eyebrow and lede
+          const others = measureTitle(h1)?.obstacles ?? [];
+          const covers = (x: number, y: number, facing: 1 | -1) => {
+            const box = { left: x - (facing < 0 ? 26 : 16) * scale - 6, right: x + (facing < 0 ? 16 : 26) * scale + 6, top: y - (TALL + 4) * scale - 6, bottom: y - 2 };
+            return others.some((o) => box.left < o.right && box.right > o.left && box.top < o.bottom && box.bottom > o.top);
+          };
+          for (const stand of map.stands) {
+            if (stand.y - TALL * scale < sy + HEADER + CLEAR || stand.x < sx + 30 || stand.x > sx + vp.w - 30) continue;
+            const row = map.rows[stand.row];
+            const words: LBox[][] = [];
+            let prev: LBox | null = null;
+            for (const q of row.glyphs) {
+              const box: LBox = { key: q.key, ch: q.ch, left: q.left, right: q.right, top: q.top, bottom: q.bottom };
+              if (!prev || box.left - prev.right > (row.baseline - Math.min(...row.glyphs.map((r) => r.top))) * 0.15) words.push([]);
+              words[words.length - 1].push(box);
+              prev = box;
+            }
+            const word = words.find((w) => w.some((q) => q.key === stand.key));
+            if (!word) continue;
+            for (const facing of [-1, 1] as const) {
+              const part = facing < 0 ? word.filter((q) => q.right <= stand.x - half + 1) : word.filter((q) => q.left >= stand.x + half - 1);
+              const end = part.length ? (facing < 0 ? part[part.length - 1] : part[0]) : null;
+              if (!end || end.top > stand.y - 6 * scale) continue; // it has to stand up beside him, not lie under his feet
+              const id = `${end.key}:${facing}`;
+              if (seen.has(id)) continue; // one spot per letter and side (the stand nearest it comes first or last; either is fine)
+              const me = { x: stand.x, feet: stand.y, facing, scale };
+              if (!canTrick('spin', part, me) || covers(stand.x, stand.y, facing)) continue;
+              seen.add(id);
+              const els = new Map<string, HTMLElement>();
+              for (const q of part) {
+                const el = h1.querySelector<HTMLElement>(`[data-glyph="${q.key}"]`);
+                if (el) els.set(q.key, el);
+              }
+              out.push({ at: null, spot: { x: stand.x, y: stand.y }, facing, word: part, els, k: 1, ceil: sy + HEADER + CLEAR });
+            }
+          }
         }
       }
       return out;
@@ -1154,7 +1244,17 @@ export function PuppeteerStage() {
       const sites = letterSites(ps);
       if (!sites.length) return false;
       const site = sites[Math.floor(Math.random() * sites.length)];
-      const pool = TRICKS.filter((t) => (!forcedTrick || t === forcedTrick) && canTrick(t, site.word, { x: site.at ? site.at.x : site.spot!.x, feet: site.at ? cache[site.at.i].top : site.spot!.y, facing: site.facing, scale: scale * site.k }));
+      const me0 = { x: site.at ? site.at.x : site.spot!.x, feet: site.at ? cache[site.at.i].top : site.spot!.y, facing: site.facing, scale: scale * site.k };
+      // a letter held over his head or stacked must stay clear of the header
+      const clear = (t: Trick) => {
+        if (site.ceil === undefined || (t !== 'carry' && t !== 'stack')) return true;
+        const e = endLettersOf(site.word, site.facing);
+        if (!e) return false;
+        const h = e[0].bottom - e[0].top;
+        const top = t === 'carry' ? me0.feet - 62 * me0.scale - h - 6 : (e[1]?.top ?? e[0].top) - h - 6;
+        return top >= site.ceil;
+      };
+      const pool = TRICKS.filter((t) => (!forcedTrick || t === forcedTrick) && canTrick(t, site.word, me0) && clear(t));
       const w: Partial<Record<Trick, number>> = {};
       for (const t of pool) w[t] = 1;
       const trick = pickVaried(w, trickRecent, Math.random) ?? pool[0];
@@ -1210,7 +1310,7 @@ export function PuppeteerStage() {
     /** The surface under him is going away (or he's nowhere): off it at once, never floating. */
     const leaveNow = (s: State, ps: Seen[], now: number) => {
       if (s.idx >= 0 && cache[s.idx] && !cache[s.idx].nook && ps[s.idx]?.visible && afoot(s.m.mode) && s.m.mode !== 'hopping' && runTo(s, ps, now, 1.6)) return note('hop-off', now);
-      if (teleport(s, now, { ps, why: s.idx < 0 ? 'nowhere' : 'plate-gone' })) return;
+      if (teleport(s, now, { ps, nowhere: s.idx >= 0, why: s.idx < 0 ? 'nowhere' : 'plate-gone' })) return;
       // nowhere on screen to be: he keeps out of sight until there is
       s.hidden = true;
       s.idx = -1;
@@ -1387,11 +1487,12 @@ export function PuppeteerStage() {
         dirty = false;
       }
       const { sx, sy } = viewport();
+      ridePins(sy); // surfaces on pinned plates: where the scroll has them now
       const ps: Seen[] = cache.map((p) => {
         const top = p.top - sy;
         const lx = p.left - sx;
         return {
-          ok: p.el.dataset.printed !== '0' && p.el.dataset.pinned !== '1', // a plate being assembled, taken apart or pinned isn't somewhere to be
+          ok: standable(p.el) && p.el.dataset.printing !== '1', // a plate being assembled or taken apart isn't somewhere to be (a whole pinned one is)
           left: lx,
           pt: { x: lx + p.width * p.f, y: top - FEET * scale * p.k },
           top,
@@ -1606,6 +1707,9 @@ export function PuppeteerStage() {
               s.awayFor = lerp(COME[1], COME[0], s.needs.company) * rand(0.85, 1.15);
               wakeIn(s.awayFor);
               note('away', now);
+            } else if (freshAt > s.awaySince && (freshAt - s.awaySince) / 1000 + 1.2 < s.awayFor) {
+              s.awayFor = (freshAt - s.awaySince) / 1000 + rand(0.5, 1.1); // a plate just came together on screen: he's along in a moment
+              wakeIn(Math.max(0, s.awayFor - (now - s.awaySince) / 1000));
             } else if (now - s.awaySince >= s.awayFor * 1000) {
               s.awaySince = 0;
               comeAlong(s, ps, now);
@@ -1922,7 +2026,8 @@ export function PuppeteerStage() {
           if (!T.swapped) {
             s.k = T.kFrom;
             sz = scale * s.k;
-            s.char = { x: T.fromDoc.x - sx, y: T.fromDoc.y - sy };
+            const ride = T.fromPin ? pinTop(T.fromPin.pin, sy) - T.fromPin.top : 0; // a pinned plate holds still on screen: so does his ink
+            s.char = { x: T.fromDoc.x - sx, y: T.fromDoc.y + ride - sy };
             ink = { k: ph.k, out: true };
           } else {
             s.char = perchPos(s.idx, s.walk.x);
@@ -2369,7 +2474,7 @@ export function PuppeteerStage() {
           get surface() {
             const s = st.current;
             const c = s && s.idx >= 0 ? cache[s.idx] : null;
-            return c ? { id: c.id, nook: c.nook, printed: c.el.dataset.printed ?? null, pinned: c.el.dataset.pinned ?? null } : null;
+            return c ? { id: c.id, nook: c.nook, printed: c.el.dataset.printed ?? null, assembled: c.el.dataset.assembled ?? null, pinned: c.el.dataset.pinned ?? null, top: c.top - viewport().sy } : null;
           },
           get away() {
             const s = st.current;
@@ -2465,11 +2570,12 @@ export function PuppeteerStage() {
       wake();
     });
     // a plate assembled or taken apart: its nooks change (and a perch may come or go)
-    const mo = new MutationObserver(() => {
+    const mo = new MutationObserver((recs) => {
       dirty = true;
+      if (recs.some((r) => r.attributeName === 'data-assembled' && (r.target as HTMLElement).dataset.assembled === '1')) freshAt = performance.now();
       wake();
     });
-    mo.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['data-printed', 'data-printing', 'data-pinned'] });
+    mo.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['data-printed', 'data-assembled', 'data-printing', 'data-pinned'] });
 
     // attention: any real pointer move or tap means the visitor is about (desires.ts `quiet`); only one
     // close to him stops what he's doing on his own and pushes back his next decision
