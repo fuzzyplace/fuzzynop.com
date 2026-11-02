@@ -7,6 +7,7 @@ import { MechArm, type ArmHandle } from './MechArm';
 import { clamp, type Pt } from './geometry';
 import { docTop, measure, onLayout, setAttr, ticker, view, whenIdle } from './ticker';
 import { useSize } from './useSize';
+import { sfx } from '../audio/bus'; // ---- sfx hook ----
 
 /**
  * A paper-cut content plate that shadowy arms assemble as you scroll through it (choreography in
@@ -539,6 +540,7 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
         c.fresh = false;
       } else follow(s, target, dt, { omega: FOLLOW.omega, maxRate: rateFor(p.end, two ? 3 : 2.6) });
 
+      if (sfx.on && s.v !== 0) sfx.plate(p, shown.current.t, s.t); // ---- sfx hook ---- (playback only, not jumps)
       if (s.t !== shown.current.t) {
         if (import.meta.env.DEV) setAttr(o, 'data-asm-t', `${s.t.toFixed(2)}/${p.end.toFixed(2)}`);
         if (s.t <= 0) empty();

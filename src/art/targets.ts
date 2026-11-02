@@ -15,6 +15,7 @@
  * (`isEngaged`); transforms only; under prefers-reduced-motion every write here is a no-op.
  * Layout reads (`queryTargets`, `measureTitle`, `titleMap`) belong in a ticker read phase.
  */
+import { sfx } from '../audio/bus'; // ---- sfx hook ----
 import { mapTitle, type Body, type GlyphBox, type GlyphPose, type MapOpts, type Rect, type TitleMap } from './glyphs';
 
 export type { GlyphPose };
@@ -87,6 +88,7 @@ function fire(el: Element, kind: string, dir: number, win: boolean) {
   if (win) el.setAttribute('data-poked-win', '');
   else el.removeAttribute('data-poked-win');
   el.setAttribute('data-poked', el.getAttribute('data-poked') === 'a' ? 'b' : 'a');
+  if (sfx.on) sfx.poke(kind, win); // ---- sfx hook ----
 }
 
 /**
@@ -214,6 +216,7 @@ export function pokeGlyph(key: string, fx: GlyphFx, dir: number = 1): boolean {
   el.setAttribute('data-poked-kind', fx);
   el.setAttribute('data-poked', el.getAttribute('data-poked') === 'a' ? 'b' : 'a');
   release(el, 1200); // the longest glyph keyframes (global.css) plus slack
+  if (sfx.on) sfx.poke(fx, false); // ---- sfx hook ----
   return true;
 }
 

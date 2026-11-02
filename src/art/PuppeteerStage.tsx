@@ -19,6 +19,7 @@ import { createRagdoll, primeRagdoll, stepRagdoll, type RagPose, type Ragdoll } 
 import { onLayout, setAttr, ticker, view as viewport } from './ticker';
 import { TrustLine, type TrustLineHandle } from './TrustLine';
 import { createStunt, type StuntView } from './stuntDriver'; // ---- stunt hook ----
+import { sfx } from '../audio/bus'; // ---- sfx hook ----
 import {
   FAR,
   FULL,
@@ -596,6 +597,7 @@ export function PuppeteerStage() {
     let lingerTimer = 0;
     const events: { k: string; t: number }[] = []; // dev: what he did and when (reactions, turning points)
     const note = (k: string, now: number) => {
+      if (sfx.on) sfx.note(k); // ---- sfx hook ----
       if (!import.meta.env.DEV) return;
       events.push({ k, t: Math.round(now) });
       if (events.length > 200) events.shift();
@@ -2521,6 +2523,7 @@ export function PuppeteerStage() {
       const pivot = Math.abs(s.swing) > 1e-4;
       setAttr(tiltRef.current, 'transform', pivot ? `rotate(${(s.swing * 180) / Math.PI} ${collar.x} ${collar.y})` : null);
       charRef.current?.set(s.char.x, s.char.y, sz, pose);
+      if (sfx.on) sfx.puppet(mode, s.char.x, s.char.y, s.hidden, s.band, s.patting, pose); // ---- sfx hook ----
       // black on black (an ink plate's insides, the footer): a soft fog patch behind him (fades in CSS)
       const here = s.idx >= 0 ? cache[s.idx] : undefined;
       const fog = fogRef.current;

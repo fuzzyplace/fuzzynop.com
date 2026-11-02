@@ -1,6 +1,7 @@
 import { useImperativeHandle, useLayoutEffect, useRef, type Ref } from 'react';
 import { hexPoints, solveIK, type Pt } from './geometry';
 import { setAttr } from './ticker';
+import { sfx } from '../audio/bus'; // ---- sfx hook ----
 
 /**
  * Biomechanical arm: spider-leg segments (tapered, barbed, sinew cables) on machined hex joints.
@@ -116,6 +117,7 @@ export function MechArm({ l1, l2, t, tool = 'nozzle', toolLen = t * 3.4, rail, t
         const { elbow, wrist, shoulder, forearm } = solveIK(base, wristTarget, l1, l2, bend);
         const tipDraw = { x: wrist.x, y: wrist.y + toolLen };
         setAttr(el.root, 'display', null);
+        if (sfx.on && el.root) sfx.arm(el.root, tip.x, tip.y); // ---- sfx hook ----
 
         if (rail) {
           setAttr(el.railLine, 'y1', railY);

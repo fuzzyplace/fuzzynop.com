@@ -9,6 +9,7 @@ import { Cta } from './components/ui';
 import { contact, elsewhere, future, nav, past, present, site, ui, vibe } from './content/site';
 import { tie, tieTitle } from './content/typeset';
 import { Hero } from './sections/Hero';
+import { Sound } from './audio/Sound'; // ---- sfx hook ----
 
 /*
  * Composition: fog-lit stage, ink silhouettes at three depths, paper-cut plates printed by
@@ -29,6 +30,7 @@ export default function App() {
             {ui.mark}
             <span className="sr-only"> {ui.markName}</span>
           </a>
+          <Sound />{/* ---- sfx hook ---- the toggle takes the free space between the mark and the nav */}
           <nav aria-label={ui.primaryNav}>
             <ul className="flex gap-4 md:gap-8">
               {nav.map((n) => (
