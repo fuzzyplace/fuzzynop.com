@@ -28,6 +28,7 @@ type Props = {
   toolLen?: number;
   rail?: { x1: number; x2: number };
   tether?: boolean; // a cable from the rail (pose.railY) straight down to the shoulder: the arm hangs from a trolley
+  rim?: boolean; // a thin gray rim round the moving parts (v2.9: so a claw reads over a black ink sheet)
   ref?: Ref<ArmHandle>;
 };
 
@@ -74,7 +75,7 @@ function placeJoint(els: JointEls, p: Pt, r: number) {
   }
 }
 
-export function MechArm({ l1, l2, t, tool = 'nozzle', toolLen = t * 3.4, rail, tether = false, ref }: Props) {
+export function MechArm({ l1, l2, t, tool = 'nozzle', toolLen = t * 3.4, rail, tether = false, rim = false, ref }: Props) {
   const nuts = rail ? Math.max(2, Math.floor((rail.x2 - rail.x1) / 90)) : 0;
   const el = useRef({
     root: null as SVGGElement | null,
@@ -198,7 +199,7 @@ export function MechArm({ l1, l2, t, tool = 'nozzle', toolLen = t * 3.4, rail, t
       )}
 
       {/* moving parts: own filter region (the arm's bbox, not the full-width rail) */}
-      <g filter="url(#ink)">
+      <g filter={rim ? 'url(#ink-rim)' : 'url(#ink)'}>
         {/* loose cables, base → wrist, sagging */}
         <path ref={(e) => void (el.cableA = e)} className="stroke-ink" fill="none" strokeWidth={cw} />
         <path ref={(e) => void (el.cableB = e)} className="stroke-ink" fill="none" strokeWidth={cw * 0.8} />

@@ -2456,8 +2456,8 @@ export function PuppeteerStage() {
         if (fog.style.opacity !== op) fog.style.opacity = op;
         setAttr(fog, 'cx', s.char.x.toFixed(1));
         setAttr(fog, 'cy', (s.char.y - 9 * sz).toFixed(1));
-        setAttr(fog, 'rx', (30 * sz).toFixed(1));
-        setAttr(fog, 'ry', (44 * sz).toFixed(1));
+        setAttr(fog, 'rx', (36 * sz).toFixed(1));
+        setAttr(fog, 'ry', (50 * sz).toFixed(1));
       }
     };
     const loop = ticker.loop(frame);
@@ -2815,8 +2815,9 @@ export function PuppeteerStage() {
       <svg className="pointer-events-none fixed inset-0 z-30 h-full w-full overflow-visible" viewBox={`0 0 ${vp.w} ${vp.h}`} aria-hidden="true">
         <defs>
           <radialGradient id="char-fog">
-            <stop offset="0%" className="char-fog-stop" stopOpacity="0.5" />
-            <stop offset="55%" className="char-fog-stop" stopOpacity="0.22" />
+            <stop offset="0%" className="char-fog-stop" stopOpacity="0.42" />
+            <stop offset="45%" className="char-fog-stop" stopOpacity="0.2" />
+            <stop offset="75%" className="char-fog-stop" stopOpacity="0.07" />
             <stop offset="100%" className="char-fog-stop" stopOpacity="0" />
           </radialGradient>
         </defs>

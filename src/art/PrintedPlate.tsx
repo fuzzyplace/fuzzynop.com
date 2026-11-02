@@ -595,10 +595,10 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
               ))}
             </g>
             <g ref={armG[1]} display="none">
-              <MechArm ref={armRef[1]} l1={l} l2={l} t={t * 0.9} tool="claw" toolLen={toolLen * 0.92} tether />
+              <MechArm ref={armRef[1]} l1={l} l2={l} t={t * 0.9} tool="claw" toolLen={toolLen * 0.92} tether rim={tone === 'ink'} />
             </g>
             <g ref={armG[0]} className="plate-arm" style={{ transformOrigin: `${parkBase.x}px ${parkBase.y}px` }}>
-              <MechArm ref={armRef[0]} l1={l} l2={l} t={t} tool="claw" toolLen={toolLen} rail={{ x1: SIDE - 22, x2: SIDE + w + 22 }} tether />
+              <MechArm ref={armRef[0]} l1={l} l2={l} t={t} tool="claw" toolLen={toolLen} rail={{ x1: SIDE - 22, x2: SIDE + w + 22 }} tether rim={tone === 'ink'} />
             </g>
           </svg>
         )}

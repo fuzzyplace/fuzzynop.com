@@ -297,6 +297,8 @@
 .plate-anchor { position: absolute; width: 24px; height: 24px; pointer-events: none; }
 .plate-anchor--edge { left: 0; right: 0; top: 0; width: auto; height: 12px; }
 .plate-arm { transform-box: view-box; }
+/* v2.9: the rim round an arm working over a black (ink) sheet (ArtDefs #ink-rim): gray, never orange */
+.ink-rim-flood { flood-color: var(--md-ref-gray-600); }
 /* the CTA's door frame: layout-neutral around the one control; the recess behind it exists only
    once a probe has won (no box at rest: a transformed layer inside the plate would change how the
    plate rasterizes) and shows only while the door swings open */
