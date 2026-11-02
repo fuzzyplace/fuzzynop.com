@@ -62,15 +62,40 @@ const SHEET_DOWN = 0.6;
 
 /** In-page jumps (nav links, hash changes): plates show where the scroll lands without playing. */
 let jumpUntil = 0;
+/** The plate id a jump is going to: that plate shows whole when it lands, even mid-pin (tall plates). */
+let jumpTarget: string | null = null;
 let jumpWired = false;
+const hashId = (h: string) => {
+  try {
+    return h.length > 1 ? decodeURIComponent(h.slice(1)) : null;
+  } catch {
+    return null;
+  }
+};
+/**
+ * A deep link (#past etc.) on page load: the browser looks for the id before React has rendered it
+ * and never tries again, so the plate whose id it is lands it once its anchor is placed.
+ */
+let pendingHash: string | null = typeof location === 'undefined' ? null : hashId(location.hash);
+const jumpTo = (id: string | null) => {
+  jumpUntil = performance.now() + 1600;
+  jumpTarget = id;
+};
 const wireJumps = () => {
   if (jumpWired) return;
   jumpWired = true;
-  const jump = () => void (jumpUntil = performance.now() + 1600);
   document.addEventListener('click', (e) => {
-    if ((e.target as Element | null)?.closest?.('a[href^="#"]')) jump();
+    const a = (e.target as Element | null)?.closest?.('a[href^="#"]');
+    if (a) jumpTo(hashId(a.getAttribute('href') ?? ''));
   });
-  window.addEventListener('hashchange', jump);
+  window.addEventListener('hashchange', () => jumpTo(hashId(location.hash)));
+};
+/** Land a deep link on this plate's anchor (once per page load). */
+const landHash = (id: string | undefined, el: HTMLElement | null) => {
+  if (!id || !el || pendingHash !== id) return;
+  pendingHash = null;
+  jumpTo(id);
+  el.scrollIntoView({ behavior: 'instant' as ScrollBehavior, block: 'start' });
 };
 
 type Props = {
@@ -113,7 +138,7 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
   const st = useRef({ t: 0, v: 0 });
   const shown = useRef<{ t: number; state: 'wait' | 'run' | 'done' | '' }>({ t: NaN, state: '' });
   const groupKey = useRef<string[]>([]); // per group: last write ('h' hidden, 'p' placed, 'm' moving)
-  const ctl = useRef({ lastSy: NaN, dir: 1 as 1 | -1, moved: 0, held: NaN, force: false, fresh: true });
+  const ctl = useRef({ lastSy: NaN, dir: 1 as 1 | -1, moved: 0, held: NaN, force: false, fresh: true, jumped: false, jumpSy: 0 });
   // The plate's art (torn cut-out paths, the arms overlay) is built lazily: when the main thread is
   // idle after the first paint, one plate per idle period, or at once (before the frame paints) when
   // the plate comes near the screen. Until then it's unassembled (hidden) below the fold.
@@ -375,12 +400,16 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
     }
     if (reduce) {
       finish();
+      shown.current.t = NaN; // if motion comes back on, the loop repaints from the scroll position
+      ctl.current.fresh = true;
       setAttr(outer.current, 'data-printed', '1');
       setAttr(outer.current, 'data-assembled', '1');
       setAttr(outer.current, 'data-sheet', '1');
       setAttr(outer.current, 'data-pinned', null);
       outer.current?.style.removeProperty('top');
       setAttr(anchor.current, 'style', null);
+      const a = anchor.current;
+      if (pendingHash && pendingHash === id) requestAnimationFrame(() => landHash(id, a));
       return;
     }
     if (shown.current.state === '') {
@@ -443,6 +472,7 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
       if (o && o.style.top !== top$) o.style.top = top$;
       // the id lands where the plate is assembled (short plates: the scroll ends at the pin's end) or at its top (tall ones)
       setAttr(anchor.current, 'style', `top:${(stick >= TOP ? pinLen - stick + SCROLL_PAD : 0).toFixed(0)}px`);
+      landHash(id, anchor.current);
       // v2.9: a plate taller than the view places most of itself while it scrolls in: a shorter pin (global.css)
       setAttr(track.current, 'data-tall', stick < TOP ? '1' : null);
       const pinned = pinLen > 0 && v.sy >= pinStart && v.sy < pinEnd;
@@ -472,6 +502,15 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
         keys.current = { k: scrollKeys(p, { s0, sheet, pinStart, pinEnd, ready, tall: stick < TOP }), key: geoKey };
       }
       const c = ctl.current;
+      // a jump to this plate shows it whole where it lands (a tall plate's anchor is its top, mid-assembly);
+      // it plays again once the reader scrolls back up from there
+      if (now < jumpUntil && id && jumpTarget === id) {
+        if (!c.jumped) c.jumped = c.force = true;
+        c.jumpSy = v.sy;
+      } else if (c.jumped && now >= jumpUntil && v.sy < c.jumpSy - 40) {
+        c.jumped = c.force = false;
+        c.fresh = true;
+      }
       // direction + idle
       if (Number.isNaN(c.lastSy)) c.lastSy = v.sy;
       const dy = v.sy - c.lastSy;
@@ -555,7 +594,7 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
         }}
         onBlur={(e) => {
           if (outer.current?.contains(e.relatedTarget as Node | null)) return;
-          ctl.current.force = false;
+          ctl.current.force = ctl.current.jumped = false;
           ctl.current.fresh = true; // back to where the scroll is, without playing
           wake.current?.();
         }}
