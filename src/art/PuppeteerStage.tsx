@@ -2,15 +2,19 @@ import { useReducedMotion } from './reducedMotion';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Character, STRIDE, type Action, type CharacterHandle, type Pose } from './Character';
 import { choosePoi, collectPois, remember, type Poi, type Scene, type SceneSurface } from './explore';
-import { KICK, QUIET, SIT_FOR, decideIdle, idleDelay, kickAt, kickDelay, type Fidget } from './idle';
+import { KICK, SIT_FOR, kickAt, kickDelay, pickFidget, type Fidget } from './idle';
 import { noteRecent, pickVaried } from './moodVariety';
 import { ACT_DUR, FLIP, TAP_AT, TAP_HOP, TURN, type AnyAction } from './poses';
 import { createProbeDriver, type Cursor, type SeenLike } from './probeDriver'; // ---- probe hook ----
-import { holdSpot } from './hold';
 import { MechArm, type ArmHandle } from './MechArm';
 import { clamp, easeInOut, lerp, type Pt } from './geometry';
 import { LIMITS, planRoute, sampleMove, type Move, type Surface } from './navigate';
-import { afoot, free, held, initial, own, transition, type Ev, type Machine, type Plan } from './puppet-machine';
+import { PRESS, afoot, free, held, initial, own, transition, type Ev, type Machine } from './puppet-machine';
+import { START as NEEDS0, WHIM_GAP, choose, grow, nextIn, satisfy, type Activity, type Cursor as BrainCursor, type Needs } from './desires';
+import { INSIDE, freeSpaces, type Rect as Box } from './interior';
+import { canTrick, lettersAt, meAt, planTrick, TRICKS, type LBox, type LetterProgram, type Trick } from './letterPlay';
+import { chooseDest, hopPhase, startHop, type Hop, type Spot } from './teleport';
+import { resetGlyphs, setGlyph, titleEl, titleMap } from './targets';
 import { createRagdoll, primeRagdoll, stepRagdoll, type RagPose, type Ragdoll } from './ragdoll';
 import { onLayout, setAttr, ticker, view as viewport } from './ticker';
 import { TrustLine, type TrustLineHandle } from './TrustLine';
@@ -41,32 +45,37 @@ import {
 import { WALK, clampTo, lookAngle, perchExtent, settledWalk, stepWalk, type Extent, type WalkState } from './walk';
 
 /**
- * A ceiling-rail arm that handles the character. Perches = elements with [data-perch] (fraction
- * along their top edge where he's set down); optional [data-perch-span] = px half-width he may
- * walk. A plate only becomes a perch once it's printed ([data-printed="1"]).
+ * The ink character of Z, an agent of his own on the page (v2.7). He's an overlay: the scroll moves
+ * and assembles the page; he lives on it. Surfaces = elements with [data-perch] (a plate only once
+ * it's assembled, [data-printed="1"]; optional [data-perch-span] = px half-width he may walk) plus the
+ * free space inside each assembled paper plate (interior.ts nooks: margins, the room beside a short
+ * line, beside the circuit tree, after a title), where he's drawn smaller, further into the paper.
  *
- * Behaviour is an explicit state machine (`puppet-machine.ts`):
- *   idle ⇄ walking → grabbed → carried | dragged → landing → idle, plus dangling with no perch.
- * - On a perch he walks toward the pointer's x (mouse: live; touch: last tap).
- * - Edge reset: pointer beyond the perch and he's stuck at its end for a beat → the claw takes
- *   him by the collar and sets him back near the middle; he then waits until the pointer comes
- *   back over his perch (or a few seconds pass) before following again.
- * - Idle relocation: 8–15 s without a big pointer move → the claw carries him to another visible
- *   perch, gives him a short dangle tour, or drags him along the surface, feet scraping.
- * - Scroll: carried to the perch nearest the reading line.
+ * Behaviour is an explicit state machine (`puppet-machine.ts`). The claw on the ceiling rail exists
+ * for one thing only: the visitor pressing on him. It drops in, grabs his collar, follows the pointer
+ * (he hangs as a ragdoll, ragdoll.ts); let go and he falls onto the surface below (or the nearest),
+ * lands, and the claw goes back up out of sight. Nothing else ever puts him in the claw.
+ *
+ * He gets about on his own: walks, runs, jumps, climbs and drops between surfaces (navigate.ts), and
+ * teleports (teleport.ts): he runs off into ink drops and gathers himself somewhere else, then shakes
+ * himself off. He teleports when there's no way on foot, when he's been off screen a few seconds and
+ * wants company, when the surface under him is going (a plate taken apart as you scroll back up), to
+ * slip in and out of a plate, and now and then on a whim (≥ 20 s apart).
+ * - Scroll: he doesn't follow it. He stays where he is (and so may leave the screen), then decides to
+ *   come along: runs / jumps if it's close, teleports if it isn't (desires.ts company decides how soon).
+ * - What he does is chosen by his needs (desires.ts): curiosity (explore, slip inside a plate and poke
+ *   about), mischief (probes, letter play), company (go to the visitor, greet, sit near), show-off (the
+ *   title stunt, a vanishing act), rest (sit, nap, watch). Never the same thing twice in a row.
+ * - Letter play (letterPlay.ts): beside a title word he picks a letter up and carries it a step, swaps
+ *   two, nudges the word crooked, stacks one on another or spins one; always puts it right in 3-6 s.
+ * - On a surface he walks toward the pointer's x when it's near him (mouse: live; touch: last tap).
  * - Pointer buzzing close round him (mouse): he backs off and swats at it like a fly.
- * - Pressing on him: the claw picks him up and follows the pointer; he hangs from the collar as a
- *   ragdoll (ragdoll.ts). Let go and he falls onto the printed perch below (or the nearest one).
  * - Pointer resting over another printed plate: he makes his own way there — walk, jump, climb,
- *   drop (navigate.ts) — if he can; otherwise he stays put and the claw may move him later.
- * - Left alone (idle.ts): he fidgets — looks round, scratches his head, shifts his weight, pushes his
- *   glasses up, crouches, looks up at the claw. Once the pointer's been quiet a few seconds he
- *   explores (explore.ts): picks a point of interest (another perch, a plate's edge, a hung stone, an
- *   ink splatter, a plate being printed, a heading), makes his way there and does something with it —
- *   peeks over the edge, hops up and taps the stone so it swings, crouches over the ink, watches the
- *   arm print, stands beside the heading. After a few finds he sits on an edge, legs dangling. Any
- *   pointer move, tap or scroll and he drops it and attends to you. The claw's idle relocation is now
- *   one of the things that can happen when he's left alone, not the default.
+ *   drop (navigate.ts) — if he can.
+ * - Fidgets (idle.ts): looks round, scratches his head, shifts his weight, pushes his glasses up,
+ *   crouches. Explore finds (explore.ts): peeks over a plate's edge, hops up and taps a hung stone so it
+ *   swings, crouches over ink, watches an arm assemble a plate, stands beside a heading, sits on edges
+ *   with his legs dangling. The pointer coming close and he drops it and attends to you.
  * - Turns are an instant flip of facing sold by a short pivot (poses.ts `turnPose`), never a squash.
  * - A plate's print arm swinging close past him: he ducks.
  * - Trust (trust.ts): he starts wary of the pointer (keeps his distance, swats, glances round). A calm,
@@ -82,33 +91,35 @@ import { WALK, clampTo, lookAngle, perchExtent, settledWalk, stepWalk, type Exte
  * - Turning points: crossing into tolerant / warm he stops dead, a beat, tilts his head at the pointer,
  *   then takes one deliberate step toward it. Losing trust (rough, chasing, a swat) makes him flinch.
  * - A pat: the pointer resting / drifting just over his head and he pushes up into it. Wary, he ducks
- *   away the first time and accepts the second. Set down somewhere new while he trusts you, he greets
- *   you. Touch: gentle taps near him and staying on a section build trust. Thinking tells: a glance
+ *   away the first time and accepts the second. Arriving somewhere new under his own steam (a run to
+ *   catch up, a teleport) while he trusts you, he greets you. Touch: gentle taps near him and staying
+ *   on a section build trust. Thinking tells: a glance
  *   at where he's going before he sets off, blink-like dips, nothing twice in a row (moodVariety.ts).
  *
- * Perch rects are cached in document space; a frame does no layout reads (choosing a point of
- * interest measures decor once, every few seconds at most). The loop sleeps once he's idle and
- * settled — sitting still counts — and timers wake it for the next fidget / kick / decision; scroll,
- * layout, print-state and pointer input wake it too.
+ * Perch rects (and plate nooks) are cached in document space, re-measured on layout and assembly
+ * changes; a frame does no layout reads (choosing what to do measures once, every few seconds at
+ * most). The loop sleeps once he's idle and settled — sitting still counts — and timers wake it for
+ * the next decision, kick or come-along; scroll, layout, print-state and pointer input wake it too.
  *
  * Loaded on demand: `Puppeteer` (Puppeteer.tsx) mounts this after the first paint, when the main
  * thread goes idle, so the hero's text paints first.
  */
-const TRANSIT = 1.25; // s, scroll carry
-const GRAB = 0.32; // s for the claw to close on his collar
-const LAND = 0.3; // s for it to let go
-const EDGE_BEAT = 0.7; // s stuck at an edge before the claw says no
-const FOLLOW_HOLD = 5; // s max he ignores the pointer after an edge reset
 const BIG_MOVE = 48; // px of pointer travel that counts as attention
 const FEET = 26; // character units from origin to feet
 const COLLAR = { x: -4, y: -12 };
 const MARGIN = 36; // px kept clear at each end of a perch
 const LOOK = 1.8; // s he keeps glancing at the pointer after it last moved
-const HOVER = 70; // px from him where the idle claw hangs
 const PESTER = 60; // px: pointer this close round him and he swats at it
 const SWAT = 0.42; // s per swat
 const DWELL = 0.7; // s the pointer rests over another plate before he sets off for it
-const GRAB_HAND = 0.16; // s: the claw snaps onto him when you press
+const GRAB_HAND = 0.22; // s: the claw drops in and closes on him when you press
+const CLAW_UP = 0.55; // s: after it lets go, the claw goes back up out of sight
+const COME: [number, number] = [1.4, 4.2]; // s off screen before he comes along (strong company need → the short end)
+const RUN = 2.6; // running vs. his walking pace (catching up)
+const RUN_MAX = 2.8; // s: a catch-up run longer than this and he teleports instead
+const NEAR_HIM = 220; // px: the pointer this close and his own whims stop (he attends to you)
+const NAP: [number, number] = [9, 18]; // s lying down
+const INSIDE_PAD = 6; // px he keeps from words inside a plate
 const GRAVITY = 2200; // px/s², falls
 const HEADER = 64; // px of fixed header at the top of the viewport
 const TALL = 70; // character units from the top of his head (hair) to his feet
@@ -116,7 +127,7 @@ const CLEAR = 12; // px kept between the header and the top of his head
 const ATTEND = 6; // px of pointer travel that means the user is around (his own whims stop)
 const EXPLORE_PACE = 0.72; // exploring walk speed vs. his usual
 const SIT_REST = 2.5; // s the pointer rests beside him (fully trusted) before he sits down by it
-const SIT_BESIDE: [number, number] = [40, 70]; // s he stays sat by it if it doesn't move
+const SIT_BESIDE: [number, number] = [20, 40]; // s he stays sat by it if it doesn't move
 const FACE_GAP = 0.7; // s after an about-face before he turns to the pointer again
 const NODE_LIT = 1.6; // s a circuit node's trace stays lit after he taps the edge above it
 const NODE_TAP = 0.45; // progress of his crouch at which his hand meets the edge
@@ -138,7 +149,7 @@ const POSTURE: Record<Band, { hunch: number; open: number }> = {
   tolerant: { hunch: 0, open: 0.5 },
   warm: { hunch: 0, open: 1 },
 };
-/** Greetings when he's set down somewhere new and trusts you (picked without repeats). */
+/** Greetings when he's arrived somewhere new and trusts you (picked without repeats). */
 const GREET: Record<string, Action[]> = { wave: ['wave'], hop: ['hop', 'wave'], tilt: ['tilt', 'wave'], up: ['hop', 'lookUp'] };
 const GREET_W = { wave: 1.4, hop: 1, tilt: 0.8, up: 0.7 };
 /** What he does after the step at a turning point into warm. */
@@ -155,21 +166,49 @@ type Act = {
   then?: (now: number) => void; // what happens when it ends
 };
 
+/** He's on his way somewhere by ink: where to, and what then. */
+type Tele = {
+  hop: Hop;
+  fromDoc: Pt; // where he was (document px, his origin)
+  kFrom: number;
+  to: { id: string; x: number } | null; // perch id + x along it (null: resolved when he re-forms)
+  poi: Poi | null; // a probe / activity goal on arrival
+  then: ((now: number) => void) | null;
+  greet: boolean;
+  swapped: boolean; // passed the gap: he's at the destination now
+  shook: boolean;
+  why: string;
+};
+/** Letter play under way. */
+type Letters = { prog: LetterProgram; word: LBox[]; els: Map<string, HTMLElement>; me: { x: number; feet: number; facing: 1 | -1; scale: number }; t0: number; x0: number };
+
 type State = {
   m: Machine;
   char: Pt;
-  from: Pt; // where the current carry / drag started (screen)
-  fromX: number; // drag start offset along the perch
-  dur: number; // s, current carry / drag
-  lift: number; // px above the higher end the carry arcs to
-  idx: number; // perch he stands on (or is headed to while carried), -1 = held in the air
-  placedBest: number; // reading-line perch when he was last placed (scroll carry only fires when it changes)
+  idx: number; // perch / nook he stands on (or is headed to), -1 = nowhere (off the page, in your hand)
+  pid: string; // that perch's id (survives re-measuring)
+  k: number; // his size factor (1 outside, INSIDE in a plate)
   grip: number;
   swing: number;
   swingV: number;
   baseX: number;
   hoverX: number;
   bend: 1 | -1;
+  claw: number; // 0..1 how far the claw has come down (only for a press)
+  clawUpAt: number; // ms it let go (it goes back up)
+  tele: Tele | null;
+  awaySince: number; // ms he went off screen (0 = he's on it)
+  awayFor: number; // s he'll stay away before coming along
+  needs: Needs;
+  needsAt: number;
+  did: Activity[]; // what he chose lately, most recent first
+  doing: Activity | null;
+  whimAt: number; // ms of his last teleport on a whim
+  stuntAt: number; // ms he last played the title stunt
+  stuntAsk: number; // ms he asked for it (0 = not waiting)
+  letters: Letters | null;
+  lying: boolean;
+  dx: number; // px he's stepped off his spot during letter play
   facing: 1 | -1;
   walk: WalkState; // x = offset from the perch's left edge
   anchored: boolean; // still where he was set down (follows the perch point if layout shifts)
@@ -180,9 +219,8 @@ type State = {
   turnHop: boolean;
   tilt: number; // head tilt, rad
   squash: number;
-  edgeSince: number; // when he got stuck at an edge with the pointer beyond it (0 = not)
-  holdUntil: number; // after an edge reset he ignores the pointer until this time (or it returns)
-  idleAt: number; // when he (or the claw) next decides what to do with himself
+  holdUntil: number; // after a landing he catches his breath, ignoring the pointer until this time
+  idleAt: number; // when he next decides what to do with himself
   rd: Ragdoll | null; // limbs hang loose while held by hand / falling
   rag: RagPose | null;
   ragW: number; // 0..1 blend of the ragdoll pose (eases out after he lands)
@@ -234,16 +272,41 @@ type State = {
   stepGoal: number | null; // a deliberate step: walk.x he's stepping to
   afterStep: ((now: number) => void) | null;
   slowUntil: number; // following at a careful pace until then
-  greetAt: number; // set down somewhere new: greet the visitor then (0 = no)
+  greetAt: number; // arrived somewhere new: greet the visitor then (0 = no)
+  hidden: boolean; // nowhere on screen to be: out of sight until there is
+  run: boolean; // his current route is a run (catching up)
+  lwalk: boolean; // stepping during letter play
   pending: { poi: Poi; route: Move[] } | null; // where he's going once he's had a look (a glance first)
   reacts: string[]; // recent reactions (greetings, flourishes), for no repeats
 };
 /** A fall in document px: start, initial velocity, landing (char origin), duration. */
 type Fall = { x0: number; y0: number; vx: number; vy: number; x1: number; y1: number; T: number; to: number };
-type Perch = { el: HTMLElement; left: number; top: number; width: number; height: number; f: number; ext: Extent; ledge: boolean };
+/**
+ * A surface (document px). `nook`: free space inside a plate (he's `k` = INSIDE there, reached by
+ * teleport only, never part of a walking route); `spot`: a one-off standing place (beside a probe
+ * target inside a plate, on the title for letter play). `host`: index of the plate a nook belongs to.
+ */
+type Perch = {
+  el: HTMLElement;
+  id: string;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  f: number;
+  ext: Extent;
+  ledge: boolean;
+  k: number;
+  nook: boolean;
+  spot: boolean;
+  host: number;
+  wall: -1 | 0 | 1;
+  lie: boolean;
+  title: boolean;
+};
 type Pointer = { x: number; y: number; t: number };
 /** A perch as seen this frame (viewport px). */
-type Seen = { ok: boolean; left: number; pt: Pt; top: number; visible: boolean; bottom: number };
+type Seen = { ok: boolean; left: number; pt: Pt; top: number; visible: boolean; onX: boolean; bottom: number };
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
@@ -255,6 +318,8 @@ export function PuppeteerStage() {
   const charRef = useRef<CharacterHandle>(null);
   const armRef = useRef<ArmHandle>(null);
   const tiltRef = useRef<SVGGElement>(null);
+  const hideRef = useRef<SVGGElement>(null);
+  const armWrap = useRef<SVGGElement>(null);
   const lineRef = useRef<TrustLineHandle>(null);
   const tr = useRef<Trust | null>(null); // survives resizes / the effect re-running
   const lineShown = useRef(false);
@@ -271,29 +336,93 @@ export function PuppeteerStage() {
     if (!vp.w) return;
     const scale = vp.w < 700 ? 1.3 : 1.85;
     const cfg = { ...WALK, cycle: 2 * STRIDE * scale }; // distance per gait cycle that keeps the planted foot still
-    const reach = (FEET - COLLAR.y) * scale; // collar → feet, px
     // a perch is only somewhere to put him if all of him fits below the fixed header: its top (his
     // feet) at least his full height plus a margin under it. Every placement goes through `visible`.
-    const headroom = HEADER + CLEAR + TALL * scale;
+    const headroomK = (k: number) => HEADER + CLEAR + TALL * scale * k;
+    const kIn = INSIDE;
+    const szIn = scale * kIn;
     let cache: Perch[] = [];
+    let spots: Perch[] = []; // one-off standing places (beside a probe target, on the title)
     const home = (i: number) => clampTo(cache[i].width * cache[i].f, cache[i].ext);
+    /** What a reader needs inside a plate (document px): its lines of text, its controls and badges. */
+    const plateText = (el: HTMLElement, sx: number, sy: number): { text: Box[]; titles: Box[] } => {
+      const text: Box[] = [];
+      const range = document.createRange();
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        if (!n.textContent?.trim()) continue;
+        range.selectNodeContents(n);
+        for (const r of range.getClientRects()) if (r.width > 1 && r.height > 1) text.push({ left: r.left + sx, right: r.right + sx, top: r.top + sy, bottom: r.bottom + sy });
+      }
+      el.querySelectorAll('a, button, svg, img, [data-poke="spin"], [data-poke="rattle"], [data-poke="tug"]').forEach((c) => {
+        if (c.closest('.plate-arm') || c.closest('[aria-hidden="true"].pointer-events-none')) return; // the plate's own arm overlay
+        const r = c.getBoundingClientRect();
+        if (r.width > 1 && r.height > 1 && r.width < el.clientWidth * 0.95) text.push({ left: r.left + sx, right: r.right + sx, top: r.top + sy, bottom: r.bottom + sy });
+      });
+      const titles: Box[] = [];
+      el.querySelectorAll('h2').forEach((h) => {
+        range.selectNodeContents(h);
+        for (const r of range.getClientRects()) if (r.width > 1) titles.push({ left: r.left + sx, right: r.right + sx, top: r.top + sy, bottom: r.bottom + sy });
+      });
+      return { text, titles };
+    };
     const measure = () => {
       const { sx, sy } = viewport();
       const s = st.current;
       const prev = s && s.idx >= 0 ? cache[s.idx] : undefined;
-      cache = Array.from(document.querySelectorAll<HTMLElement>('[data-perch]')).map((el) => {
+      const base: Perch[] = Array.from(document.querySelectorAll<HTMLElement>('[data-perch]')).map((el, i) => {
         const r = el.getBoundingClientRect();
         const f = parseFloat(el.dataset.perch ?? '0.5');
         const half = parseFloat(el.dataset.perchSpan ?? '');
         const ext = perchExtent(r.width, MARGIN, half > 0 ? { center: r.width * f, half } : undefined);
-        return { el, left: r.left + sx, top: r.top + sy, width: r.width, height: r.height, f, ext, ledge: el.dataset.ledge !== undefined };
+        return { el, id: el.id || `p${i}`, left: r.left + sx, top: r.top + sy, width: r.width, height: r.height, f, ext, ledge: el.dataset.ledge !== undefined, k: 1, nook: false, spot: false, host: -1, wall: 0, lie: false, title: false };
       });
-      // the perch he stands on resized (window resize, late layout): keep his place on it proportionally
-      const now = s && s.idx >= 0 ? cache[s.idx] : undefined;
-      if (s && now) {
-        const x = s.anchored ? now.width * now.f : prev && prev.el === now.el && prev.width > 0 ? (s.walk.x * now.width) / prev.width : s.walk.x;
+      // the free space inside each assembled paper plate (an ink plate would swallow his silhouette)
+      const nooks: Perch[] = [];
+      base.forEach((c, i) => {
+        if (c.el.dataset.printed !== '1' || c.el.dataset.printing === '1' || !c.el.querySelector('.plate-face.plate-paper')) return;
+        const face = c.el.querySelector<HTMLElement>('.plate-face') ?? c.el;
+        const fr = face.getBoundingClientRect();
+        const plate = { left: fr.left + sx, right: fr.right + sx, top: fr.top + sy, bottom: fr.bottom + sy };
+        const { text, titles } = plateText(face, sx, sy);
+        const found = freeSpaces(plate, text, { inset: 14, pad: INSIDE_PAD, w: 30 * szIn, h: (TALL + 3) * szIn, lieW: 76 * szIn, titles });
+        found.forEach((n, j) => {
+          const width = n.right - n.left;
+          nooks.push({ el: c.el, id: `${c.id}:n${Math.round(n.left - plate.left)}:${Math.round(n.y - plate.top)}`, left: n.left, top: n.y, width, height: 0, f: 0.5, ext: { lo: 0, hi: width }, ledge: false, k: kIn, nook: true, spot: false, host: i, wall: n.wall, lie: n.lie, title: n.title });
+          void j;
+        });
+      });
+      cache = [...base, ...nooks, ...spots];
+      if (!s) return;
+      // keep him on the same surface (by id), or the nearest nook in the same plate
+      let i = cache.findIndex((c) => c.id === s.pid);
+      if (i < 0 && prev?.nook) {
+        const me = { x: prev.left + s.walk.x, y: prev.top };
+        let best = Infinity;
+        cache.forEach((c, j) => {
+          if (!c.nook || c.el !== prev.el) return;
+          const d = Math.hypot(c.left + clamp(me.x - c.left, 0, c.width) - me.x, c.top - me.y);
+          if (d < best && d < 60) {
+            best = d;
+            i = j;
+          }
+        });
+      }
+      if (s.idx >= 0 || s.tele) s.idx = i;
+      // the surface he stands on resized (window resize, late layout): keep his place on it proportionally
+      const now = s.idx >= 0 ? cache[s.idx] : undefined;
+      if (now) {
+        s.pid = now.id;
+        const x = s.anchored ? now.width * now.f : prev && prev.el === now.el && prev.width > 0 && !prev.nook ? (s.walk.x * now.width) / prev.width : prev ? prev.left + s.walk.x - now.left : s.walk.x;
         s.walk = { ...s.walk, x: clampTo(x, now.ext) };
       }
+    };
+    /** A one-off standing place (document px, feet), at size factor k. Returns its perch id. */
+    const addSpot = (x: number, y: number, k: number, el: HTMLElement): string => {
+      const id = `spot:${Math.round(x)}:${Math.round(y)}`;
+      spots = [...spots.filter((q) => q.id !== id && (st.current?.pid === q.id || st.current?.tele?.to?.id === q.id)), { el, id, left: x, top: y, width: 0, height: 0, f: 0, ext: { lo: 0, hi: 0 }, ledge: false, k, nook: true, spot: true, host: -1, wall: 0, lie: false, title: false }];
+      measure();
+      return id;
     };
     measure();
     let dirty = false;
@@ -304,12 +433,14 @@ export function PuppeteerStage() {
     const lim = { ...LIMITS, jumpUp: LIMITS.jumpUp * k185, gap: LIMITS.gap * k185, reach: LIMITS.reach * k185, climbSpeed: LIMITS.climbSpeed * k185 };
     const limX = { ...lim, speed: lim.speed * EXPLORE_PACE }; // an amble, not an errand
     let attnAt = performance.now(); // the user was last around (pointer moved, tap, scroll)
+    let nearAt = 0; // the user last came close to him (his own whims stop)
+    // walking routes are between real surfaces only: nooks and spots are reached by teleport
     const surfaces = (ok: boolean[]): Surface[] =>
       cache.map((c, i) =>
-        ok[i] ? { left: c.left + c.ext.lo, right: c.left + c.ext.hi, y: c.top, bottom: c.top + c.height, x0: c.left, x1: c.left + c.width } : { left: Infinity, right: -Infinity, y: Infinity },
+        ok[i] && !c.nook ? { left: c.left + c.ext.lo, right: c.left + c.ext.hi, y: c.top, bottom: c.top + c.height, x0: c.left, x1: c.left + c.width } : { left: Infinity, right: -Infinity, y: Infinity },
       );
 
-    // ---- stunt hook: the title stunt (stuntDriver.ts), once per page load ----
+    // ---- stunt hook: the title stunt (stuntDriver.ts), when he feels like showing off ----
     const stunt = createStunt({ scale, feet: FEET, tall: TALL, collar: COLLAR, cycle: cfg.cycle, headroom: HEADER + CLEAR }, () => loop.wake());
     const heroGround = () => cache.findIndex((c) => !c.ledge && !!c.el.closest('#top'));
     const stuntView = (s: State, gi: number): StuntView => {
@@ -328,14 +459,14 @@ export function PuppeteerStage() {
       }, Math.max(0, s * 1000) + 20);
       timers.add(id);
     };
-    const armIdle = (now: number, what: Parameters<typeof idleDelay>[0] = 'settled') => {
+    const armIdle = (now: number, what: Parameters<typeof nextIn>[0] | 'attention' = 'settled') => {
       const s = st.current;
       if (!s || reduce) return;
-      // the pointer resting by him (or still shaken): he's minding it, so fidgets come at the slower pace
+      // the pointer resting by him: he's minding it, so he decides at a slower pace
       // (shaken, though, he keeps cowering and glancing round: the quicker pace, so it reads)
-      const minding = !!company(s, ptr.current) || uneasy(tr.current!, now);
-      const quiet = feel(now) === 'shaken' ? QUIET * 2 : minding ? 0 : (now - attnAt) / 1000;
-      const wait = idleDelay(what, quiet, Math.random);
+      const minding = !!company(s, ptr.current) && feel(now) !== 'shaken';
+      let wait = nextIn(what === 'attention' ? 'fidget' : what, Math.random);
+      if (minding || what === 'attention') wait *= 1.5;
       s.idleAt = now + wait * 1000;
       wakeIn(wait);
     };
@@ -387,13 +518,14 @@ export function PuppeteerStage() {
       return d <= FAR ? { p, d } : null;
     };
 
+    let sz = scale; // px per character unit as he's drawn now (smaller inside a plate)
+    let clawUses = 0; // dev: times the claw came down (only ever for a press)
     const go = (s: State, ev: Ev, now: number) => {
       const next = transition(s.m, ev, now);
       if (next === s.m) return false;
       if (import.meta.env.DEV && next.mode !== s.m.mode) console.debug(`[puppet] ${s.m.mode} → ${next.mode}`, ev.type === 'take' ? ev.plan : ev.type);
       const was = s.m; // ---- probe hook ---- (the driver hears every transition)
       const prev = s.m.mode;
-      const prevPlan = s.m.plan;
       s.m = next;
       // entry actions
       if (next.mode !== 'fidget') s.pending = null; // the glance before setting off was interrupted
@@ -401,73 +533,56 @@ export function PuppeteerStage() {
         s.stepGoal = null;
         s.afterStep = null;
       }
+      if (prev === 'fidget' && s.letters) endLetters(s); // letter play cut short: they spring home
+      if (prev === 'sitting') s.lying = false;
       if (next.mode === 'swatting' && now - s.flinchAt > FLINCH_GAP * 1000 && !reduce) {
         // the swatting episode opens with a flinch: he recoils first, then bats at it
         s.flinchSwat = true;
         s.flinchAt = now;
         note('flinch:swat', now);
       }
-      if (next.mode === 'idle' && prev === 'landing' && prevPlan && prevPlan.why !== 'edge' && prevPlan.why !== 'press' && prevPlan.why !== 'probe') {
-        // set down somewhere new: if he trusts you he greets you once he's found his feet
-        s.greetAt = now + rand(250, 600);
-        wakeIn((s.greetAt - now) / 1000);
-      }
-      if (next.mode === 'carried' || next.mode === 'dragged') {
-        const plan = next.plan!;
-        s.from = { ...s.char };
-        s.fromX = s.walk.x;
-        s.idx = plan.to;
-        s.walk = { ...s.walk, v: 0, walking: false };
-        const dist = Math.abs((plan.to >= 0 ? plan.x : 0) - s.walk.x);
-        if (plan.kind === 'hand') s.dur = Infinity;
-        else if (next.mode === 'dragged') s.dur = clamp(dist / 110 + 0.3, 1.2, 3.2);
-        else if (plan.kind === 'tour') s.dur = 3.4;
-        else if (plan.why === 'edge') s.dur = 0.9;
-        else if (plan.why === 'relocate' || plan.why === 'press') s.dur = 1.7;
-        else s.dur = TRANSIT;
-        s.lift = plan.kind === 'tour' ? Math.min(200, vp.h * 0.24) : plan.why === 'edge' ? 46 : Math.min(220, vp.h * 0.25);
-        if (prev === 'carried' || prev === 'dangling') s.lift = Math.min(s.lift, 80); // already up
-        if (plan.why === 'probe') s.lift = probe.lift(s.from, s.lift); // ---- probe hook ---- (the arc stays under the header)
-      }
-      if (next.mode === 'landing') {
-        s.squash = next.plan?.kind === 'drag' ? 0.05 : 0.12;
-        if (s.idx >= 0) {
-          s.walk = { x: next.plan!.x, v: 0, phase: s.walk.phase, walking: false };
-          s.anchored = Math.abs(next.plan!.x - home(s.idx)) < 1;
-        }
-        if (next.plan?.why === 'edge') {
-          s.holdUntil = now + FOLLOW_HOLD * 1000;
-          s.ignoreBefore = now; // a pointer parked past the end doesn't pull him straight back there: it has to move again
-        }
-        else s.placedBest = next.plan?.why === 'scroll' || next.plan?.why === 'enter' ? s.idx : s.placedBest;
-      }
-      if (next.mode === 'carried' && next.plan?.kind === 'hand') {
-        s.rd = createRagdoll(s.swing);
-        primeRagdoll(s.rd, collarOf(s), { x: 0, y: 0 });
-        s.hv = { x: 0, y: 0 };
-        s.route = null;
-        s.fall = null;
-        s.idx = -1;
-      }
-      if (next.mode === 'falling') startFall(s);
-      if (next.mode === 'grabbed' && next.plan?.kind === 'hand') trustNow(now, (t) => scare(t, now));
       if (next.mode === 'grabbed') {
+        // the visitor pressed on him: the claw drops in (it's the only time it ever does)
+        clawUses++;
+        note('claw:press', now);
+        trustNow(now, (t) => scare(t, now));
         s.route = null;
         s.fall = null;
         s.goal = null;
+        s.tele = null;
+        s.lying = false;
         s.act = prev === 'sitting' ? { kind: 'sit', at: now, dur: ACT_DUR.sit * 0.6, reverse: true } : null; // up off the edge as the claw takes him
+        s.seat = 0;
       }
-      if (next.mode === 'carried' || next.mode === 'dragged') s.seat = 0;
-      if (prev === 'sitting' && next.mode !== 'grabbed') {
+      if (next.mode === 'carried') {
+        s.rd = createRagdoll(s.swing);
+        primeRagdoll(s.rd, collarOf(s), { x: 0, y: 0 });
+        s.hv = { x: 0, y: 0 };
+        s.idx = -1;
+        s.pid = '';
+      }
+      if (next.mode === 'falling') {
+        s.clawUpAt = now;
+        startFall(s);
+      }
+      if (prev === 'sitting' && next.mode !== 'grabbed' && next.mode !== 'teleport') {
         // stands up (and shuffles back from the edge) before anything else
         s.act = { kind: 'sit', at: now, dur: ACT_DUR.sit * 0.75, reverse: true, block: true };
         s.seatFrom = s.seat;
         s.seatTo = 0;
         s.kickFrom = 0;
       }
-      if (next.mode === 'idle' && (prev === 'landing' || prev === 'falling' || prev === 'hopping' || prev === 'walking')) {
+      if (next.mode === 'teleport') {
+        s.route = null;
+        s.stepGoal = null;
+        s.walk = { ...s.walk, v: 0, walking: false };
+        if (prev !== 'fidget' || !s.tele?.poi) s.act = null;
+        s.seat = 0;
+        s.kickFrom = 0;
+      }
+      if (next.mode === 'idle' && (prev === 'falling' || prev === 'hopping' || prev === 'walking' || prev === 'teleport')) {
         if (s.holdUntil > now) wakeIn((s.holdUntil - now) / 1000);
-        armIdle(now);
+        armIdle(now, prev === 'walking' ? 'settled' : 'arrived');
       }
       if (next.mode === 'idle' && own(prev)) {
         if (prev === 'fidget' && s.act && s.act.kind !== 'sit') s.act = null;
@@ -479,6 +594,7 @@ export function PuppeteerStage() {
         } else if (prev === 'sitting') armIdle(now, 'activity');
         else if (prev === 'fidget') armIdle(now, s.goal ? 'activity' : 'fidget');
         if (prev === 'fidget') s.goal = null;
+        if (prev === 'exploring' && !s.goal) armIdle(now, 'settled');
       }
       if (next.mode === 'swatting' && own(prev)) {
         s.goal = null;
@@ -489,13 +605,15 @@ export function PuppeteerStage() {
       return true;
     };
 
-    const collarOf = (s: State): Pt => ({ x: s.char.x + COLLAR.x * s.shown * scale, y: s.char.y + COLLAR.y * scale });
+    const collarOf = (s: State): Pt => ({ x: s.char.x + COLLAR.x * s.shown * sz, y: s.char.y + COLLAR.y * sz });
 
     // let go: pick the printed perch under him (or the nearest one) and throw him at it in document space
     const startFall = (s: State) => {
       const { sx, sy } = viewport();
-      const feet = s.char.y + FEET * scale;
-      const vis = cache.map((c, i) => ({ c, i, top: c.top - sy, l: c.left - sx + c.ext.lo, r: c.left - sx + c.ext.hi })).filter((q) => q.c.el.dataset.printed !== '0' && q.top >= headroom && q.top < vp.h);
+      const feet = s.char.y + FEET * sz;
+      const vis = cache
+        .map((c, i) => ({ c, i, top: c.top - sy, l: c.left - sx + c.ext.lo, r: c.left - sx + c.ext.hi }))
+        .filter((q) => !q.c.nook && q.c.el.dataset.printed !== '0' && q.top >= headroomK(1) && q.top < vp.h);
       const below = vis.filter((q) => q.top >= feet - 4);
       const under = below.filter((q) => s.char.x >= q.l - 20 && s.char.x <= q.r + 20).sort((a, b) => a.top - b.top)[0];
       const off = (q: (typeof vis)[number]) => Math.max(0, q.l - s.char.x, s.char.x - q.r);
@@ -511,7 +629,7 @@ export function PuppeteerStage() {
         y1 = pick.c.top - FEET * scale;
       } else {
         x1 = x0 + vx * 0.3;
-        y1 = sy + vp.h + 200; // nothing to land on: out the bottom; the claw fetches him
+        y1 = sy + vp.h + 200; // nothing to land on: out the bottom; he gathers himself back on screen
       }
       const dy = y1 - y0;
       let T: number;
@@ -522,9 +640,64 @@ export function PuppeteerStage() {
       }
       s.fall = { x0, y0, vx, vy, x1, y1, T: Math.max(0.15, T), to: pick ? pick.i : -1 };
       s.idx = pick ? pick.i : -1;
+      s.pid = pick ? pick.c.id : '';
       if (s.rd) primeRagdoll(s.rd, collarOf(s), s.hv);
     };
 
+    // ---- getting about by ink (teleport.ts) ----
+    /** Everywhere on screen he could gather himself (document px, feet). */
+    const destSpots = (ps: Seen[], only?: (c: Perch) => boolean): Spot[] => {
+      const out: Spot[] = [];
+      cache.forEach((c, i) => {
+        if (c.spot || !ps[i]?.ok || !ps[i].visible || !ps[i].onX) return;
+        if (only && !only(c)) return;
+        const lo = c.left + c.ext.lo;
+        const hi = c.left + c.ext.hi;
+        const { sx } = viewport();
+        const a = Math.max(lo, sx + 40);
+        const b = Math.min(hi, sx + vp.w - 40);
+        if (a > b) return;
+        // a couple of places along it
+        const xs = b - a > 160 ? [a + (b - a) * 0.25, a + (b - a) * 0.75] : [(a + b) / 2];
+        xs.forEach((x, n) => out.push({ id: `${c.id}#${n}`, i, x, y: c.top, inside: c.nook }));
+      });
+      return out;
+    };
+    const focusDoc = (): Pt | null => {
+      const v = visitor();
+      const { sx, sy } = viewport();
+      return v ? { x: v.x + sx, y: v.y + sy } : null;
+    };
+    let recentDest: string[] = [];
+    /**
+     * Run off into ink and gather himself at `to` (perch index + document x), or wherever is best near
+     * your attention when `to` is null. `then` runs once he's re-formed (and shaken himself off).
+     */
+    const teleport = (s: State, now: number, o: { to?: { i: number; x: number } | null; ps?: Seen[]; prefer?: 'inside' | 'outside'; only?: (c: Perch) => boolean; poi?: Poi | null; then?: ((now: number) => void) | null; greet?: boolean; why: string }): boolean => {
+      let to = o.to ?? null;
+      if (!to && o.ps) {
+        const { sx, sy } = viewport();
+        const me = s.idx >= 0 && !s.hidden ? { x: s.char.x + sx, y: s.char.y + sy + FEET * sz } : null;
+        const d = chooseDest(destSpots(o.ps, o.only), { focus: focusDoc(), view: { left: sx, right: sx + vp.w, top: sy + HEADER + CLEAR, bottom: sy + vp.h - 8 }, me, recent: recentDest, prefer: o.prefer, rand: Math.random });
+        if (d) {
+          to = { i: d.i, x: d.x };
+          recentDest = [d.id, ...recentDest].slice(0, 4);
+        }
+      }
+      if (!to || !cache[to.i]) return false;
+      const { sx, sy } = viewport();
+      const c = cache[to.i];
+      const fromDoc = { x: s.char.x + sx, y: s.char.y + sy };
+      const seen = !s.hidden && s.char.y > HEADER && s.char.y < vp.h + 40 && s.char.x > -40 && s.char.x < vp.w + 40 && s.m.mode !== 'falling';
+      const toPt = { x: to.x, y: c.top };
+      if (!go(s, { type: 'vanish' }, now)) return false;
+      const hop = startHop(now, Math.hypot(toPt.x - fromDoc.x, toPt.y - fromDoc.y), reduce);
+      if (!seen && !reduce) hop.out = 0; // nobody sees him go: he just turns up
+      s.tele = { hop, fromDoc, kFrom: s.k, to: { id: c.id, x: clampTo(to.x - c.left, c.ext) }, poi: o.poi ?? null, then: o.then ?? null, greet: !!o.greet, swapped: false, shook: false, why: o.why };
+      if (o.poi) s.goal = o.poi;
+      note(`teleport:${o.why}:${c.id}`, now);
+      return true;
+    };
     // ---- his own ideas: fidgets, points of interest, sitting ----
     const play = (s: State, kind: Action, now: number, extra: Partial<Act> = {}) => {
       s.act = { kind, at: now, dur: ACT_DUR[kind], ...extra };
@@ -552,7 +725,7 @@ export function PuppeteerStage() {
     const stepToward = (s: State, x: number, gap: number) => {
       const dir = x > s.char.x ? 1 : -1;
       const room = Math.abs(x - s.char.x) - gap;
-      const len = Math.min(13 * scale, room);
+      const len = Math.min(13 * sz, room);
       return len >= 6 ? s.walk.x + dir * len : null;
     };
     /** Play a sequence of acts, one after another (`then` chains them). */
@@ -625,7 +798,7 @@ export function PuppeteerStage() {
       s.dodgeUntil = now + DODGE_FOR * 1000;
       faceTo(s, p.x);
       note('dodge', now);
-      const away = s.walk.x + (p.x > s.char.x ? -1 : 1) * 16 * scale;
+      const away = s.walk.x + (p.x > s.char.x ? -1 : 1) * 16 * sz;
       chain(s, now, [{ kind: 'duck', block: true }], () => void startStep(s, away));
     };
     const startFidget = (s: State, f: Fidget, now: number) => {
@@ -634,7 +807,7 @@ export function PuppeteerStage() {
       if (f === 'step') {
         // a pace toward whatever he's facing (the pointer, usually), then a curious look
         const v = visitor();
-        const at = v && Math.abs(v.x - s.char.x) > 12 ? stepToward(s, v.x, keepGap(tr.current!, now) - 20) : s.walk.x + s.facing * 11 * scale;
+        const at = v && Math.abs(v.x - s.char.x) > 12 ? stepToward(s, v.x, keepGap(tr.current!, now) - 20) : s.walk.x + s.facing * 11 * sz;
         if (at !== null && startStep(s, at, (t) => freeNow(s) && !s.act && chain(s, t, [{ kind: 'tilt', look: !!v }]))) return note('fidget:step', now);
         f = 'tilt';
       }
@@ -646,7 +819,7 @@ export function PuppeteerStage() {
       const near = feel(now) === 'warm' || f === 'tilt' || f === 'wave' ? company(s, ptr.current) : null;
       if (near) {
         if (Math.abs(near.p.x - s.char.x) > 12) s.facing = near.p.x > s.char.x ? 1 : -1;
-      } else if (f === 'lookUp' && Math.abs(s.hoverX - s.char.x) > 20) s.facing = s.hoverX > s.char.x ? 1 : -1; // toward the claw
+      }
       play(s, f, now);
       if (near && f !== 'look') s.look = { x: near.p.x + viewport().sx, y: near.p.y + viewport().sy };
     };
@@ -672,7 +845,7 @@ export function PuppeteerStage() {
       const view = { left: sx, right: sx + vp.w, top: sy, bottom: sy + vp.h };
       // he only wanders onto surfaces with room for all of him below the header (`visible`)
       const surfaces = cache.map((c, i): SceneSurface | null =>
-        ps[i].ok && ps[i].visible
+        ps[i].ok && ps[i].visible && !c.nook
           ? { left: c.left + c.ext.lo, right: c.left + c.ext.hi, y: c.top, bottom: c.top + c.height, x0: c.left, x1: c.left + c.width, ledge: c.ledge, plate: c.el.dataset.printed !== undefined }
           : null,
       );
@@ -785,6 +958,7 @@ export function PuppeteerStage() {
       s.ignoreBefore = now;
       go(s, { type: 'explore' }, now);
       s.idx = poi.s;
+      s.pid = cache[poi.s]?.id ?? s.pid;
     };
     /** At the point of interest: face it and do the thing. */
     const arrive = (s: State, now: number) => {
@@ -792,6 +966,13 @@ export function PuppeteerStage() {
       if (!poi || s.idx < 0) return;
       // ---- probe hook ---- a probe's spot: the driver takes it from here; anything else is a find
       if (poi.kind === 'probe') return probe.arrive(s, now);
+      if (poi.id === 'visit') {
+        // came over to you: say hello (if he trusts you) rather than look round
+        s.goal = null;
+        s.greetAt = now + rand(150, 400);
+        wakeIn(0.45);
+        return;
+      }
       probe.noteWhim(poi.activity);
       if (poi.activity !== 'sit') probe.noteFind();
       const sx = viewport().sx;
@@ -822,42 +1003,7 @@ export function PuppeteerStage() {
       } else s.amp = 1;
       play(s, poi.activity, now);
     };
-    /** The claw's idea: carry him to another perch, give him a dangle tour, or drag him along. */
-    const clawRelocate = (s: State, ps: Seen[], now: number) => {
-      const ext = cache[s.idx].ext;
-      const others = ps.map((_, i) => i).filter((i) => i !== s.idx && ps[i].ok && ps[i].visible);
-      const span = ext.hi - ext.lo;
-      const options: Plan[] = [];
-      if (others.length) {
-        const j = others[Math.floor(Math.random() * others.length)];
-        options.push({ kind: 'carry', why: 'relocate', to: j, x: home(j) });
-      }
-      if (span >= 160) {
-        // drag him toward the far side of his perch, at least 120 px
-        const toHi = s.walk.x - ext.lo < ext.hi - s.walk.x;
-        const x = toHi ? rand(Math.max(ext.lo, s.walk.x + 120), ext.hi) : rand(ext.lo, Math.min(ext.hi, s.walk.x - 120));
-        options.push({ kind: 'drag', why: 'relocate', to: s.idx, x: clampTo(x, ext) });
-      }
-      options.push({ kind: 'tour', why: 'relocate', to: s.idx, x: span > 80 ? rand(ext.lo + span * 0.25, ext.hi - span * 0.25) : home(s.idx) });
-      go(s, { type: 'take', plan: options[Math.floor(Math.random() * options.length)] }, now);
-    };
-
-    /** Where the claw holds him with nowhere to set him down: clear of every plate (hold.ts); cached per scroll / layout. */
-    let holdMemo: { key: string; at: Pt } | null = null;
-    const holdAt = (sx: number, sy: number): Pt => {
-      const key = `${sx},${sy},${cache.length},${cache[0]?.top}`;
-      if (holdMemo && holdMemo.key === key && !dirty) return holdMemo.at;
-      const plates = cache
-        .filter((c) => !c.ledge && c.height > 0)
-        .map((c) => ({ left: c.left - sx, right: c.left - sx + c.width, top: c.top - sy, bottom: c.top - sy + c.height }))
-        .filter((b) => b.bottom > 0 && b.top < vp.h);
-      const at = holdSpot({ vw: vp.w, vh: vp.h, minTop: HEADER + CLEAR, plates, up: 48 * scale, down: (FEET + 6) * scale, half: 22 * scale, pref: { x: vp.w * (vp.w < 700 ? 0.78 : 0.86), y: vp.h * 0.34 } });
-      holdMemo = { key, at };
-      return at;
-    };
-
     // ---- probe hook ---- prod and probe (probeDriver.ts): the driver, and what it may use of the stage
-    let lastBest = -1; // the reading-line perch, last frame
     const probe = createProbeDriver({
       scale,
       vw: vp.w,
@@ -872,7 +1018,7 @@ export function PuppeteerStage() {
         const s = st.current!;
         const sx = viewport().sx;
         const ok = cache.map((_, j) => (!!ps[j]?.ok && !!ps[j]?.visible) || j === s.idx);
-        if (!ok[i] || s.idx < 0) return null;
+        if (!ok[i] || s.idx < 0 || cache[s.idx].nook || cache[i].nook) return null;
         const S = surfaces(ok);
         const r = planRoute(S, { s: s.idx, x: cache[s.idx].left + s.walk.x }, { s: i, x: clamp(x, S[i].left, S[i].right) }, limX);
         return r && r.every((m) => m.to.x >= sx + 40 && m.to.x <= sx + vp.w - 40) ? r : null;
@@ -883,12 +1029,354 @@ export function PuppeteerStage() {
       full: (now) => advance(tr.current!, now).full,
       visitor,
       cursor: (): Cursor => (sense.touch ? 'touch' : !ptr.current || sense.gone ? 'gone' : st.current && company(st.current, ptr.current) ? 'near' : 'watching'),
-      attnAt: () => attnAt,
-      best: () => lastBest,
-      home,
+      attnAt: () => nearAt,
       note,
+      insideScale: szIn,
+      teleportTo: (dest, poi, now) => {
+        const s = st.current!;
+        if ('spot' in dest) {
+          const host = cache.find((c) => !c.nook && c.left <= dest.spot.x && c.left + c.width >= dest.spot.x && c.top <= dest.spot.y && c.top + c.height >= dest.spot.y);
+          const id = addSpot(dest.spot.x, dest.spot.y, kIn, host?.el ?? document.body);
+          const i = cache.findIndex((c) => c.id === id);
+          return i >= 0 && teleport(s, now, { to: { i, x: dest.spot.x }, poi: { ...poi, s: i }, why: 'probe' });
+        }
+        return teleport(s, now, { to: dest, poi, why: 'probe' });
+      },
     });
     // ---- end probe hook ----
+
+    // ---- inside a plate ----
+    let insideRecent: string[] = [];
+    /** Lie down for a nap (the sitting mode, on his back). */
+    const nap = (s: State, now: number) => {
+      if (!go(s, { type: 'sit' }, now)) return false;
+      s.lying = true;
+      s.goal = null;
+      play(s, 'lie', now);
+      s.seatFrom = s.seatTo = s.seat = 0;
+      s.sitUntil = now + rand(NAP[0], NAP[1]) * 1000;
+      s.kickAt = Infinity;
+      s.kickFrom = 0;
+      wakeIn((s.sitUntil - now) / 1000);
+      note('nap', now);
+      return true;
+    };
+    /** Inside a plate: he has a look at the words beside him, reads them, peeks round them, walks his nook, lies down. */
+    const insideAct = (s: State, now: number) => {
+      if (s.idx < 0 || !cache[s.idx]?.nook || !freeNow(s) || s.act) return;
+      const c = cache[s.idx];
+      const w: Record<string, number> = { read: c.wall ? 1.3 : 0, peek: c.wall ? 0.9 : 0, look: 0.8, crouch: 0.5, lie: c.lie ? 1.1 : 0, scratch: 0.4, walk: c.width > 30 * sz ? 1 : 0 };
+      const k = pickVaried(w, insideRecent, Math.random) ?? 'look';
+      insideRecent = noteRecent(insideRecent, k, 3);
+      note(`inside:${k}`, now);
+      if (k === 'lie') return void nap(s, now);
+      if (k === 'walk') {
+        const to = s.walk.x < c.width / 2 ? c.width - rand(0, c.width * 0.2) : rand(0, c.width * 0.2);
+        startStep(s, to, (t) => freeNow(s) && !s.act && chain(s, t, [{ kind: c.wall ? 'read' : 'look' }]));
+        return;
+      }
+      if (!go(s, { type: 'fidget' }, now)) return;
+      const { sx, sy } = viewport();
+      if (c.wall) s.facing = c.wall;
+      s.look = c.wall ? { x: s.char.x + sx + c.wall * 60 * sz, y: s.char.y + sy - 6 * sz } : null;
+      play(s, k as Action, now);
+    };
+
+    // ---- letter play (letterPlay.ts) ----
+    type LetterSite = { at: { i: number; x: number } | null; spot: Pt | null; facing: 1 | -1; word: LBox[]; els: Map<string, HTMLElement>; k: number };
+    /** A title's letters as words (by the gaps between them), from their elements. */
+    const wordsOf = (els: HTMLElement[], key: (el: HTMLElement) => string, sx: number, sy: number): { word: LBox[]; els: Map<string, HTMLElement> }[] => {
+      const out: { word: LBox[]; els: Map<string, HTMLElement> }[] = [];
+      let cur: { word: LBox[]; els: Map<string, HTMLElement> } | null = null;
+      let last: LBox | null = null;
+      for (const el of els) {
+        const r = el.getBoundingClientRect();
+        if (r.width <= 0) continue;
+        const g: LBox = { key: key(el), ch: el.textContent ?? '', left: r.left + sx, right: r.right + sx, top: r.top + sy, bottom: r.bottom + sy };
+        const h = g.bottom - g.top;
+        const split = !last || Math.abs(g.top - last.top) > h * 0.5 || g.left - last.right > h * 0.18 || g.left < last.left;
+        if (split || !cur) out.push((cur = { word: [], els: new Map() }));
+        cur.word.push(g);
+        cur.els.set(g.key, el);
+        last = g;
+      }
+      return out.filter((w) => w.word.length > 0);
+    };
+    /** Where on screen he could play with a title word: beside a plate title (inside), or on the hero tagline. */
+    const letterSites = (ps: Seen[]): LetterSite[] => {
+      const out: LetterSite[] = [];
+      const { sx, sy } = viewport();
+      cache.forEach((c, i) => {
+        if (!c.nook || c.spot || !c.title || !ps[i]?.ok || !ps[i].visible || !ps[i].onX) return;
+        const host = cache[c.host];
+        const els = host ? Array.from(host.el.querySelectorAll<HTMLElement>('[data-plate-glyph]')) : [];
+        if (!els.length) return;
+        for (const w of wordsOf(els, (el) => el.dataset.plateGlyph ?? '', sx, sy)) {
+          const top = Math.min(...w.word.map((g) => g.top));
+          const bottom = Math.max(...w.word.map((g) => g.bottom));
+          if (bottom < c.top - TALL * szIn || top > c.top) continue; // not on his line
+          for (const [x, facing] of [[c.left, -1], [c.left + c.width, 1]] as const) {
+            const me = { x, feet: c.top, facing, scale: szIn };
+            if (canTrick('spin', w.word, me)) out.push({ at: { i, x }, spot: null, facing, word: w.word, els: w.els, k: kIn });
+          }
+        }
+      });
+      // the hero tagline: from a shelf on a line's letters, beside the end of the shorter line above it
+      const h1 = titleEl();
+      const g = heroGround();
+      if (h1 && h1.getAttribute('data-written') === '1' && g >= 0 && ps[g]?.visible) {
+        const map = titleMap({ w: 22 * scale, h: TALL * scale }, [{ left: -1e5, right: 1e5, top: -1e5, bottom: sy + HEADER + CLEAR }]);
+        if (map) {
+          for (const stand of map.stands) {
+            const above = map.rows[stand.row - 1];
+            if (!above) continue;
+            const els = above.glyphs.map((q) => h1.querySelector<HTMLElement>(`[data-glyph="${q.key}"]`)).filter((e): e is HTMLElement => !!e);
+            const words = wordsOf(els, (el) => el.dataset.glyph ?? '', sx, sy);
+            const w = words[words.length - 1];
+            if (!w) continue;
+            const me = { x: stand.x, feet: stand.y, facing: -1 as const, scale };
+            if (stand.y - TALL * scale < sy + HEADER + CLEAR || stand.x > sx + vp.w - 30) continue;
+            if (canTrick('spin', w.word, me)) out.push({ at: null, spot: { x: stand.x, y: stand.y }, facing: -1, word: w.word, els: w.els, k: 1 });
+          }
+        }
+      }
+      return out;
+    };
+    let trickRecent: Trick[] = [];
+    const endLetters = (s: State) => {
+      if (!s.letters) return;
+      s.letters = null;
+      s.dx = 0;
+      resetGlyphs(); // anything still out of place springs home
+    };
+    /** Go to a title word and play with it. */
+    const startLetters = (s: State, ps: Seen[], now: number): boolean => {
+      const sites = letterSites(ps);
+      if (!sites.length) return false;
+      const site = sites[Math.floor(Math.random() * sites.length)];
+      const pool = TRICKS.filter((t) => (!forcedTrick || t === forcedTrick) && canTrick(t, site.word, { x: site.at ? site.at.x : site.spot!.x, feet: site.at ? cache[site.at.i].top : site.spot!.y, facing: site.facing, scale: scale * site.k }));
+      const w: Partial<Record<Trick, number>> = {};
+      for (const t of pool) w[t] = 1;
+      const trick = pickVaried(w, trickRecent, Math.random) ?? pool[0];
+      if (!trick) return false;
+      trickRecent = noteRecent(trickRecent, trick, 3);
+      const begin = (t: number) => {
+        if (!freeNow(s) || s.act || s.idx < 0) return;
+        const c = cache[s.idx];
+        const me = { x: c.left + s.walk.x, feet: c.top, facing: site.facing, scale: scale * c.k };
+        const prog = planTrick(trick, site.word, me, Math.random);
+        if (!prog || !go(s, { type: 'fidget' }, t)) return;
+        s.facing = site.facing;
+        s.letters = { prog, word: site.word, els: site.els, me, t0: t, x0: s.walk.x };
+        s.act = { kind: 'still', at: t, dur: prog.dur, block: true };
+        wakeIn(prog.dur);
+        note(`letters:${trick}`, t);
+      };
+      if (site.at) return teleport(s, now, { to: site.at, then: begin, why: 'letters' });
+      const id = addSpot(site.spot!.x, site.spot!.y, 1, titleEl() ?? document.body);
+      const i = cache.findIndex((c) => c.id === id);
+      return i >= 0 && teleport(s, now, { to: { i, x: site.spot!.x }, then: begin, why: 'letters' });
+    };
+    /** Each frame of letter play: his pose and step, and the letters. */
+    const tickLetters = (s: State, now: number) => {
+      const L = s.letters;
+      if (!L) return;
+      const t = (now - L.t0) / 1000;
+      if (t >= L.prog.dur || s.m.mode !== 'fidget') return endLetters(s);
+      const m = meAt(L.prog, t);
+      const was = s.dx;
+      s.dx = m.dx;
+      if (m.walking) s.walk.phase = (((s.walk.phase + (Math.abs(s.dx - was) / (cfg.cycle * s.k))) % 1) + 1) % 1;
+      if (s.act) s.act.look = m.look === 'visitor';
+      const { sx, sy } = viewport();
+      const end = L.word[L.me.facing < 0 ? L.word.length - 1 : 0];
+      s.look = m.look === 'word' ? { x: (L.word[0].left + L.word[L.word.length - 1].right) / 2, y: (end.top + end.bottom) / 2 } : { x: (end.left + end.right) / 2, y: (end.top + end.bottom) / 2 };
+      void sx;
+      void sy;
+      const poses = lettersAt(L.prog, L.word, L.me, t);
+      for (const k of L.prog.keys) {
+        const el = L.els.get(k);
+        if (el) setGlyph(el, poses.get(k) ?? null);
+      }
+      if (m.act) {
+        s.action = m.act;
+        s.actionK = m.k;
+      } else s.action = undefined;
+      s.lwalk = m.walking;
+    };
+
+    // ---- getting about on his own ----
+    const limRun = { ...lim, speed: lim.speed * RUN };
+    /** The surface under him is going away (or he's nowhere): off it at once, never floating. */
+    const leaveNow = (s: State, ps: Seen[], now: number) => {
+      if (s.idx >= 0 && cache[s.idx] && !cache[s.idx].nook && ps[s.idx]?.visible && afoot(s.m.mode) && s.m.mode !== 'hopping' && runTo(s, ps, now, 1.6)) return note('hop-off', now);
+      if (teleport(s, now, { ps, why: s.idx < 0 ? 'nowhere' : 'plate-gone' })) return;
+      // nowhere on screen to be: he keeps out of sight until there is
+      s.hidden = true;
+      s.idx = -1;
+      s.pid = '';
+    };
+    /** A quick run (walk / jump / climb / drop) onto a surface on screen near your attention. */
+    const runTo = (s: State, ps: Seen[], now: number, max = RUN_MAX): boolean => {
+      if (s.idx < 0 || cache[s.idx].nook) return false;
+      const { sx, sy } = viewport();
+      const f = focusDoc() ?? { x: sx + vp.w / 2, y: sy + vp.h / 2 };
+      const ok = cache.map((_, j) => (!!ps[j]?.ok && !!ps[j]?.visible && !!ps[j]?.onX) || j === s.idx);
+      const S = surfaces(ok);
+      const from = { s: s.idx, x: cache[s.idx].left + s.walk.x };
+      const cand = cache
+        .map((c, j) => ({ c, j, x: clamp(f.x, S[j].left, S[j].right) }))
+        .filter((q) => q.j !== s.idx && ok[q.j] && !q.c.nook && Number.isFinite(S[q.j].left) && ps[q.j]?.visible)
+        .sort((a, b) => Math.hypot(a.x - f.x, a.c.top - f.y) - Math.hypot(b.x - f.x, b.c.top - f.y))
+        .slice(0, 3);
+      for (const q of cand) {
+        const x = clamp(q.x + (f.x > q.x ? -60 : 60), S[q.j].left, S[q.j].right);
+        const route = planRoute(S, from, { s: q.j, x }, limRun);
+        if (!route || !route.length || route.reduce((t, m) => t + m.duration, 0) > max) continue;
+        s.route = route;
+        s.leg = 0;
+        s.legAt = now;
+        s.run = true;
+        if (!go(s, { type: 'hop' }, now)) return false;
+        s.idx = q.j;
+        s.pid = q.c.id;
+        return true;
+      }
+      return false;
+    };
+    /** He's been off screen long enough: he comes along (a run if it's close, ink if it isn't). */
+    const comeAlong = (s: State, ps: Seen[], now: number) => {
+      if (own(s.m.mode)) go(s, { type: 'attend' }, now);
+      if (!free(s.m.mode)) return;
+      if (runTo(s, ps, now)) return note('come:run', now);
+      teleport(s, now, { ps, greet: true, why: 'come' });
+    };
+    /** Go to the visitor: on foot if it's an easy walk, else by ink; then say hello. */
+    const visit = (s: State, ps: Seen[], now: number): boolean => {
+      const f = focusDoc();
+      if (!f || s.idx < 0) return false;
+      if (!cache[s.idx].nook) {
+        const ok = cache.map((_, j) => (!!ps[j]?.ok && !!ps[j]?.visible && !!ps[j]?.onX) || j === s.idx);
+        const S = surfaces(ok);
+        let best: { j: number; x: number; d: number } | null = null;
+        cache.forEach((c, j) => {
+          if (!ok[j] || c.nook || !Number.isFinite(S[j].left)) return;
+          const x = clamp(f.x + (f.x > c.left + s.walk.x ? -1 : 1) * keepGap(tr.current!, now), S[j].left, S[j].right);
+          const d = Math.hypot(x - f.x, (c.top - f.y) * 0.7);
+          if (!best || d < best.d) best = { j, x, d };
+        });
+        const b = best as { j: number; x: number; d: number } | null;
+        if (b && b.d < 320) {
+          const route = planRoute(S, { s: s.idx, x: cache[s.idx].left + s.walk.x }, { s: b.j, x: b.x }, limX);
+          if (route && route.length && route.reduce((t, m) => t + m.duration, 0) < 7) {
+            const poi: Poi = { id: 'visit', kind: 'perch', s: b.j, x: b.x, face: 0, look: f, activity: 'look', weight: 0 };
+            setOff(s, poi, route, now);
+            return true;
+          }
+        }
+      }
+      return teleport(s, now, { ps, greet: true, why: 'visit' });
+    };
+    /** He watches something for a while: you, or an arm assembling a plate. */
+    const watch = (s: State, now: number) => {
+      if (!go(s, { type: 'fidget' }, now)) return false;
+      const v = visitor();
+      const { sx, sy } = viewport();
+      const arm = cache.find((c) => c.el.dataset.printing === '1' && c.el.dataset.arm);
+      const at = v ? { x: v.x + sx, y: v.y + sy } : arm ? { x: arm.left + Number(arm.el.dataset.arm!.split(' ')[2]), y: arm.top + Number(arm.el.dataset.arm!.split(' ')[3]) } : null;
+      if (at && Math.abs(at.x - (s.char.x + sx)) > 12) s.facing = at.x > s.char.x + sx ? 1 : -1;
+      s.look = at;
+      play(s, 'watch', now, { dur: rand(3, 5.5) });
+      return true;
+    };
+    /** What the pointer is doing, as his needs see it. */
+    const cursorNow = (s: State, now: number): BrainCursor => {
+      const p = ptr.current;
+      if (sense.touch) return 'touch';
+      if (!p || sense.gone) return 'gone';
+      if (company(s, p)) return 'near';
+      return now - p.t > 1500 ? 'resting' : 'watching';
+    };
+    /** His needs choose what he does next (desires.ts); he goes and does it. */
+    const decide = (s: State, ps: Seen[], now: number) => {
+      const fl = feel(now);
+      const cur = cursorNow(s, now);
+      s.needs = grow(s.needs, Math.min(120, (now - s.needsAt) / 1000), { band: fl, cursor: cur, offscreen: false, busy: false });
+      s.needsAt = now;
+      const vis = (_c: Perch, i: number) => !!ps[i]?.ok && ps[i].visible && ps[i].onX;
+      const here = cache[s.idx];
+      const gi = heroGround();
+      const can: Partial<Record<Activity, boolean>> = {
+        explore: !here.nook,
+        inside: cache.some((c, i) => c.nook && !c.spot && i !== s.idx && vis(c, i)),
+        probe: fl !== 'shaken' && !probe.busy,
+        letters: fl !== 'shaken' && (cache.some((c, i) => c.nook && c.title && vis(c, i)) || (gi >= 0 && !!ps[gi]?.visible)),
+        stunt: s.idx === gi && gi >= 0 && RANK[fl] >= RANK.tolerant && now - s.stuntAt > 60000 && titleEl()?.getAttribute('data-written') === '1',
+        visit: cur !== 'near' && cur !== 'gone',
+        sit: true,
+        nap: (!!here.nook && here.lie) || cache.some((c, i) => c.nook && c.lie && vis(c, i)),
+        watch: true,
+        vanish: now - s.whimAt > WHIM_GAP * 1000,
+      };
+      let a = forced ?? choose(s.needs, { band: fl, cursor: cur, quiet: (now - attnAt) / 1000, can }, s.did, Math.random);
+      let ok = false;
+      switch (a) {
+        case 'explore':
+          ok = startExplore(s, 'explore', ps, now, probe.fresh) || startExplore(s, 'explore', ps, now);
+          break;
+        case 'inside':
+          ok = teleport(s, now, { ps, prefer: 'inside', only: (c) => c.nook && !c.spot, then: (t) => insideAct(s, t), why: 'inside' });
+          break;
+        case 'probe':
+          ok = probe.decide(s, 'explore', ps, now, true);
+          break;
+        case 'letters':
+          ok = startLetters(s, ps, now);
+          break;
+        case 'stunt':
+          stunt.invite();
+          s.stuntAsk = now;
+          wakeIn(0.1);
+          ok = true;
+          break;
+        case 'visit':
+          ok = visit(s, ps, now);
+          break;
+        case 'sit':
+          ok = here.nook ? (here.lie ? nap(s, now) : false) : startExplore(s, 'rest', ps, now);
+          break;
+        case 'nap':
+          ok = here.nook && here.lie ? nap(s, now) : teleport(s, now, { ps, prefer: 'inside', only: (c) => c.nook && c.lie && !c.spot, then: (t) => void nap(s, t), why: 'nap' });
+          break;
+        case 'watch':
+          ok = watch(s, now);
+          break;
+        case 'vanish':
+          ok = teleport(s, now, { ps, greet: true, why: 'whim' });
+          if (ok) s.whimAt = now;
+          break;
+        case 'fidget':
+          break;
+      }
+      if (!ok && a !== 'fidget') {
+        note(`want:${a}:no`, now);
+        a = 'fidget';
+      }
+      if (a === 'fidget') {
+        // a pause where he is: shuffle along a nook inside, otherwise a fidget
+        if (here.nook && Math.random() < 0.4) insideAct(s, now);
+        else startFidget(s, pickFidget(Math.random, probe.fidgetRecent(s.fidgets), fl), now);
+      }
+      s.did = noteRecent(s.did, a, 3);
+      s.needs = satisfy(s.needs, a);
+      s.doing = a;
+      decisions.push({ t: Math.round(now), a, at: here.nook ? 'inside' : here.ledge ? 'ledge' : 'surface' });
+      if (decisions.length > 400) decisions.shift();
+      note(`want:${a}`, now);
+    };
+    const decisions: { t: number; a: Activity; at: string }[] = []; // dev: what he chose and when
+    let forced: Activity | null = null; // dev: `__puppet.force`
+    let forcedTrick: Trick | null = null;
 
     let lastSeen: Seen[] = []; // dev: the last frame's view of the perches
     let frames = 0; // dev: frames run (to check the loop sleeps when he's settled)
@@ -901,57 +1389,53 @@ export function PuppeteerStage() {
       const { sx, sy } = viewport();
       const ps: Seen[] = cache.map((p) => {
         const top = p.top - sy;
+        const lx = p.left - sx;
         return {
-          ok: p.el.dataset.printed !== '0',
-          left: p.left - sx,
-          pt: { x: p.left - sx + p.width * p.f, y: top - FEET * scale },
+          ok: p.spot || p.el.dataset.printed !== '0',
+          left: lx,
+          pt: { x: lx + p.width * p.f, y: top - FEET * scale * p.k },
           top,
-          visible: top >= headroom && top < vp.h - 8,
+          visible: top >= headroomK(p.k) && top < vp.h - 8,
+          onX: lx + p.ext.hi >= 24 && lx + p.ext.lo <= vp.w - 24,
           bottom: top + p.height,
         };
       });
       lastSeen = ps;
       if (!ps.length) return false; // layout / print-state changes wake us when perches appear
-      const line = vp.h * 0.5;
-      let best = -1;
-      let bestD = Infinity;
-      ps.forEach((p, i) => {
-        if (!p.ok || !p.visible || cache[i].ledge) return; // the reading line picks plates, never ledges
-        const d = Math.abs(p.top - line);
-        if (d < bestD) {
-          bestD = d;
-          best = i;
-        }
-      });
-      if (best < 0) {
-        // ---- probe hook ---- no plate he can stand on in view (the very bottom of the page): the
-        // footer's ledge will do, rather than dangling (he can knock on it and make the 0x90 hop)
-        const f = cache.findIndex((c, i) => c.el.hasAttribute('data-poke-ledge') && ps[i].ok && ps[i].visible);
-        if (f >= 0) {
-          best = f;
-          bestD = Math.abs(ps[f].top - line);
-        }
-      }
-      lastBest = best; // ---- probe hook ----
 
       if (!st.current) {
-        const first = ps[0].pt;
-        const x0 = home(0);
+        // he arrives on his own: gathers himself out of ink on the hero ground (or wherever's on screen)
+        const gi = heroGround();
+        const start = gi >= 0 && ps[gi].visible ? gi : ps.findIndex((q, i) => q.ok && q.visible && !cache[i].nook);
+        const i0 = Math.max(0, start);
+        const x0 = home(i0);
         st.current = {
-          m: initial(now, reduce ? null : { kind: 'carry', why: 'enter', to: 0, x: x0 }),
-          char: reduce ? { ...first } : { x: first.x, y: -120 },
-          from: { x: first.x, y: -120 },
-          fromX: x0,
-          dur: TRANSIT,
-          lift: Math.min(220, vp.h * 0.25),
-          idx: 0,
-          placedBest: 0,
-          grip: reduce ? 0 : 1,
+          m: initial(now),
+          char: { ...perchPosOf(ps, i0, x0) },
+          idx: i0,
+          pid: cache[i0].id,
+          k: cache[i0].k,
+          grip: 0,
           swing: 0,
           swingV: 0,
-          baseX: first.x,
-          hoverX: first.x + HOVER,
+          baseX: ps[i0].pt.x,
+          hoverX: ps[i0].pt.x,
           bend: -1,
+          claw: 0,
+          clawUpAt: -Infinity,
+          tele: null,
+          awaySince: 0,
+          awayFor: 3,
+          needs: { ...NEEDS0 },
+          needsAt: now,
+          did: [],
+          doing: null,
+          whimAt: now,
+          stuntAt: -Infinity,
+          stuntAsk: 0,
+          letters: null,
+          lying: false,
+          dx: 0,
           facing: 1,
           walk: { x: x0, v: 0, phase: 0, walking: false },
           anchored: true,
@@ -962,7 +1446,6 @@ export function PuppeteerStage() {
           turnHop: false,
           tilt: 0,
           squash: 0,
-          edgeSince: 0,
           holdUntil: 0,
           idleAt: Infinity,
           rd: null,
@@ -1015,19 +1498,26 @@ export function PuppeteerStage() {
           afterStep: null,
           slowUntil: 0,
           greetAt: 0,
+          hidden: true,
+          run: false,
+          lwalk: false,
           pending: null,
           reacts: [],
         };
-        armIdle(now);
+        const s0 = st.current;
+        s0.char = { x: s0.char.x, y: -400 }; // not on screen yet: he turns up
+        if (!teleport(s0, now, { to: { i: i0, x: cache[i0].left + x0 }, why: 'enter' })) armIdle(now);
+        s0.hidden = false;
       }
       const s = st.current;
+      sz = scale * s.k;
       const mode = () => s.m.mode;
       const p = ptr.current;
       // ---- trust: what the pointer has been doing since the last frame / wake ----
       const mouse = !!p && !sense.touch && !sense.gone;
       // the pointer just over his head, roughly over him (a hand reaching out: a pat)
-      const headTop = s.char.y - (TALL - FEET) * scale;
-      const overHead = mouse && (free(mode()) || own(mode())) && s.idx >= 0 && Math.abs(p!.x - (s.char.x + 2 * scale * s.shown)) <= PAT_HALF * scale && headTop - p!.y >= 0 && headTop - p!.y <= PAT_HI + 60;
+      const headTop = s.char.y - (TALL - FEET) * sz;
+      const overHead = mouse && (free(mode()) || own(mode())) && s.idx >= 0 && Math.abs(p!.x - (s.char.x + 2 * sz * s.shown)) <= PAT_HALF * sz && headTop - p!.y >= 0 && headTop - p!.y <= PAT_HI + 60;
       const gentleOver = overHead && headTop - p!.y >= PAT_LO && headTop - p!.y <= PAT_HI && (sense.speed <= PAT_SPEED || now - p!.t > 250);
       {
         const md = mode();
@@ -1044,9 +1534,9 @@ export function PuppeteerStage() {
         s.patting = pat;
         let cond: Cond;
         if (s.m.plan?.kind === 'hand' || md === 'falling') cond = 'held';
-        else if (!afoot(md) && md !== 'landing') cond = 'neutral'; // the claw has him: nothing earned or lost
+        else if (!afoot(md)) cond = 'neutral'; // ink, the stunt: nothing earned or lost
         else {
-          const d = mouse ? Math.hypot(p!.x - s.char.x, p!.y - (s.char.y - 8 * scale)) : null;
+          const d = mouse ? Math.hypot(p!.x - s.char.x, p!.y - (s.char.y - 8 * sz)) : null;
           const linger = sense.touch && now - lastScroll >= LINGER_AFTER * 1000 && s.idx >= 0 && !!lastSeen[s.idx]?.visible;
           cond = classify({ d, speed: sense.speed, approach: sense.approach, still: p ? (now - p.t) / 1000 : Infinity, touch: sense.touch, pat, linger });
         }
@@ -1054,10 +1544,10 @@ export function PuppeteerStage() {
         s.cond = cond;
         const t = trustNow(now, (t) => observe(t, now, cond));
         save(now);
-        if (t.full && !lineShown.current && afoot(md) && s.idx >= 0) {
+        if (t.full && !lineShown.current && afoot(md) && s.idx >= 0 && !s.hidden && s.char.y > HEADER) {
           // the first time he fully trusts you: the hidden line, above him (once a session; TrustLine guards it)
           lineShown.current = true;
-          lineRef.current?.show({ x: s.char.x, head: s.char.y - (TALL - FEET) * scale, feet: s.char.y + FEET * scale, gap: 10, half: 14 * scale, top: HEADER + CLEAR });
+          lineRef.current?.show({ x: s.char.x, head: s.char.y - (TALL - FEET) * sz, feet: s.char.y + FEET * sz, gap: 10, half: 14 * sz, top: HEADER + CLEAR });
         }
       }
       const fl = feel(now);
@@ -1079,63 +1569,57 @@ export function PuppeteerStage() {
         else if (freeNow(s) && !s.act && now - s.turnPtAt > TURN_GAP * 1000) turningPoint(s, s.turnPending.band, now);
       }
       if (s.greetAt && now >= s.greetAt) greet(s, now);
-      const heldPt = { ...holdAt(sx, sy) };
-      heldPt.x += Math.sin(now / 1400) * 6;
-      heldPt.y += Math.cos(now / 1100) * 4;
 
-      // ---- stunt hook: start it (free on the hero ground, title written) / a scroll ends it ----
+      // ---- stunt hook: he asked for it (showing off, on the hero ground) / a scroll ends it ----
       if (mode() === 'stunt' && stunt.scrolled(sy)) {
-        stunt.stop(); // letters spring home; the page decides where he goes (below)
+        stunt.stop(); // letters spring home; he gathers himself somewhere on screen (below)
         s.idx = -1;
-      } else if (!reduce) {
+        go(s, { type: 'vanish' }, now);
+        s.tele = null;
+        leaveNow(s, ps, now);
+      } else if (!reduce && s.stuntAsk) {
         const gi = heroGround();
         const onGround = gi >= 0 && mode() === 'idle' && s.idx === gi;
-        const eligible = onGround && !s.act && !s.walk.walking && s.stepGoal === null && !s.turnPending && !pressed && !holding && now - s.m.since > 600;
+        const eligible = onGround && !s.act && !s.walk.walking && s.stepGoal === null && !s.turnPending && !pressed && !holding;
         const sv = stuntView(s, gi);
-        if (stunt.want(now, sv, eligible)) {
-          if (go(s, { type: 'stunt' }, now)) {
-            s.act = null;
-            s.goal = null;
-            stunt.begin(now, sv);
-          }
-        } else if (onGround && stunt.pending(now)) {
-          s.idleAt = Math.max(s.idleAt, now + 400); // it's coming: no wandering off first
-          if (!eligible && now - s.m.since <= 600) wakeIn(0.65);
-        }
+        if (now - s.stuntAsk > 5000 || !onGround) s.stuntAsk = 0; // it didn't come together: something else then
+        else if (stunt.want(now, sv, eligible) && go(s, { type: 'stunt' }, now)) {
+          s.act = null;
+          s.goal = null;
+          s.stuntAsk = 0;
+          s.stuntAt = now;
+          stunt.begin(now, sv);
+        } else s.idleAt = Math.max(s.idleAt, now + 400);
       }
 
-      // ---- the page decides: scroll / perch lost (urgent; interrupts anything but the user's hand / a fall) ----
-      const byHand = s.m.plan?.kind === 'hand';
-      // ---- probe hook ---- (held beside a target for a probe, the driver brings him back itself)
-      if (mode() !== 'falling' && !byHand && !probe.holds(s)) {
-        const cur = s.idx >= 0 ? ps[s.idx] : undefined;
-        const curOk = !!cur && cur.ok && cur.visible;
-        let take: Plan | null = null;
-        if (mode() === 'dangling') {
-          if (best >= 0) take = { kind: 'carry', why: 'scroll', to: best, x: home(best) };
-        } else if (!curOk) {
-          if (best >= 0) take = { kind: 'carry', why: 'scroll', to: best, x: home(best) };
-          else if (s.idx !== -1 || afoot(mode())) take = { kind: 'carry', why: 'lost', to: -1, x: 0 };
-        } else if (mode() !== 'hopping' && mode() !== 'exploring' && best >= 0 && best !== s.idx && best !== s.placedBest && bestD + 80 < Math.abs(cur!.top - line)) {
-          take = { kind: 'carry', why: 'scroll', to: best, x: home(best) };
-        }
-        if (take) {
-          if (reduce) {
-            // carry stays instant: put him straight there
-            s.idx = take.to;
-            s.m = { mode: take.to < 0 ? 'dangling' : 'idle', plan: null, since: now };
-            s.grip = take.to < 0 ? 1 : 0;
-            if (take.to >= 0) {
-              s.walk = { x: take.x, v: 0, phase: s.walk.phase, walking: false };
-              s.anchored = true;
-              s.placedBest = take.to;
+      // ---- his surface: going away under him (leave now), or off screen (come along in a bit) ----
+      {
+        const md = mode();
+        if (md !== 'teleport' && md !== 'falling' && !held(md) && md !== 'stunt') {
+          const mine = s.idx >= 0 ? ps[s.idx] : undefined;
+          if (!mine || !mine.ok) {
+            if (md !== 'hopping' || !mine) leaveNow(s, ps, now);
+            else go(s, { type: 'vanish' }, now) && (s.tele = null, leaveNow(s, ps, now)); // the plate he was headed for went away
+          } else if ((!mine.visible || !mine.onX) && md !== 'hopping' && md !== 'exploring') {
+            if (!s.awaySince) {
+              s.awaySince = now;
+              s.awayFor = lerp(COME[1], COME[0], s.needs.company) * rand(0.85, 1.15);
+              wakeIn(s.awayFor);
+              note('away', now);
+            } else if (now - s.awaySince >= s.awayFor * 1000) {
+              s.awaySince = 0;
+              comeAlong(s, ps, now);
             }
-          } else go(s, { type: 'take', plan: take }, now);
+          } else s.awaySince = 0;
+        }
+        if (s.hidden && mode() !== 'teleport' && s.idx < 0) {
+          // nowhere to be yet: try again (layout / scroll wake us)
+          if (teleport(s, now, { ps, why: 'return' })) s.hidden = false;
         }
       }
 
-      // ---- the user is back: his own whims stop (mid-jump he lands first) ----
-      if (own(mode()) && attnAt > s.m.since) {
+      // ---- the user came close: his own whims stop (mid-jump he lands first) ----
+      if (own(mode()) && nearAt > s.m.since && !s.letters) {
         const mv = s.route?.[s.leg];
         if (mode() === 'exploring' && mv && mv.kind !== 'walk') {
           s.route = s.route!.slice(0, s.leg + 1);
@@ -1143,6 +1627,7 @@ export function PuppeteerStage() {
         } else {
           if (mode() === 'exploring' && mv) {
             s.idx = mv.onto;
+            s.pid = cache[mv.onto].id;
             s.walk = { ...s.walk, x: clampTo(s.char.x + viewport().sx - cache[mv.onto].left, cache[mv.onto].ext), v: 0, walking: false };
             s.route = null;
           }
@@ -1150,16 +1635,17 @@ export function PuppeteerStage() {
         }
       }
 
-      // ---- on a perch under his own power: walk, maybe get reset at an edge ----
+      // ---- on a surface under his own power: walk toward the pointer when it's near him ----
       let backing = false; // edging away from the pointer (he keeps facing it)
       if (free(mode()) && s.idx >= 0) {
         const perch = cache[s.idx];
         const ext = perch.ext;
+        const wc = s.k === 1 ? cfg : { ...cfg, cycle: cfg.cycle * s.k, vmax: cfg.vmax * (0.5 + 0.5 * s.k) };
         const raw = p ? p.x - ps[s.idx].left : s.walk.x;
-        if (s.holdUntil && (now >= s.holdUntil || (raw >= ext.lo && raw <= ext.hi))) s.holdUntil = 0;
+        if (s.holdUntil && now >= s.holdUntil) s.holdUntil = 0;
         // a pointer buzzing round him: back off and swat at it (wary or shaken only: trust ends it)
         if (p && !reduce) {
-          const d = Math.hypot(p.x - s.char.x, p.y - (s.char.y - 8 * scale));
+          const d = Math.hypot(p.x - s.char.x, p.y - (s.char.y - 8 * sz));
           const pd = pesterDist(tr.current!, now);
           if (mode() !== 'swatting' && d < pd && now - p.t < 500 && !(overHead && fl !== 'shaken')) {
             if (go(s, { type: 'pester' }, now)) trustNow(now, (t) => nudge(t, now, -SWAT_COST));
@@ -1170,13 +1656,14 @@ export function PuppeteerStage() {
         // a hand held over him: he doesn't back off sideways from it (he leans into it, or ducks it)
         const handOver = overHead && fl !== 'shaken' && (sense.speed <= PAT_SPEED * 1.5 || now - p!.t > 250);
         const stepping = s.stepGoal !== null && !blocked && !swatting;
-        const follow = !!p && !reduce && !s.holdUntil && p.t > s.ignoreBefore && !blocked && !handOver && !stepping;
+        const near = !!p && !!company(s, p); // he only minds a pointer that's close to him
+        const follow = near && !reduce && !s.holdUntil && p!.t > s.ignoreBefore && !blocked && !handOver && !stepping;
         if (stepping) {
           // a deliberate step: slow, all the way (no arrival slack)
           const x0 = s.walk.x;
           const ph0 = s.walk.phase;
-          s.walk = stepWalk(s.walk, s.stepGoal!, dt, ext, { ...cfg, vmax: cfg.vmax * 0.5, arrive: 3, restart: 0 });
-          s.walk.phase = (((ph0 + ((s.walk.x - x0) * (s.facing || 1)) / cfg.cycle) % 1) + 1) % 1; // a step back is a step back
+          s.walk = stepWalk(s.walk, s.stepGoal!, dt, ext, { ...wc, vmax: wc.vmax * 0.5, arrive: 3, restart: 0 });
+          s.walk.phase = (((ph0 + ((s.walk.x - x0) * (s.facing || 1)) / wc.cycle) % 1) + 1) % 1; // a step back is a step back
           s.anchored = false;
           if (!s.walk.walking) {
             s.walk = { ...s.walk, v: 0 };
@@ -1186,58 +1673,44 @@ export function PuppeteerStage() {
             then?.(now);
           }
         } else if (!follow && !swatting && !settledWalk(s.walk)) {
-          s.walk = stepWalk(s.walk, s.walk.x, dt, ext, cfg); // held up mid-stride: ease to a stop where he is
+          s.walk = stepWalk(s.walk, s.walk.x, dt, ext, wc); // held up mid-stride: ease to a stop where he is
         }
         if (follow || swatting) {
           const prevX = s.walk.x;
           const prevPhase = s.walk.phase;
           // he keeps to his side of the pointer, as far off as he's comfortable with (wary: well back; warm: right by it)
           if (Math.abs(s.walk.x - raw) > 8) s.side = s.walk.x > raw ? 1 : -1;
-          const goal = swatting ? s.walk.x + (p!.x > s.char.x ? -70 : 70) : raw + s.side * keepGap(tr.current!, now);
+          const goal = swatting ? s.walk.x + (p!.x > s.char.x ? -70 : 70) : raw + s.side * keepGap(tr.current!, now) * s.k;
           backing = !swatting && Math.sign(goal - s.walk.x) === s.side && Math.abs(goal - s.walk.x) > 4;
-          s.walk = stepWalk(s.walk, goal, dt, ext, swatting ? { ...cfg, vmax: cfg.vmax * 0.8 } : now < s.slowUntil ? { ...cfg, vmax: cfg.vmax * 0.6 } : cfg);
+          s.walk = stepWalk(s.walk, goal, dt, ext, swatting ? { ...wc, vmax: wc.vmax * 0.8 } : now < s.slowUntil ? { ...wc, vmax: wc.vmax * 0.6 } : wc);
           const moved = s.walk.x - prevX;
           if (moved) {
             s.anchored = false;
             // gait runs backward when he backs away facing the pointer
-            s.walk.phase = (((prevPhase + (moved * (s.facing || 1)) / cfg.cycle) % 1) + 1) % 1;
+            s.walk.phase = (((prevPhase + (moved * (s.facing || 1)) / wc.cycle) % 1) + 1) % 1;
           }
         }
         if (!swatting) {
           if (s.walk.walking && mode() === 'idle') go(s, { type: 'move' }, now);
           else if (!s.walk.walking && mode() === 'walking') go(s, { type: 'stop' }, now);
         }
-
-        // edge: pointer well past the end he's stuck at
-        const stuck =
-          follow &&
-          settledWalk(s.walk) &&
-          ext.hi - ext.lo > 60 &&
-          !swatting &&
-          ((raw > ext.hi + 10 && s.walk.x >= ext.hi - 0.5) || (raw < ext.lo - 10 && s.walk.x <= ext.lo + 0.5));
-        if (!stuck) s.edgeSince = 0;
-        else if (!s.edgeSince) s.edgeSince = now;
-        else if (now - s.edgeSince > EDGE_BEAT * 1000) {
-          s.edgeSince = 0;
-          go(s, { type: 'take', plan: { kind: 'carry', why: 'edge', to: s.idx, x: home(s.idx) } }, now);
-        }
       }
 
-      // ---- the claw's own ideas: a press on him, or boredom ----
-      if (pressed && !reduce && !byHand) {
-        go(s, { type: 'take', plan: { kind: 'hand', why: 'press', to: -1, x: 0 } }, now);
-        if (s.m.plan?.kind !== 'hand') holding = false; // the press didn't take (mid-handling)
+      // ---- a press on him: the claw (and only then) ----
+      if (pressed && !reduce && !held(mode())) {
+        go(s, { type: 'take', plan: PRESS }, now);
+        if (!held(mode())) holding = false; // the press didn't take (he's ink just now)
       }
-      if (byHand && mode() === 'carried' && !holding) go(s, { type: 'release' }, now);
+      if (held(mode()) && !holding) go(s, { type: 'release' }, now);
 
       // ---- his own ideas: the pointer rests over another printed plate → find a way there ----
-      if (free(mode()) && mode() !== 'swatting' && s.idx >= 0 && !reduce && p && p.t > s.ignoreBefore && (fl === 'tolerant' || fl === 'warm') && !overHead) {
+      if (free(mode()) && mode() !== 'swatting' && s.idx >= 0 && !cache[s.idx].nook && !reduce && p && p.t > s.ignoreBefore && (fl === 'tolerant' || fl === 'warm') && !overHead) {
         // ledges are small: a generous zone above them counts as resting over them
         const over = (q: (typeof ps)[number], i: number) =>
           cache[i].ledge
             ? p.x >= q.left - 24 && p.x <= q.left + cache[i].width + 24 && p.y >= q.top - 110 && p.y <= q.bottom + 16
             : p.x >= q.left && p.x <= q.left + cache[i].width && p.y >= q.top - 40 && p.y <= q.bottom;
-        const j = ps.findIndex((q, i) => i !== s.idx && q.ok && q.visible && over(q, i));
+        const j = ps.findIndex((q, i) => i !== s.idx && !cache[i].nook && q.ok && q.visible && over(q, i));
         if (j !== s.want) {
           s.want = j;
           s.wantSince = now;
@@ -1252,16 +1725,18 @@ export function PuppeteerStage() {
             s.route = route;
             s.leg = 0;
             s.legAt = now;
+            s.run = false;
             go(s, { type: 'hop' }, now);
             s.idx = j;
+            s.pid = cache[j].id;
           } else s.wantFail = j;
         }
       } else if (!free(mode())) s.want = -1;
 
-      // ---- left alone: fidget, explore, sit — or the claw has an idea ----
+      // ---- left to himself: sit by a resting pointer, or his needs choose what he does ----
       const near = company(s, p);
       const still = p ? (now - p.t) / 1000 : 0;
-      if (mode() === 'idle' && s.idx >= 0 && !reduce && !s.walk.walking && !s.holdUntil && !s.act && !s.patting && s.stepGoal === null && near && fl === 'warm' && !uneasy(tr.current!, now)) {
+      if (mode() === 'idle' && s.idx >= 0 && !reduce && !s.walk.walking && !s.holdUntil && !s.act && !s.patting && s.stepGoal === null && near && fl === 'warm' && !uneasy(tr.current!, now) && !cache[s.idx].spot) {
         // fully at ease and the pointer resting right by him: he sits down beside it
         const by = Math.abs(near.p.x - s.char.x) < 110 && Math.abs(near.p.y - s.char.y) < 240;
         if (by && still >= SIT_REST) sitBeside(s, near.p, now);
@@ -1270,23 +1745,11 @@ export function PuppeteerStage() {
           wakeIn(SIT_REST - still);
         }
       }
-      if (mode() === 'idle' && s.idx >= 0 && !reduce && now >= s.idleAt && !s.walk.walking && !s.holdUntil && !s.act && !s.patting && s.stepGoal === null && !s.turnPending) {
-        const quiet = (now - attnAt) / 1000;
-        // shaken, he won't wander off; with the pointer about he stays with it (and minds it)
-        const stay = uneasy(tr.current!, now) || !!near;
-        // ---- probe hook ---- fidgets avoid what he just did anywhere; an exploration may be a probe; a find
-        // avoids the activity he just did (or anything, if that's all there is)
-        const c = decideIdle({ quiet, explored: s.explored, recent: probe.fidgetRecent(s.fidgets), rand: Math.random, feel: fl, stay });
-        const explore = (mood: 'explore' | 'rest') => startExplore(s, mood, ps, now, probe.fresh) || startExplore(s, mood, ps, now);
-        if (probe.decide(s, c.kind, ps, now)) {
-          // off to probe something
-        } else if (c.kind === 'fidget') startFidget(s, c.fidget, now);
-        else if (c.kind === 'claw') clawRelocate(s, ps, now);
-        else if (!explore(c.kind === 'rest' ? 'rest' : 'explore') && !(c.kind === 'rest' && explore('explore'))) {
-          // nowhere to go on his own: sometimes the claw obliges, otherwise he stays and fidgets later
-          if (Math.random() < 0.4) clawRelocate(s, ps, now);
-          else startFidget(s, 'look', now);
-        }
+      if (mode() === 'idle' && s.idx >= 0 && !reduce && now >= s.idleAt && !s.walk.walking && !s.holdUntil && !s.act && !s.patting && s.stepGoal === null && !s.turnPending && !s.stuntAsk && !s.awaySince) {
+        if (cache[s.idx].spot) {
+          // a one-off spot (done with the probe / the letters): on to somewhere proper
+          teleport(s, now, { ps, why: 'done' });
+        } else decide(s, ps, now);
         if (mode() === 'idle') armIdle(now, 'nothing');
       }
 
@@ -1300,7 +1763,7 @@ export function PuppeteerStage() {
       if (mode() === 'sitting') {
         if (now >= s.sitUntil) {
           go(s, { type: 'attend' }, now); // had enough: gets up
-        } else if (now >= s.kickAt) {
+        } else if (now >= s.kickAt && !s.lying) {
           s.kickFrom = now;
           s.kickAt = now + (KICK + kickDelay(Math.random)) * 1000;
           wakeIn((s.kickAt - now) / 1000);
@@ -1308,11 +1771,11 @@ export function PuppeteerStage() {
       }
 
       // ---- a print arm swinging close past him: duck ----
-      if (!reduce && (free(mode()) || mode() === 'fidget') && now > s.duckUntil) {
-        const { sx, sy } = viewport();
-        const head = { x: s.char.x + sx, y: s.char.y + sy - 14 * scale };
+      if (!reduce && (free(mode()) || mode() === 'fidget') && now > s.duckUntil && !s.letters) {
+        const head = { x: s.char.x + sx, y: s.char.y + sy - 14 * sz };
         cache.forEach((c, i) => {
-          const a = c.el.dataset.arm; // printing, or swinging back up off the finished plate
+          if (c.nook) return;
+          const a = c.el.dataset.arm; // assembling, or swinging back up off the finished plate
           const was = s.arms[i];
           s.arms[i] = a ?? '';
           if (!a || !was || a === was || now <= s.duckUntil) return;
@@ -1322,7 +1785,7 @@ export function PuppeteerStage() {
           const vx = T.x - B.x;
           const vy = T.y - B.y;
           const u = clamp(((head.x - B.x) * vx + (head.y - B.y) * vy) / Math.max(1, vx * vx + vy * vy));
-          if (Math.hypot(head.x - (B.x + vx * u), head.y - (B.y + vy * u)) < 50 * scale) {
+          if (Math.hypot(head.x - (B.x + vx * u), head.y - (B.y + vy * u)) < 50 * sz) {
             if (mode() === 'fidget') go(s, { type: 'done' }, now);
             play(s, 'duck', now);
             s.duckUntil = now + 2600;
@@ -1334,10 +1797,9 @@ export function PuppeteerStage() {
       // ---- motion for the current mode ----
       const prevX = s.char.x;
       const m = s.m;
-      const k = clamp((now - m.since) / 1000 / (m.mode === 'grabbed' ? (m.plan?.kind === 'hand' ? GRAB_HAND : GRAB) : m.mode === 'landing' ? LAND : s.dur));
       const perchPos = (i: number, x: number): Pt => ({ x: ps[i].left + x, y: ps[i].pt.y });
-      let lean: number | null = null; // fixed pose angle (drag) instead of pendulum physics
       let ragdoll = false;
+      let ink: { k: number; out: boolean } | undefined;
       s.action = undefined;
       if (m.mode === 'swatting') {
         const t = (now - m.since) / 1000;
@@ -1352,59 +1814,39 @@ export function PuppeteerStage() {
       } else s.flinchSwat = false;
       // shuffling out to the edge as he sits / back as he stands
       if (s.act?.kind === 'sit') s.seat = lerp(s.seatFrom, s.seatTo, easeInOut(clamp((now - s.act.at) / 1000 / s.act.dur)));
+      // his size: smaller inside a plate; held or falling he comes out of the paper
+      const kGoal = s.idx >= 0 && cache[s.idx] && (afoot(m.mode) || m.mode === 'stunt') ? cache[s.idx].k : held(m.mode) || m.mode === 'falling' ? 1 : s.k;
+      if (m.mode !== 'teleport') s.k = Math.abs(kGoal - s.k) < 0.002 || reduce ? kGoal : lerp(s.k, kGoal, 1 - Math.pow(0.004, dt));
+      sz = scale * s.k;
       switch (m.mode) {
         case 'swatting':
         case 'idle':
         case 'walking':
-        case 'landing':
         case 'fidget':
         case 'sitting':
-          if (s.idx >= 0) s.char = perchPos(s.idx, s.walk.x + s.seat);
-          s.grip = m.mode === 'landing' ? 1 - easeInOut(k) : 0;
-          if (m.mode === 'landing' && k >= 1) go(s, { type: 'landed' }, now);
+          if (s.idx >= 0) s.char = perchPos(s.idx, s.walk.x + s.seat + s.dx);
+          s.grip = 0;
           break;
-        case 'grabbed':
-          if (s.idx >= 0 && m.plan?.kind !== 'hand') s.char = perchPos(s.idx, s.walk.x); // by hand: he stays where you caught him
+        case 'grabbed': {
+          // the claw drops in from the rail and closes on his collar; he stays where you caught him
+          const k = clamp((now - m.since) / 1000 / GRAB_HAND);
           s.grip = easeInOut(k);
           if (k >= 1) go(s, { type: 'gripped' }, now);
           break;
-        case 'dangling':
-          s.char = probe.hold(s, now) ?? { ...heldPt }; // ---- probe hook ---- (held beside a target)
-          s.grip = 1;
-          break;
+        }
         case 'carried': {
-          const plan = m.plan!;
-          if (plan.kind === 'hand') {
-            // the claw follows the pointer; he hangs from the collar
-            if (hand) {
-              const goal = { x: hand.x - COLLAR.x * s.shown * scale, y: hand.y - COLLAR.y * scale };
-              const a = 1 - Math.pow(1e-6, dt);
-              const nx = lerp(s.char.x, goal.x, a);
-              const ny = lerp(s.char.y, goal.y, a);
-              const b = 1 - Math.pow(0.02, dt);
-              s.hv = { x: lerp(s.hv.x, (nx - s.char.x) / Math.max(dt, 1e-3), b), y: lerp(s.hv.y, (ny - s.char.y) / Math.max(dt, 1e-3), b) };
-              s.char = { x: nx, y: ny };
-            }
-            s.grip = 1;
-            ragdoll = true;
-            break;
+          // the claw follows the pointer; he hangs from the collar
+          if (hand) {
+            const goal = { x: hand.x - COLLAR.x * s.shown * sz, y: hand.y - COLLAR.y * sz };
+            const a = 1 - Math.pow(1e-6, dt);
+            const nx = lerp(s.char.x, goal.x, a);
+            const ny = lerp(s.char.y, goal.y, a);
+            const b = 1 - Math.pow(0.02, dt);
+            s.hv = { x: lerp(s.hv.x, (nx - s.char.x) / Math.max(dt, 1e-3), b), y: lerp(s.hv.y, (ny - s.char.y) / Math.max(dt, 1e-3), b) };
+            s.char = { x: nx, y: ny };
           }
-          const target = plan.to < 0 ? (probe.hold(s, now) ?? heldPt) : perchPos(plan.to, plan.x); // ---- probe hook ----
-          const e = easeInOut(k);
-          const peak = Math.min(s.from.y, target.y) - s.lift;
-          const mx = (s.from.x + target.x) / 2;
-          let x = (1 - e) * (1 - e) * s.from.x + 2 * (1 - e) * e * mx + e * e * target.x;
-          let y = (1 - e) * (1 - e) * s.from.y + 2 * (1 - e) * e * peak + e * e * target.y;
-          if (plan.kind === 'tour') {
-            // a short loop out and back while up in the air: shown around, then put down
-            const dir = s.from.x < vp.w / 2 ? 1 : -1;
-            const amp = Math.min(150, vp.w * 0.18);
-            x += Math.sin(2 * Math.PI * e) * amp * dir;
-            y += -Math.sin(2 * Math.PI * e) * Math.sin(Math.PI * e) * 30;
-          }
-          s.char = { x, y };
           s.grip = 1;
-          if (k >= 1) go(s, { type: 'arrived' }, now);
+          ragdoll = true;
           break;
         }
         case 'falling': {
@@ -1413,21 +1855,91 @@ export function PuppeteerStage() {
           const u = clamp(t / f.T);
           const x = f.x0 + (f.x1 - f.x0) * u + f.vx * f.T * u * (1 - u) * 0.5;
           const y = f.y0 + f.vy * Math.min(t, f.T) + (GRAVITY * Math.min(t, f.T) ** 2) / 2;
-          s.char = { x: x - viewport().sx, y: (u >= 1 ? f.y1 : y) - viewport().sy };
-          s.grip = Math.max(0, s.grip - dt * 6);
+          s.char = { x: x - sx, y: (u >= 1 ? f.y1 : y) - sy };
+          s.grip = 0;
           ragdoll = true;
           if (u >= 1) {
             s.fall = null;
             s.squash = 0.16;
-            if (f.to >= 0) play(s, 'land', now);
-            if (f.to >= 0) {
+            if (f.to >= 0 && cache[f.to]) {
+              play(s, 'land', now);
               s.idx = f.to;
+              s.pid = cache[f.to].id;
               s.walk = { x: clampTo(f.x1 - cache[f.to].left, cache[f.to].ext), v: 0, phase: s.walk.phase, walking: false };
               s.anchored = false;
-              s.placedBest = best;
               s.holdUntil = now + 1500; // catches his breath before following again
-            } else s.idx = -1;
+              go(s, { type: 'arrived' }, now);
+            } else {
+              // fell out of sight: he'll gather himself back on screen
+              s.idx = -1;
+              s.pid = '';
+              s.hidden = true;
+              go(s, { type: 'arrived' }, now);
+              if (teleport(s, now, { ps, why: 'fell' })) s.hidden = false;
+            }
+          }
+          break;
+        }
+        case 'teleport': {
+          const T = s.tele;
+          if (!T) {
             go(s, { type: 'arrived' }, now);
+            break;
+          }
+          const ph = hopPhase(T.hop, now);
+          if (!T.swapped && ph.phase !== 'out') {
+            // through the gap: he's at the destination now (or, if it went away meanwhile, somewhere else)
+            let j = T.to ? cache.findIndex((c) => c.id === T.to!.id) : -1;
+            if (j < 0 || !ps[j]?.ok) {
+              const d = chooseDest(destSpots(ps), { focus: focusDoc(), view: { left: sx, right: sx + vp.w, top: sy + HEADER + CLEAR, bottom: sy + vp.h - 8 }, me: null, rand: Math.random });
+              j = d ? d.i : -1;
+              T.to = d ? { id: cache[d.i].id, x: clampTo(d.x - cache[d.i].left, cache[d.i].ext) } : null;
+              T.poi = null;
+              T.then = null;
+            }
+            if (j < 0) {
+              // nowhere on screen: out of sight until there is
+              s.tele = null;
+              s.idx = -1;
+              s.pid = '';
+              s.hidden = true;
+              go(s, { type: 'arrived' }, now);
+              break;
+            }
+            s.idx = j;
+            s.pid = cache[j].id;
+            s.k = cache[j].k;
+            sz = scale * s.k;
+            s.walk = { x: T.to!.x, v: 0, phase: s.walk.phase, walking: false };
+            s.anchored = false;
+            s.hidden = false;
+            T.swapped = true;
+            const v = visitor();
+            const at = perchPos(j, T.to!.x);
+            if (T.poi?.face) s.facing = s.shown = T.poi.face;
+            else if (v && Math.abs(v.x - at.x) > 10) s.facing = s.shown = v.x > at.x ? 1 : -1;
+          }
+          if (!T.swapped) {
+            s.k = T.kFrom;
+            sz = scale * s.k;
+            s.char = { x: T.fromDoc.x - sx, y: T.fromDoc.y - sy };
+            ink = { k: ph.k, out: true };
+          } else {
+            s.char = perchPos(s.idx, s.walk.x);
+            ink = ph.phase === 'gone' ? { k: 1, out: true } : ph.phase === 'in' ? { k: ph.k, out: false } : undefined;
+          }
+          s.grip = 0;
+          if (ph.phase === 'done') {
+            s.tele = null;
+            go(s, { type: 'arrived' }, now);
+            note(`arrived:${T.why}`, now);
+            const after = (t: number) => {
+              if (T.poi) arrive(s, t);
+              else if (T.then) T.then(t);
+              if (T.greet && freeNow(s) && !s.act) greet(s, t);
+            };
+            if (!reduce && !T.hop.instant) chain(s, now, [{ kind: 'shake', block: true }], after);
+            else after(now);
           }
           break;
         }
@@ -1449,10 +1961,10 @@ export function PuppeteerStage() {
           }
           const smp = sampleMove(mv, t, 40 * (scale / 1.85));
           const prevPhase = s.walk.phase;
-          s.char = { x: smp.p.x - viewport().sx, y: smp.p.y - FEET * scale - viewport().sy };
+          s.char = { x: smp.p.x - sx, y: smp.p.y - FEET * scale - sy };
           const dir = mv.to.x >= mv.from.x ? 1 : -1;
           if (Math.abs(mv.to.x - mv.from.x) > 1) s.facing = dir;
-          if (smp.action === 'walk') s.walk = { ...s.walk, v: dir * (m.mode === 'exploring' ? limX : lim).speed, phase: (prevPhase + Math.abs(s.char.x - prevX) / cfg.cycle) % 1 };
+          if (smp.action === 'walk') s.walk = { ...s.walk, v: dir * (m.mode === 'exploring' ? limX : s.run ? limRun : lim).speed, phase: (prevPhase + Math.abs(s.char.x - prevX) / cfg.cycle) % 1 };
           else {
             s.walk = { ...s.walk, v: 0 };
             s.action = smp.action;
@@ -1467,31 +1979,21 @@ export function PuppeteerStage() {
             }
             s.route = null;
             s.idx = last.onto;
+            s.pid = cache[last.onto]?.id ?? '';
             s.walk = { x: clampTo(last.to.x - cache[last.onto].left, cache[last.onto].ext), v: 0, phase: s.walk.phase, walking: false };
             s.anchored = false;
-            s.placedBest = best;
             s.want = -1;
             const exploring = m.mode === 'exploring';
+            const ran = s.run;
+            s.run = false;
             go(s, { type: 'arrived' }, now);
             if (exploring && s.goal) arrive(s, now);
+            else if (ran) {
+              // caught up with you: hello
+              s.greetAt = now + rand(200, 450);
+              wakeIn(0.5);
+            }
           }
-          break;
-        }
-        case 'dragged': {
-          // along the surface by the collar: body leans, legs trail, feet scrape
-          const plan = m.plan!;
-          const e = easeInOut(k);
-          const x = lerp(s.fromX, plan.x, e);
-          const dir = plan.x >= s.fromX ? 1 : -1;
-          const speed = Math.sin(Math.PI * k); // 0 at the ends
-          const scrape = Math.sin(now / 45) * 0.025 + Math.sin(now / 71) * 0.015; // catching on the surface
-          lean = dir * (0.08 + 0.2 * speed) + scrape * speed;
-          s.walk = { ...s.walk, x, phase: (s.walk.phase + (Math.abs(x - s.walk.x) / (cfg.cycle * 1.6))) % 1 };
-          const at = perchPos(s.idx, x);
-          // rotating about the collar lifts the feet; drop him so they stay on the surface
-          s.char = { x: at.x, y: at.y + reach * (1 - Math.cos(lean)) };
-          s.grip = 1;
-          if (k >= 1) go(s, { type: 'arrived' }, now);
           break;
         }
       }
@@ -1500,8 +2002,8 @@ export function PuppeteerStage() {
       let kick = 0;
       s.amp = s.act?.kind === 'tap' ? s.amp : 1;
       if (s.m.mode === 'sitting') {
-        s.action = 'sit';
-        s.actionK = s.act?.kind === 'sit' ? clamp((now - s.act.at) / 1000 / s.act.dur) : 1;
+        s.action = s.lying ? 'lie' : 'sit';
+        s.actionK = s.act?.kind === 'sit' || s.act?.kind === 'lie' ? clamp((now - s.act.at) / 1000 / s.act.dur) : 1;
         if (s.kickFrom) {
           const u = (now - s.kickFrom) / 1000 / KICK;
           if (u >= 1) s.kickFrom = 0;
@@ -1537,20 +2039,19 @@ export function PuppeteerStage() {
           }
         }
       }
+      s.lwalk = false;
+      if (s.letters) tickLetters(s, now); // ---- letter play: his pose and the letters ----
 
       s.kick = kick;
-      // pendulum swing while carried, settles otherwise; drags hold a lean
-      const inAir = s.m.mode === 'carried' || s.m.mode === 'dangling';
+      // pendulum swing while carried, settles otherwise
+      const inAir = s.m.mode === 'carried';
       const vx = (s.char.x - prevX) / Math.max(dt, 0.001);
       if (ragdoll && s.rd) {
         // falling: the collar drops with him, so gravity barely pulls his limbs (they float up loose)
-        s.rag = stepRagdoll(s.rd, collarOf(s), dt, scale, m.mode === 'falling' ? 0.5 : 1);
+        s.rag = stepRagdoll(s.rd, collarOf(s), dt, sz, m.mode === 'falling' ? 0.5 : 1);
         s.ragW = 1;
         s.swing = s.rag.torso;
         s.swingV = s.rd.torso.v;
-      } else if (lean !== null) {
-        s.swing = lean;
-        s.swingV = 0;
       } else {
         const targetSwing = inAir ? clamp(-vx * 0.0009, -0.55, 0.55) : 0;
         s.swingV += ((targetSwing - s.swing) * 40 - s.swingV * 6) * dt;
@@ -1565,13 +2066,13 @@ export function PuppeteerStage() {
         }
       }
 
-      // facing: direction of travel while handled or walking; otherwise toward the pointer (or the page centre)
+      // facing: direction of travel while handled or walking; otherwise toward the pointer when it's near
       const handled = held(s.m.mode);
-      const fresh = !!p && p.t > s.ignoreBefore; // a pointer he's still minding
-      if (s.m.mode === 'hopping' || s.m.mode === 'exploring' || own(s.m.mode)) {
-        // set by the route / the activity
+      const fresh = !!p && p.t > s.ignoreBefore && !!near; // a pointer he's still minding (close to him)
+      if (s.m.mode === 'hopping' || s.m.mode === 'exploring' || own(s.m.mode) || s.m.mode === 'teleport') {
+        // set by the route / the activity / where he gathered himself
       } else if (s.act?.block && now < s.act.at + s.act.dur * 1000) {
-        // standing up: not yet
+        // standing up / shaking himself off: not yet
       } else if (s.m.mode === 'swatting' && p) {
         s.facing = p.x > s.char.x ? 1 : -1; // faces the pest while backing off
       } else if (handled || s.m.mode === 'falling') {
@@ -1584,10 +2085,10 @@ export function PuppeteerStage() {
       else if (fresh) {
         // toward the pointer, but not round and round after one darting back and forth across him
         if (Math.abs(p!.x - s.char.x) > 28 && now - s.faceAt > FACE_GAP * 1000) s.facing = p!.x > s.char.x ? 1 : -1;
-      } else if (!p && !s.ignoreBefore) s.facing = s.char.x < vp.w / 2 ? 1 : -1;
+      }
       // the about-face: facing flips instantly partway through a short pivot (head first, weight, a step
       // across — or a little hop when he's standing). Held, falling or reduced motion: just flips.
-      const pivots = !reduce && !ragdoll && (afoot(s.m.mode) || s.m.mode === 'landing') && s.m.mode !== 'sitting';
+      const pivots = !reduce && !ragdoll && afoot(s.m.mode) && s.m.mode !== 'sitting';
       if (s.turnAt && s.facing === s.shown && now - s.turnAt < FLIP * TURN * 1000) s.turnAt = 0; // changed his mind before the flip
       if (s.facing !== s.shown && !s.turnAt) {
         if (!pivots) s.shown = s.facing;
@@ -1604,15 +2105,19 @@ export function PuppeteerStage() {
         if (u >= 1) s.turnAt = 0;
       }
 
-      // gait amplitude follows speed; eases out when he stops. Dragged: a weak stumble, feet scraping.
+      // gait amplitude follows speed; eases out when he stops
       const amtGoal =
-        free(s.m.mode) || ((s.m.mode === 'hopping' || s.m.mode === 'exploring') && s.walk.v !== 0) ? clamp(Math.abs(s.walk.v) / (cfg.vmax * 0.35)) : s.m.mode === 'dragged' ? 0.35 : 0;
+        free(s.m.mode) || ((s.m.mode === 'hopping' || s.m.mode === 'exploring') && s.walk.v !== 0)
+          ? clamp(Math.abs(s.walk.v) / (cfg.vmax * 0.35))
+          : s.lwalk
+            ? 0.7
+            : 0;
       s.amt = amtGoal >= s.amt ? amtGoal : Math.max(amtGoal, s.amt - dt * 4);
 
-      // a glance at the pointer for a moment after it moves, while he stands still
+      // a glance at the pointer for a moment after it moves, while he stands still (when it's near him)
       const looking = free(s.m.mode) && !reduce && fresh && !s.walk.walking && (now - p!.t) / 1000 < LOOK;
-      const headY = s.char.y - 28 * scale;
-      const aim = ((own(s.m.mode) && s.m.mode !== 'exploring') || probe.looks(s)) && s.look ? { x: s.look.x - viewport().sx, y: s.look.y - viewport().sy } : null; // ---- probe hook ----
+      const headY = s.char.y - 28 * sz;
+      const aim = own(s.m.mode) && s.m.mode !== 'exploring' && s.look ? { x: s.look.x - sx, y: s.look.y - sy } : null;
       // at ease with you, he keeps an eye on the pointer when it rests by him (a steady aim: the loop still settles).
       // Wary or shaken he never takes his eyes off it, even backing away.
       const watchful = (fl === 'wary' || fl === 'shaken') && free(s.m.mode);
@@ -1633,7 +2138,7 @@ export function PuppeteerStage() {
                   ? lookAngle(gaze.x - s.char.x, gaze.y - headY, 0.6)
                   : 0;
       // ---- how he holds himself: eases toward his mood's posture (reduced motion: just is) ----
-      const standing = afoot(s.m.mode) || s.m.mode === 'landing';
+      const standing = afoot(s.m.mode);
       const pg = POSTURE[fl];
       const ease = (cur: number, goal: number, base: number) => (reduce || Math.abs(goal - cur) < 0.004 ? goal : lerp(cur, goal, 1 - Math.pow(base, dt)));
       s.hunch = ease(s.hunch, standing ? pg.hunch : 0, 0.04);
@@ -1641,15 +2146,10 @@ export function PuppeteerStage() {
       s.patW = ease(s.patW, s.patting && standing ? 1 : 0, s.patting ? 0.01 : 0.05);
       s.tilt = Math.abs(tiltGoal - s.tilt) < 0.002 ? tiltGoal : lerp(s.tilt, tiltGoal, 1 - Math.pow(0.004, dt));
 
-      // the idle claw trails behind him on a leash around its resting spot (never at rest over his text);
-      // while it has him (or is reaching for him) it rides right above.
-      const reaching = handled || s.grip > 0;
-      const rest = s.idx >= 0 ? ps[s.idx].pt.x + HOVER : s.char.x + HOVER;
-      const leash = vp.w < 700 ? 30 : 220;
-      const hoverGoal = reaching ? s.char.x + HOVER * 0.5 : rest + clamp(s.char.x - HOVER * s.facing - rest, -leash, leash);
-      s.hoverX = Math.abs(hoverGoal - s.hoverX) < 0.01 ? hoverGoal : lerp(s.hoverX, hoverGoal, 1 - Math.pow(reaching ? 0.002 : 0.12, dt));
-      const baseGoal = reaching ? s.char.x : s.hoverX - 10;
-      s.baseX = lerp(s.baseX, baseGoal, 1 - Math.pow(reaching ? 0.005 : 0.02, dt));
+      // the claw's carriage rides the rail above him while it has him (it's out of sight otherwise)
+      const clawOut = handled || now - s.clawUpAt < CLAW_UP * 1000;
+      if (clawOut) s.baseX = handled ? lerp(s.baseX, s.char.x, 1 - Math.pow(0.005, dt)) : s.baseX;
+      else s.baseX = s.char.x;
       // ---- stunt hook: he's on the title (the driver says where and how); hand him back when it ends ----
       if (s.m.mode === 'stunt') {
         const gi = heroGround();
@@ -1658,14 +2158,16 @@ export function PuppeteerStage() {
           stunt.stop();
           if (f.done === 'ground' && gi >= 0) {
             s.idx = gi;
+            s.pid = cache[gi].id;
             s.walk = { x: clampTo(f.x - cache[gi].left, cache[gi].ext), v: 0, phase: s.walk.phase, walking: false };
             s.anchored = false;
             s.char = perchPos(gi, s.walk.x);
             go(s, { type: 'done' }, now);
             armIdle(now);
           } else {
-            s.idx = -1; // the claw comes for him and sets him back down in the light
-            go(s, { type: 'take', plan: { kind: 'carry', why: 'enter', to: Math.max(0, gi), x: home(Math.max(0, gi)) } }, now);
+            // up on the title: he runs off into ink and gathers himself back down in the light
+            s.idx = -1;
+            teleport(s, now, { to: gi >= 0 ? { i: gi, x: cache[gi].left + home(gi) } : null, ps, why: 'stunt-down' });
           }
         } else {
           s.char = f.char;
@@ -1676,27 +2178,27 @@ export function PuppeteerStage() {
           s.kick = f.kick;
           s.amt = f.amt;
           s.walk = { ...s.walk, phase: f.phase, v: 0 };
-          s.grip = f.grip;
+          s.grip = 0;
           s.swing = f.swing;
           s.swingV = 0;
           s.tilt = f.tilt;
           s.squash = f.squash;
           s.rag = null;
           s.ragW = 0;
+          ink = f.ink;
         }
       } else if (stunt.active) {
-        // something took him mid-stunt (a press, the page): letters home, and no jump back to the ground
+        // something took him mid-stunt (a press): letters home, and no jump back to the ground
         stunt.stop();
         if (stunt.last) s.char = { ...stunt.last };
-        if (s.m.mode === 'grabbed' && s.m.plan?.kind !== 'hand') s.idx = -1;
       }
-      draw();
+      draw(ink);
 
-      // settled: idle and still, everything at rest, claw arrived → sleep until something changes
+      // settled: idle and still, everything at rest, claw gone → sleep until something changes
       const settled =
         (s.m.mode === 'idle' || (s.m.mode === 'sitting' && !s.kickFrom)) &&
-        !s.edgeSince &&
         !s.act &&
+        !s.letters &&
         settledWalk(s.walk) &&
         s.amt === 0 &&
         !s.turnAt &&
@@ -1707,13 +2209,12 @@ export function PuppeteerStage() {
         s.patW === (s.patting && standing ? 1 : 0) &&
         s.stepGoal === null &&
         !looking &&
-        s.hoverX === hoverGoal &&
+        !clawOut &&
+        s.k === kGoal &&
         Math.abs(s.swing) < 1e-4 &&
         Math.abs(s.swingV) < 1e-4 &&
         s.squash === 0 &&
-        s.ragW === 0 &&
-        Math.abs(s.baseX - baseGoal) < 1e-4; // tight: a looser snap leaves the carriage visibly off by a sub-pixel
-      if (s.m.mode === 'dangling') return Math.abs(s.swing) > 1e-4 || !reduce; // sways in the air; reduced motion: still
+        s.ragW === 0;
       if (settled) {
         // asleep, trust keeps changing on paper: wake when it next crosses a band (or fear fades)
         window.clearTimeout(trustTimer);
@@ -1723,24 +2224,46 @@ export function PuppeteerStage() {
       return !settled;
     };
 
-    const draw = () => {
+    const perchPosOf = (ps: Seen[], i: number, x: number): Pt => ({ x: ps[i].left + x, y: ps[i].pt.y });
+    const clawTop = (x: number): Pt => ({ x, y: -vp.h * 0.15 });
+    let clawLast: Pt = { x: 0, y: 0 };
+    const draw = (ink?: { k: number; out: boolean }) => {
       const s = st.current;
       if (!s) return;
+      const now = performance.now();
       const collar = collarOf(s);
-      const hover = { x: s.hoverX, y: Math.max(vp.h * 0.08, s.char.y - 170) };
-      const g = clamp(s.grip);
-      const tip = { x: lerp(hover.x, collar.x, g), y: lerp(hover.y, collar.y, g) };
-      const t = vp.w < 700 ? 12 : 20;
-      const base = { x: s.baseX, y: -t * 2 };
-      // elbow side flips only once the tip is well past the carriage (no elbow pop as he walks)
-      if (tip.x > base.x + 40) s.bend = -1;
-      else if (tip.x < base.x - 40) s.bend = 1;
       const mode = s.m.mode;
+      // the claw: only for a press. It drops in from the rail, holds him while you do, goes back up after.
+      let tip: Pt | null = null;
+      let grip = 0;
+      if (held(mode)) {
+        const k = mode === 'grabbed' ? clamp((now - s.m.since) / 1000 / GRAB_HAND) : 1;
+        const e = easeInOut(k);
+        const top = clawTop(collar.x);
+        tip = { x: lerp(top.x, collar.x, e), y: lerp(top.y, collar.y, e) };
+        grip = mode === 'grabbed' ? clamp((k - 0.6) / 0.4) : 1;
+        clawLast = collar;
+      } else if (now - s.clawUpAt < CLAW_UP * 1000) {
+        const e = easeInOut(clamp((now - s.clawUpAt) / 1000 / CLAW_UP));
+        const top = clawTop(clawLast.x);
+        tip = { x: lerp(clawLast.x, top.x, e), y: lerp(clawLast.y, top.y, e) };
+        grip = 1 - clamp(e * 3);
+      }
+      setAttr(armWrap.current, 'display', tip ? null : 'none');
+      if (tip) {
+        const t = vp.w < 700 ? 12 : 20;
+        const base = { x: s.baseX, y: -t * 2 };
+        // elbow side flips only once the tip is well past the carriage (no elbow pop as he moves)
+        if (tip.x > base.x + 40) s.bend = -1;
+        else if (tip.x < base.x - 40) s.bend = 1;
+        armRef.current?.set({ base, tip, bend: s.bend, grip });
+      }
+      setAttr(hideRef.current, 'display', s.hidden && mode !== 'teleport' ? 'none' : null);
       const loose = s.rag && s.ragW > 0;
-      const dangle = loose ? 0.3 * s.ragW : mode === 'carried' || mode === 'dangling' ? 1 : mode === 'dragged' ? 0.55 : 0;
+      const dangle = loose ? 0.3 * s.ragW : mode === 'carried' ? 1 : 0;
       const w = s.ragW;
       const rag = loose ? { torso: 0, head: s.rag!.head * w, armL: s.rag!.armL * w, armR: s.rag!.armR * w, legL: s.rag!.legL * w, legR: s.rag!.legR * w } : undefined;
-      const turn = s.turnAt ? { k: clamp((performance.now() - s.turnAt) / 1000 / TURN), hop: s.turnHop } : undefined;
+      const turn = s.turnAt ? { k: clamp((now - s.turnAt) / 1000 / TURN), hop: s.turnHop } : undefined;
       const pose: Pose = {
         swing: 0,
         dangle: s.m.mode === 'stunt' && stunt.frame ? stunt.frame.dangle : dangle, // ---- stunt hook ----
@@ -1759,14 +2282,14 @@ export function PuppeteerStage() {
         turn,
         tremble: s.tremble,
         mood: { hunch: s.hunch, open: s.open, pat: s.patW },
+        ink: reduce ? undefined : ink,
+        lie: s.action === 'lie' ? s.actionK : 0,
       };
       // character pivots on the collar while the claw has him
       const pivot = Math.abs(s.swing) > 1e-4;
       setAttr(tiltRef.current, 'transform', pivot ? `rotate(${(s.swing * 180) / Math.PI} ${collar.x} ${collar.y})` : null);
-      charRef.current?.set(s.char.x, s.char.y, scale, pose);
-      armRef.current?.set({ base, tip, bend: s.bend, grip: g });
+      charRef.current?.set(s.char.x, s.char.y, sz, pose);
     };
-
     const loop = ticker.loop(frame);
     if (import.meta.env.DEV) {
       // dev only: `__puppet.play('scratch')` plays an action on the spot; `__puppet.mode` reads the machine
@@ -1796,6 +2319,55 @@ export function PuppeteerStage() {
           },
           get frames() {
             return frames;
+          },
+          // ---- v2.7: his own life ----
+          /** his needs now (desires.ts), 0..1 */
+          get desires() {
+            const s = st.current;
+            return s ? { ...s.needs } : null;
+          },
+          /** what he chose and when (ms), and where he was */
+          decisions,
+          /** times the claw has come down (only ever for a press) */
+          get clawUses() {
+            return clawUses;
+          },
+          /** the nooks inside assembled plates (document px) */
+          get nooks() {
+            return cache.filter((c) => c.nook && !c.spot).map((c) => ({ id: c.id, left: c.left, right: c.left + c.width, y: c.top, title: c.title, lie: c.lie, wall: c.wall }));
+          },
+          get letters() {
+            const L = st.current?.letters;
+            return L ? { trick: L.prog.trick, keys: L.prog.keys, dur: L.prog.dur } : null;
+          },
+          /** do this now (desires.ts Activity), as if he'd chosen it; false if he can't from here */
+          force: (a: Activity, o: { trick?: Trick } = {}) => {
+            const s = st.current;
+            if (!s || reduce) return false;
+            const now = performance.now();
+            if (s.m.mode === 'sitting' || s.m.mode === 'fidget') go(s, { type: 'attend' }, now);
+            if (s.m.mode !== 'idle' || s.idx < 0) return false;
+            forcedTrick = o.trick ?? null;
+            forced = a;
+            decide(s, lastSeen, now);
+            forced = null;
+            forcedTrick = null;
+            loop.wake();
+            return s.did[0] === a;
+          },
+          /** teleport now: anywhere good near the pointer, or into a plate ('inside') */
+          teleport: (where?: 'inside' | 'outside') => {
+            const s = st.current;
+            if (!s || reduce) return false;
+            const now = performance.now();
+            if (own(s.m.mode)) go(s, { type: 'attend' }, now);
+            const ok = teleport(s, now, { ps: lastSeen, prefer: where, only: where === 'inside' ? (c) => c.nook && !c.spot : where === 'outside' ? (c) => !c.nook : undefined, greet: true, why: 'dev' });
+            loop.wake();
+            return ok;
+          },
+          get away() {
+            const s = st.current;
+            return s ? { since: s.awaySince, for: s.awayFor } : null;
           },
           /** trust 0..1 (set: also clears fear); `fear` 0..1; `feel` = the band he's in */
           get trust() {
@@ -1886,28 +2458,36 @@ export function PuppeteerStage() {
       dirty = true;
       wake();
     });
-    const mo = new MutationObserver(wake);
-    mo.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['data-printed'] });
+    // a plate assembled or taken apart: its nooks change (and a perch may come or go)
+    const mo = new MutationObserver(() => {
+      dirty = true;
+      wake();
+    });
+    mo.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['data-printed', 'data-printing'] });
 
-    // attention: any real pointer move, tap or scroll means the user is around (his whims stop);
-    // a big move or a scroll also pushes back his next idle decision
+    // attention: any real pointer move or tap means the visitor is about (desires.ts `quiet`); only one
+    // close to him stops what he's doing on his own and pushes back his next decision
     let anchor: Pt | null = null;
     let near: Pt | null = null;
     const attention = (x: number, y: number) => {
+      const now = performance.now();
       if (!near || Math.hypot(x - near.x, y - near.y) > ATTEND) {
         near = { x, y };
-        attnAt = performance.now();
+        attnAt = now;
       }
-      if (!anchor || Math.hypot(x - anchor.x, y - anchor.y) > BIG_MOVE) {
+      const s = st.current;
+      const close = !!s && !s.hidden && Math.hypot(x - s.char.x, y - (s.char.y - 20 * sz)) < NEAR_HIM;
+      if (close && (!anchor || Math.hypot(x - anchor.x, y - anchor.y) > BIG_MOVE)) {
         anchor = { x, y };
-        armIdle(performance.now(), 'attention');
+        nearAt = now;
+        armIdle(now, 'attention');
       }
     };
     const onHim = (x: number, y: number) => {
       const s = st.current;
       const md = s?.m.mode;
-      if (!s || reduce || !(afoot(md!) || md === 'landing' || md === 'falling' || md === 'stunt')) return false; // ---- stunt hook: you can catch him mid-stunt ----
-      return Math.abs(x - s.char.x) < 18 * scale && y > s.char.y - 45 * scale && y < s.char.y + FEET * scale;
+      if (!s || reduce || s.hidden || !(afoot(md!) || md === 'falling' || md === 'stunt')) return false; // ---- stunt hook: you can catch him mid-stunt ----
+      return Math.abs(x - s.char.x) < Math.max(18 * sz, 16) && y > s.char.y - 45 * sz && y < s.char.y + FEET * sz;
     };
 
     // pointer: mouse/pen follow live; touch follows the last tap (a short press that didn't scroll)
@@ -1920,7 +2500,7 @@ export function PuppeteerStage() {
       if (e.pointerType === 'touch') return;
       const t = performance.now();
       const s = st.current;
-      const d = s ? Math.hypot(e.clientX - s.char.x, e.clientY - (s.char.y - 8 * scale)) : Infinity;
+      const d = s ? Math.hypot(e.clientX - s.char.x, e.clientY - (s.char.y - 8 * sz)) : Infinity;
       const last = sense.last;
       if (last && !sense.touch && !sense.gone) {
         // smoothed speed and approach (toward him), ~0.15 s
@@ -1971,7 +2551,7 @@ export function PuppeteerStage() {
       const s = st.current;
       sense.touch = true;
       sense.last = null;
-      if (s) trustNow(performance.now(), (t) => tap(t, performance.now(), Math.hypot(e.clientX - s.char.x, e.clientY - (s.char.y - 8 * scale))));
+      if (s) trustNow(performance.now(), (t) => tap(t, performance.now(), Math.hypot(e.clientX - s.char.x, e.clientY - (s.char.y - 8 * sz))));
       ptr.current = { x: e.clientX, y: e.clientY, t: performance.now() };
       attention(e.clientX, e.clientY);
       wake();
@@ -1986,7 +2566,6 @@ export function PuppeteerStage() {
     const onScroll = () => {
       attnAt = performance.now();
       lastScroll = attnAt;
-      armIdle(attnAt, 'attention');
       if (sense.touch) {
         // staying on a section starts to count once the scrolling stops (one timer, re-armed)
         window.clearTimeout(lingerTimer);
@@ -2036,6 +2615,7 @@ export function PuppeteerStage() {
       window.clearTimeout(lingerTimer);
       save(performance.now(), true);
       unlightNode();
+      if (st.current?.letters) endLetters(st.current);
       stunt.destroy(); // ---- stunt hook ----
       probe.stop(); // ---- probe hook ----
     };
@@ -2047,10 +2627,15 @@ export function PuppeteerStage() {
   return (
     <>
       <svg className="pointer-events-none fixed inset-0 z-30 h-full w-full overflow-visible" viewBox={`0 0 ${vp.w} ${vp.h}`} aria-hidden="true">
-        <g ref={tiltRef}>
-          <Character ref={charRef} />
+        <g ref={hideRef}>
+          <g ref={tiltRef}>
+            <Character ref={charRef} />
+          </g>
         </g>
-        <MechArm ref={armRef} l1={l} l2={l} t={t} tool="claw" toolLen={t * 2.6} />
+        {/* the claw: only ever for a press on him (out of sight otherwise) */}
+        <g ref={armWrap} display="none">
+          <MechArm ref={armRef} l1={l} l2={l} t={t} tool="claw" toolLen={t * 2.6} />
+        </g>
       </svg>
       <TrustLine ref={lineRef} />
     </>

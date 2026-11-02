@@ -5,12 +5,13 @@
  * ("did you see that?"); fully trusted, now and then a probe wins (the CTA cracks open, a badge spins
  * a full turn). Every touch lands on the target at the moment his hand meets it (`poke` / `pokeWin`).
  *
- * How he gets there (always a spot where his body box covers no text):
+ * How he gets there (always a spot where his body box covers no text; v2.7: on his own, never the claw):
  * - stand: walk (navigate.ts) onto the plate's top edge, or the footer's ledge, and work from there
  *   (pick at a torn corner, lift the edge and look under it, poke up at a parked print arm, knock on
- *   the footer's edge so the 0x90 under it hops). If he can't walk there the claw sets him down.
- * - heist: the claw lowers him beside the target and holds him there by the collar while he works
- *   (hex badges, the CTA, circuit nodes): `heistSpot` finds the side where his body clears all text.
+ *   the footer's edge so the 0x90 under it hops). If he can't walk there he teleports onto it.
+ * - inside ("heist"): he slips into the plate (teleports; drawn smaller there, interior.ts INSIDE)
+ *   and stands beside the target while he works (hex badges, the CTA, circuit nodes): `heistSpot`
+ *   finds the side where his body clears all text. He stays inside after; the stage decides what next.
  *
  * Variety: everything he does on his own (fidgets, explore finds, sitting, probes) is noted here as a
  * whim; fidgets and explore finds avoid what he just did anywhere (moodVariety.ts), and the explore /
@@ -27,7 +28,7 @@ import type { Fidget } from './idle';
 import { noteRecent, pickVaried, type Weights } from './moodVariety';
 import type { Move } from './navigate';
 import { AIM_AHEAD, PROBE_HIT, PROBE_REACH, durOf, type AnyAction, type ProbeMove } from './poses';
-import { forProbe, type Ev, type Machine, type Plan } from './puppet-machine';
+import type { Ev, Machine } from './puppet-machine';
 import { chooseProbe, COOLDOWN, type Band, type ProbeAction, type ProbeChoice, type ProbeKind, type ProbeTarget } from './probe';
 import { isEngaged, poke, pokeWin, queryTargets, type PokeTarget } from './targets';
 
@@ -35,7 +36,7 @@ import { isEngaged, poke, pokeWin, queryTargets, type PokeTarget } from './targe
 export const PROBE_GAP = 16; // s between probes at least (on top of probe.ts caps)
 export const RETRY_AFTER = 25; // s a target he couldn't get at is left alone
 export const NEAR_CURSOR = 150;
-export const MAX_COLUMN = 40; // px of text the claw may cross on its way down to hold him beside a target (about a label) // px: a target this close to the visitor's pointer is less tempting
+// NEAR_CURSOR: px; a target this close to the visitor's pointer is less tempting
 /** His body box, character units from the collar (origin), facing +x. */
 export const BODY = { back: 12, front: 14, up: 44, down: 27 };
 const FIDGETS = new Set<string>(['look', 'scratch', 'shift', 'glasses', 'lookUp', 'crouch', 'cower', 'blink', 'tilt', 'wave', 'step']);
@@ -44,7 +45,7 @@ const FIDGETS = new Set<string>(['look', 'scratch', 'shift', 'glasses', 'lookUp'
 export const MOVE: Record<ProbeKind, ProbeMove> = { spin: 'prod', tug: 'tug', lift: 'pick', peek: 'lift', rattle: 'rattle', twitch: 'prod', tap: 'knock' };
 /** The everyday activity (explore.ts / idle.ts) each probe most resembles: not straight after it. */
 const LIKE: Record<ProbeKind, string> = { spin: 'tap', tug: 'crouch', lift: 'crouch', peek: 'peek', rattle: 'watch', twitch: 'watch', tap: 'crouch' };
-/** How he gets at each kind: from a surface, or held beside it by the claw. */
+/** How he gets at each kind: from a surface, or from inside the plate beside it. */
 export const APPROACH: Record<ProbeKind, 'stand' | 'heist'> = { spin: 'heist', tug: 'heist', rattle: 'heist', lift: 'stand', peek: 'stand', twitch: 'stand', tap: 'stand' };
 
 // ---------- pure helpers ----------
@@ -252,9 +253,14 @@ export type StageCtx = {
   visitor: () => Pt | null; // screen px
   cursor: () => Cursor;
   attnAt: () => number;
-  best: () => number; // the reading-line perch, -1 = none
-  home: (i: number) => number; // where on perch i he's usually set down (px along it)
   note: (k: string, now: number) => void;
+  /** px per character unit inside a plate (he's drawn smaller there) */
+  insideScale: number;
+  /**
+   * Teleport (ink) to a surface (`i`, document x) or to a standing spot inside a plate (feet, document
+   * px); `poi` becomes his goal, and the stage calls `arrive` once he's gathered himself there.
+   */
+  teleportTo: (dest: { i: number; x: number } | { spot: Pt; facing: 1 | -1 }, poi: Poi, now: number) => boolean;
 };
 
 type Run = {
@@ -263,7 +269,7 @@ type Run = {
   action: ProbeAction;
   win: boolean;
   glanceBack: boolean;
-  approach: 'walk' | 'drop' | 'heist';
+  approach: 'walk' | 'drop' | 'heist'; // drop / heist: he teleports there (onto the surface / inside the plate)
   phase: 'approach' | 'ready' | 'beats' | 'return';
   at: number; // ms it started
   beats: Beat[];
@@ -275,7 +281,6 @@ type Run = {
   facing: 1 | -1;
   aim: number;
   dir: number; // side he's on, for the target's response
-  home: { idx: number; x: number };
   surf: number; // stand: the surface index
   forced: boolean;
 };
@@ -388,7 +393,6 @@ export function createProbeDriver(ctx: StageCtx) {
       i: -1,
       beatAt: now,
       fired: 0,
-      home: { idx: s.idx, x: s.walk.x },
       forced,
     };
     const heist = action !== 'look' && APPROACH[kind] === 'heist';
@@ -398,19 +402,23 @@ export function createProbeDriver(ctx: StageCtx) {
       const contact = { left: cr.left + sx, right: cr.right + sx, top: cr.top + sy, bottom: cr.bottom + sy };
       const move = MOVE[kind];
       const reach = PROBE_REACH[move] ?? PROBE_REACH.prod!;
+      const ki = ctx.insideScale;
       const spot = heistSpot({
         contact,
         avoid: avoidRects(pt, all, contact),
         view: { left: sx, right: sx + ctx.vw, top: sy, bottom: sy + ctx.vh },
         minTop: sy + ctx.minTop,
-        scale: k,
+        scale: ki,
         reach,
         prefer: meX >= cx(contact) ? 1 : -1,
-        maxColumn: forced ? Infinity : MAX_COLUMN,
       });
       if (!spot) return false;
+      // standing there, his feet are below the collar: still on screen
+      const feetY = spot.at.y + (ctx.feet / k) * ki;
+      if (feetY - sy > ctx.vh - 4) return false;
       run = { ...base, approach: 'heist', look: { x: cx(contact), y: cy(contact) }, hold: spot.at, facing: spot.facing, aim: AIM_AHEAD, dir: spot.side, surf: -1 };
-      if (!ctx.go({ type: 'take', plan: { kind: 'carry', why: 'probe', to: -1, x: 0 } }, now)) {
+      const poi: Poi = { id: `probe:${pt.id}`, kind: 'probe', s: -1, x: spot.at.x, face: spot.facing, look: run.look, activity: 'look', weight: 0 };
+      if (!ctx.teleportTo({ spot: { x: spot.at.x, y: feetY }, facing: spot.facing }, poi, now)) {
         run = null;
         return false;
       }
@@ -434,7 +442,7 @@ export function createProbeDriver(ctx: StageCtx) {
       else ctx.setOff(poi, route, now);
       return true;
     }
-    if (!ctx.go({ type: 'take', plan: { kind: 'carry', why: 'probe', to: i, x: st.x - p.left } }, now)) {
+    if (!ctx.teleportTo({ i, x: st.x }, poi, now)) {
       run = null;
       return false;
     }
@@ -482,27 +490,11 @@ export function createProbeDriver(ctx: StageCtx) {
 
   const begin = (s: Probed, now: number) => {
     const r = run!;
-    if (r.approach !== 'heist' && !ctx.go({ type: 'fidget' }, now)) return cancel(now);
+    if (!ctx.go({ type: 'fidget' }, now)) return cancel(now);
     r.phase = 'beats';
     r.i = 0;
     s.explored++;
     startBeat(s, now);
-  };
-
-  const sendBack = (s: Probed, now: number) => {
-    const r = run!;
-    r.phase = 'return';
-    const P = ctx.perches();
-    const ok = (i: number) => i >= 0 && i < P.length && P[i].el.isConnected;
-    const { sy } = ctx.view();
-    const visible = (i: number) => ok(i) && P[i].top - sy >= ctx.minTop + 70 * k && P[i].top - sy < ctx.vh - 8 && P[i].el.dataset.printed !== '0';
-    const plan: Plan = visible(r.home.idx)
-      ? { kind: 'carry', why: 'probe', to: r.home.idx, x: r.home.x }
-      : visible(ctx.best())
-        ? { kind: 'carry', why: 'probe', to: ctx.best(), x: ctx.home(ctx.best()) }
-        : { kind: 'carry', why: 'lost', to: -1, x: 0 };
-    if (!ctx.go({ type: 'take', plan }, now) || plan.to < 0) run = null;
-    s.look = null;
   };
 
   /** The hand meets it: the target answers (or the visitor's on it: he's caught, and backs off). */
@@ -555,7 +547,7 @@ export function createProbeDriver(ctx: StageCtx) {
      * The idle decision (stage): `kind` from idle.ts. On 'explore' he may probe something instead.
      * True = a probe is under way (the stage does nothing else).
      */
-    decide(s: Probed, kind: 'fidget' | 'explore' | 'rest' | 'claw', ps: readonly SeenLike[], now: number): boolean {
+    decide(s: Probed, kind: 'fidget' | 'explore' | 'rest', ps: readonly SeenLike[], now: number, sure = false): boolean {
       if (run || kind !== 'explore' || s.idx < 0) return false;
       const band = ctx.feel(now);
       if (band === 'shaken' || now - lastProbeAt < PROBE_GAP * 1000) return false;
@@ -568,7 +560,7 @@ export function createProbeDriver(ctx: StageCtx) {
       let list = g.list;
       let choice = chooseProbe(list.map((q) => q.pr), st);
       const whim = chooseWhim({ band, cursor: ctx.cursor(), region, ready: !!choice, recent: whimCats, rand: Math.random });
-      if (whim !== 'probe') return false;
+      if (!sure && whim !== 'probe') return false;
       for (let tries = 0; choice && tries < 3; tries++) {
         const pick = list.find((q) => q.pr.id === choice!.target.id)!;
         if (start(s, choice, pick.pt, g.all, ps, now)) return true;
@@ -598,7 +590,7 @@ export function createProbeDriver(ctx: StageCtx) {
       return false;
     },
 
-    /** Stage arrive(): he reached a probe's spot on foot. */
+    /** Stage arrive(): he reached a probe's spot (on foot, or gathered there from ink). */
     arrive(s: Probed, now: number) {
       if (!run || run.phase !== 'approach' || s.goal?.kind !== 'probe') return;
       begin(s, now);
@@ -608,14 +600,7 @@ export function createProbeDriver(ctx: StageCtx) {
     entered(s: Probed, prev: Machine, ev: Ev, now: number) {
       if (!run) return;
       const m = s.m;
-      if (run.phase === 'return') {
-        if (m.mode === 'idle' || (m.mode !== 'carried' && m.mode !== 'landing' && m.mode !== 'grabbed' && !forProbe(m))) run = null;
-        return;
-      }
-      if (m.mode === 'dangling' && forProbe(m) && run.approach === 'heist') run.phase = 'ready';
-      else if (m.mode === 'idle' && prev.mode === 'landing' && prev.plan?.why === 'probe' && run.approach === 'drop') run.phase = 'ready';
-      else if (ev.type === 'attend' || ev.type === 'pester') cancel(now);
-      else if (ev.type === 'take' && ev.plan.why !== 'probe') cancel(now);
+      if (ev.type === 'attend' || ev.type === 'pester' || ev.type === 'take') cancel(now);
       else if (m.mode === 'idle' && run.phase === 'beats' && prev.mode === 'fidget') {
         // the beats ran out (or something stopped him): done
         if (run.i >= run.beats.length - 1) {
@@ -632,27 +617,12 @@ export function createProbeDriver(ctx: StageCtx) {
       if (!r) return;
       const m = s.m.mode;
       if (r.phase === 'approach') {
-        if (r.approach === 'walk' && m !== 'exploring' && m !== 'fidget' && m !== 'idle') cancel(now);
-        return;
-      }
-      if (r.phase === 'ready') {
-        if ((r.approach === 'heist' && m === 'dangling') || (r.approach !== 'heist' && m === 'idle')) begin(s, now);
-        else if (r.approach !== 'heist' && m !== 'landing') cancel(now);
+        const ok = r.approach === 'walk' ? m === 'exploring' || m === 'fidget' || m === 'idle' : m === 'teleport' || m === 'idle' || m === 'fidget';
+        if (!ok) cancel(now);
         return;
       }
       if (r.phase !== 'beats') return;
-      const heist = r.approach === 'heist';
-      if (heist) {
-        // the visitor's back (pointer, tap, scroll) or the target's slipping off screen: the claw takes him home
-        const { sy } = ctx.view();
-        const box = bodyBox(r.hold!, r.facing, k);
-        if (m !== 'dangling' || !forProbe(s.m)) return cancel(now);
-        if ((!r.forced && ctx.attnAt() > r.at) || box.top - sy < ctx.minTop || box.bottom - sy > ctx.vh + 4 || !r.t.el.isConnected) {
-          record(r, 'aborted', now);
-          finishProbe(r, now);
-          return sendBack(s, now);
-        }
-      } else if (m !== 'fidget') return cancel(now);
+      if (m !== 'fidget' || !r.t.el.isConnected) return cancel(now);
       const b = r.beats[r.i];
       const u = (now - r.beatAt) / 1000 / b.dur;
       const hits = b.hits ?? [];
@@ -666,43 +636,16 @@ export function createProbeDriver(ctx: StageCtx) {
         startBeat(s, now);
         return;
       }
-      // the last beat is over
-      if (heist) {
-        record(r, r.action === 'look' ? 'looked' : 'done', now);
-        finishProbe(r, now);
-        sendBack(s, now);
-      }
-      // on foot: the stage's fidget ends with this act; `entered` closes the run
+      // the last beat is over: the stage's fidget ends with this act; `entered` closes the run
     },
 
-    /** Heist: where the claw holds him (screen px), or null (not a heist hold right now). */
-    hold(s: Probed, now: number): Pt | null {
-      const r = run;
-      if (!r || r.approach !== 'heist' || r.phase === 'return' || !r.hold || !forProbe(s.m)) return null;
-      const { sx, sy } = ctx.view();
-      // a slow, small sway on the line (slow enough never to read as travel: his facing holds)
-      return { x: r.hold.x - sx + Math.sin(now / 1300) * 1.2, y: r.hold.y - sy + Math.cos(now / 1700) * 1 };
-    },
-    /** The claw keeps him for a probe: the page's own carries wait (the driver sends him back itself). */
-    holds(s: Probed) {
-      return !!run && run.approach === 'heist' && run.phase !== 'return' && forProbe(s.m);
-    },
-    /** Head aim while held for a probe (the stage aims only in his own modes otherwise). */
-    looks(s: Probed) {
-      return !!run && run.approach === 'heist' && run.phase === 'beats' && forProbe(s.m) && !!s.look;
-    },
     /** The front arm's reach angle for the pose. */
     aim() {
       return run && run.phase === 'beats' ? run.aim : AIM_AHEAD;
     },
-    /** A probe carry's arc stays under the header (px of lift). */
-    lift(from: Pt, lift: number) {
-      const r = run;
-      let ty = from.y;
-      const { sy } = ctx.view();
-      if (r?.hold && r.phase !== 'return') ty = r.hold.y - sy;
-      const peakMin = ctx.minTop + BODY.up * k;
-      return Math.max(0, Math.min(lift, Math.min(from.y, ty) - peakMin));
+    /** A probe is under way (he's on his way to it, or at it). */
+    get busy() {
+      return !!run;
     },
     stop() {
       run = null;
