@@ -96,14 +96,14 @@
   text-shadow: 0 calc(var(--asm-lift, 0) * 7px) calc(var(--asm-lift, 0) * 4px) rgb(0 0 0 / calc(var(--asm-lift, 0) * .3));
 }
 /* v2.7 pinned assembly: the plate sticks (native sticky, scrolling is never intercepted) while
-   the visitor scrolls through its spacer, about one viewport (phones: about half). PrintedPlate
-   sets the sticky top from the plate's height. Reduced motion: no pin. */
+   the visitor scrolls through its spacer, under half a viewport (phones: under a third; v2.9, was
+   85 / 55svh). PrintedPlate sets the sticky top from the plate's height. Reduced motion: no pin. */
 .plate-target { position: absolute; left: 0; top: 0; width: 1px; height: 1px; pointer-events: none; }
 .plate-spacer { height: 0; }
 @media (prefers-reduced-motion: no-preference) {
   .plate-pin { position: sticky; top: 88px; }
-  .plate-spacer { height: 55svh; }
-  @media (min-width: 840px) { .plate-spacer { height: 85svh; } }
+  .plate-spacer { height: 30svh; }
+  @media (min-width: 840px) { .plate-spacer { height: 45svh; } }
 }
 @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
   [data-printed='1'] > .plate-alive:is(:hover, :focus-within) {
