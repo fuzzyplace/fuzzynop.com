@@ -114,7 +114,7 @@ const SWAT = 0.42; // s per swat
 const DWELL = 0.7; // s the pointer rests over another plate before he sets off for it
 const GRAB_HAND = 0.22; // s: the claw drops in and closes on him when you press
 const CLAW_UP = 0.55; // s: after it lets go, the claw goes back up out of sight
-const COME: [number, number] = [1.4, 4.2]; // s off screen before he comes along (strong company need → the short end)
+const COME: [number, number] = [0.9, 2.6]; // s off screen before he comes along (strong company need → the short end)
 const RUN = 2.6; // running vs. his walking pace (catching up)
 const RUN_MAX = 2.8; // s: a catch-up run longer than this and he teleports instead
 const NEAR_HIM = 220; // px: the pointer this close and his own whims stop (he attends to you)
@@ -2475,6 +2475,10 @@ export function PuppeteerStage() {
             const s = st.current;
             const c = s && s.idx >= 0 ? cache[s.idx] : null;
             return c ? { id: c.id, nook: c.nook, printed: c.el.dataset.printed ?? null, assembled: c.el.dataset.assembled ?? null, pinned: c.el.dataset.pinned ?? null, top: c.top - viewport().sy } : null;
+          },
+          /** how many places on screen he could be right now (0: nowhere, e.g. only a plate being assembled is in view) */
+          get places() {
+            return destSpots(lastSeen).length;
           },
           get away() {
             const s = st.current;
