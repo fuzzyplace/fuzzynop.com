@@ -431,11 +431,15 @@ export function PuppeteerStage() {
         const face = c.el.querySelector<HTMLElement>('.plate-face') ?? c.el;
         const fr = face.getBoundingClientRect();
         const plate = { left: fr.left + sx, right: fr.right + sx, top: fr.top + sy, bottom: fr.bottom + sy };
-        const { text, titles } = plateText(face, sx, sy);
-        const found = freeSpaces(plate, text, { inset: 14, pad: INSIDE_PAD, w: 30 * szIn, h: (TALL + 3) * szIn, lieW: 76 * szIn, titles });
-        found.forEach((n, j) => {
+        // v2.9: found in plate-relative px, so a plate gives the same nooks (and ids) wherever it is
+        // (pinned or not: native sticky only offsets it), and he doesn't snap when it un-pins
+        const { text, titles } = plateText(face, -fr.left, -fr.top);
+        const rel = { left: 0, right: fr.width, top: 0, bottom: fr.height };
+        const found = freeSpaces(rel, text, { inset: 14, pad: INSIDE_PAD, w: 30 * szIn, h: (TALL + 3) * szIn, lieW: 76 * szIn, titles });
+        found.forEach((m, j) => {
+          const n = { ...m, left: m.left + plate.left, right: m.right + plate.left, y: m.y + plate.top };
           const width = n.right - n.left;
-          nooks.push({ el: c.el, id: `${c.id}:n${Math.round(n.left - plate.left)}:${Math.round(n.y - plate.top)}`, left: n.left, top: n.y, width, height: 0, f: 0.5, ext: { lo: 0, hi: width }, ledge: false, k: kIn, nook: true, spot: false, host: i, wall: n.wall, lie: n.lie, title: n.title, pin: c.pin, top0: n.y, dark });
+          nooks.push({ el: c.el, id: `${c.id}:n${Math.round(m.left)}:${Math.round(m.y)}`, left: n.left, top: n.y, width, height: 0, f: 0.5, ext: { lo: 0, hi: width }, ledge: false, k: kIn, nook: true, spot: false, host: i, wall: n.wall, lie: n.lie, title: n.title, pin: c.pin, top0: n.y, dark });
           void j;
         });
       });
