@@ -26,7 +26,7 @@ Branch `claude/v2.8-launch` (on top of `claude/v2.3-living-stage-x605vc`). `npm 
 **Launch prep done in v2.8**
 - `index.html`: twitter title/description/image alt, `og:site_name`, `og:image:alt`, apple-touch-icon and manifest links.
 - `public/`: `apple-touch-icon.png` (paper hex with FZNP on ink, 180x180, rendered from SVG), `site.webmanifest`, `404.html` (dark, the footer egg, a link home, noindex).
-- `vercel.json`: strict CSP plus short caching for og/favicon/icons. Tested on 2026-11-02 against the production build under these headers (temp static server mirroring Vercel's headers and 404): full scroll at 1440 and 375, the character stage chunk loaded and he appeared, zero CSP violations, zero console or page errors, no horizontal scroll; unknown paths return 404 with the 404 page. Lighthouse locally: accessibility, best practices and SEO 100, same as before; performance 78 to 87 (container variance, unchanged by these edits).
+- `vercel.json`: strict CSP plus short caching for og/favicon/icons. `*.vercel.app` hosts (previews) get a second CSP that adds the Vercel toolbar origins (`vercel.live`, its pusher socket, `vercel.com` images), so preview comments are not blocked; `fuzzynop.com` keeps the strict one. Tested on 2026-11-02 against the production build under these headers (temp static server mirroring Vercel's headers and 404): full scroll at 1440 and 375, the character stage chunk loaded and he appeared, zero CSP violations, zero console or page errors, no horizontal scroll; unknown paths return 404 with the 404 page. Lighthouse locally: accessibility, best practices and SEO 100, same as before; performance 78 to 87 (container variance, unchanged by these edits).
 
 **Waiting on Z**
 - DNS provider access and a go-ahead date (LAUNCH.md).

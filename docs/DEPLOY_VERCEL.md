@@ -40,7 +40,7 @@ Project → **Analytics → Enable** (Web Analytics). `@vercel/analytics` is alr
 - Rollback: Vercel → Deployments → previous → **Promote to Production** (instant).
 
 ## Config in repo
-- `vercel.json`: framework, build/output, www→apex redirect, security headers (incl. a strict `Content-Security-Policy`: scripts, fonts and requests from the site itself only, inline styles allowed for the art; Vercel Analytics is same-origin under `/_vercel/insights`), immutable caching for `/assets/*`, 1-hour caching for `og.png`, favicon, touch icon and manifest. A new third-party script, font, image host or embed needs a CSP change here or it will be blocked.
+- `vercel.json`: framework, build/output, www→apex redirect, security headers (incl. a strict `Content-Security-Policy`: scripts, fonts and requests from the site itself only, inline styles allowed for the art; Vercel Analytics is same-origin under `/_vercel/insights`; requests to a `*.vercel.app` host get a second CSP that also allows the Vercel preview toolbar from `vercel.live`, while the custom domain keeps the strict one), immutable caching for `/assets/*`, 1-hour caching for `og.png`, favicon, touch icon and manifest. A new third-party script, font, image host or embed needs a CSP change here or it will be blocked.
 - `public/404.html`: Vercel serves it with status 404 for any path that isn't a file (no SPA rewrite; the site is one page at `/`).
 - `public/apple-touch-icon.png` (180x180, rendered from SVG), `public/site.webmanifest`, `public/favicon.svg`, `public/og.png` (1200x630).
 - `.nvmrc` — Node 22.

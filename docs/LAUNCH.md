@@ -38,8 +38,8 @@ Run all of these against the preview URL before step 4. Tick in the PR.
 - [ ] Keyboard only: skip link, visible orange focus ring, focus inside a plate shows it whole.
 
 **Headers, meta, errors**
-- [ ] DevTools console: no errors and no CSP violations on a full scroll (the CSP is in `vercel.json`; it was tested locally on 2026-11-02 with zero violations at 1440 and 375).
-- [ ] Response headers on `/` include `Content-Security-Policy`, `Strict-Transport-Security`, `X-Frame-Options: DENY`.
+- [ ] DevTools console: no errors and no CSP violations on a full scroll (the CSP is in `vercel.json`; it was tested locally on 2026-11-02 with zero violations at 1440 and 375). Previews (`*.vercel.app`) get a second CSP that also allows the Vercel toolbar (`vercel.live`, `vercel.com` images, `assets.vercel.com` fonts, the `ws-us3.pusher.com` socket), so preview comments work. If a violation still names a Vercel toolbar URL, it is the toolbar, not the site: note it, then re-test with the toolbar off (toolbar menu, or Project Settings → General → Vercel Toolbar) or in a private window that is not signed in to Vercel.
+- [ ] Response headers on `/` include `Content-Security-Policy` (on the preview it lists `https://vercel.live`; on `fuzzynop.com` it must not), `Strict-Transport-Security`, `X-Frame-Options: DENY`.
 - [ ] An unknown path (e.g. `/nope`) returns **404** with the dark 404 page and a link home.
 - [ ] Share card: paste the preview URL into opengraph.xyz (or a Slack DM to yourself): title "Josh Schwartz / FuzzyNop", the tagline image. Note: `og:image` points at `https://fuzzynop.com/og.png`, which only resolves after cutover, so the card on the preview may show the v1 image or none. Re-check after step 6.
 - [ ] Lighthouse (mobile) on the preview: ≥ 95 accessibility, best practices, SEO; performance as high as it goes (local runs: 78 to 87, variance from the container).
@@ -114,7 +114,7 @@ At the DNS provider for `fuzzynop.com`:
 - [ ] https://fuzzynop.com/nope → 404 page, status 404.
 - [ ] `https://fuzzynop.com/og.png`, `/favicon.svg`, `/apple-touch-icon.png`, `/site.webmanifest`, `/robots.txt`, `/sitemap.xml` all 200.
 - [ ] Share card on opengraph.xyz and in a real Slack / iMessage / LinkedIn post preview (LinkedIn Post Inspector refreshes its cache).
-- [ ] Console: no errors, no CSP violations. Vercel Analytics shows a page view within a few minutes.
+- [ ] Console: no errors, no CSP violations (production uses the strict CSP with no `vercel.live`; if you are signed in to Vercel and the toolbar shows on the custom domain, its violations are expected there, so check in a private window). Vercel Analytics shows a page view within a few minutes.
 - [ ] Lighthouse on production (mobile): note the scores in the PR.
 
 ---
