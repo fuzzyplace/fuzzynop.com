@@ -449,9 +449,9 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
       const geoKey = `${top}|${trackH}|${H}|${vh}`;
       if (!keys.current || keys.current.key !== geoKey) {
         const s0 = top - vh * START;
-        const sheet = Math.max(s0 + vh * 0.3, pinStart - vh * 0.1);
+        const sheet = Math.min(Math.max(s0 + vh * 0.3, pinStart - vh * 0.1), top - vh * 0.4); // landed by the time its top is ~40% down
         const ready = r.groups.map((gr) => top + gr.box.y + gr.box.h - vh * READY);
-        keys.current = { k: scrollKeys(p, { s0, sheet, pinStart, pinEnd, ready }), key: geoKey };
+        keys.current = { k: scrollKeys(p, { s0, sheet, pinStart, pinEnd, ready, tall: stick < TOP }), key: geoKey };
       }
       const c = ctl.current;
       // direction + idle

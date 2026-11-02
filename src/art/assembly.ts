@@ -436,9 +436,10 @@ export const union = (bs: Box[]): Box => {
  * Where the plate's pin sits in document scroll px (PrintedPlate measures these in the read phase).
  * s0: the sheet starts in (plate top low in the viewport). sheet: it has landed. pinStart / pinEnd:
  * the plate is stuck between these. ready[i]: group i's slot is well in view (matters only before
- * the pin, while the plate still moves; a tall plate places its top while it scrolls in).
+ * the pin, while the plate still moves). tall: taller than the viewport; it places each piece as
+ * soon as its slot is in view while it scrolls in.
  */
-export type PinGeo = { s0: number; sheet: number; pinStart: number; pinEnd: number; ready: number[] };
+export type PinGeo = { s0: number; sheet: number; pinStart: number; pinEnd: number; ready: number[]; tall?: boolean };
 export type Keys = { s: number[]; t: number[] };
 
 /** Keyframes scroll ↔ time: the sheet lands at `sheet`, presses spread by their time over the pin (never before their slot is in view), done a little before the pin ends. */
@@ -452,8 +453,11 @@ export function scrollKeys(p: Plan, g: PinGeo): Keys {
   p.groups.forEach((gr, i) => {
     if (gr.tP <= lt) return;
     const even = ls + ((done - ls) * (gr.tP - lt)) / Math.max(1e-6, p.end - lt);
-    const ready = clamp(g.ready[i] ?? -Infinity, -Infinity, g.pinStart);
-    const at = Math.min(done, Math.max(even, ready));
+    const r = g.ready[i] ?? -Infinity;
+    const ready = clamp(r, -Infinity, g.pinStart);
+    // a tall plate places what's already in view as it scrolls in (so the top of it can be read, and a
+    // jump to its top finds it put together); the rest is spread over the pin
+    const at = Math.min(done, g.tall && r < g.pinStart ? Math.max(ready, ls + 8) : Math.max(even, ready));
     if (at <= ls) return; // squeezed: it shares the segment with the group before
     s.push(at);
     t.push(gr.tP);
