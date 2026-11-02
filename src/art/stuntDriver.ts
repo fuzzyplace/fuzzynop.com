@@ -49,7 +49,8 @@ export type StuntFrame = {
   stunt?: { kind: StuntAct; k: number } & StuntOpts;
   amt: number; // gait amplitude
   phase: number; // gait phase
-  grip: number; // the claw on his collar, 0..1
+  grip: number; // the claw on his collar, 0..1 (v2.7: always 0; the claw is only ever the visitor's)
+  ink?: { k: number; out: boolean }; // the boost: he runs off into ink on the ground and gathers himself on the title
   dangle: number;
   swing: number; // rad, about the collar
   tilt: number; // head, rad
@@ -60,7 +61,9 @@ export type StuntEnd = { done: 'ground'; x: number } | { done: 'collect' };
 type G = GlyphBox & { boxTop: number; boxBottom: number }; // + the span's own box (transform origin)
 type Ready = { prog: StuntProgram; glyph: Map<string, G>; row0: G[]; hero: Pt; sy: number; vw: number; at: number };
 
-let played = false; // once per page load (the stage is rebuilt on resize; this isn't)
+// v2.7: not on load any more. He plays it when he feels like showing off near the title (the stage
+// calls `invite`); `played` is set again once it starts (the stage is rebuilt on resize; this isn't).
+let played = true;
 let forced: number | null = null;
 function devSeed(): number | null {
   if (!import.meta.env.DEV) return null;
@@ -75,7 +78,6 @@ const DEG = Math.PI / 180;
 
 export function createStunt(body: StuntBody, wake: () => void) {
   const s = body.scale;
-  const head = (body.tall - body.feet) * s; // origin to the top of his head, px
   let ready: Ready | null = null;
   let measuring = false;
   let retryAt = 0; // the title wasn't all on screen: don't measure again until then
@@ -312,35 +314,26 @@ export function createStunt(body: StuntBody, wake: () => void) {
           break;
         }
         case 'boost': {
-          // the claw closes on his collar mid-stride, swings him up and sets him down on the title
+          // v2.7: no claw. Mid-stride he runs off into ink on the ground and gathers himself on his first spot
           const from = { x: r.ax, y: A.y };
-          if (u < 0.2) {
-            const k = u / 0.2;
+          if (u < 0.44) {
             o = from;
-            f.grip = easeInOut(k);
-            f.action = 'jump';
-            f.actionK = 0.15 * k;
-            f.dangle = 0;
-          } else if (u < 0.86) {
-            const e = easeInOut((u - 0.2) / 0.66);
-            const lift = 110 * (s / 1.85);
-            const top = v.sy + body.headroom + head; // his head never goes under the header
-            const peak = Math.max(top, Math.min(from.y, B.y) - lift);
-            const ctrl = 2 * peak - (from.y + B.y) / 2;
-            o = { x: lerp(from.x, B.x, e), y: (1 - e) * (1 - e) * from.y + 2 * (1 - e) * e * ctrl + e * e * B.y };
-            if (b.to.at === 'top' && o.y < top) o.y = top;
-            f.grip = 1;
-            f.dangle = 1;
+            f.ink = { k: u / 0.44, out: true };
             f.facing = r.facing = B.x < from.x ? -1 : 1;
-          } else {
-            const k = (u - 0.86) / 0.14;
+          } else if (u < 0.52) {
             o = B;
-            f.grip = 1 - easeInOut(k);
-            f.dangle = 0;
-            if (b.to.at === 'hang') f.stunt = { kind: 'cling', k };
+            f.ink = { k: 1, out: true };
+          } else if (u < 0.92) {
+            o = B;
+            f.ink = { k: (u - 0.52) / 0.4, out: false };
+            if (b.to.at === 'hang') f.stunt = { kind: 'cling', k: 1 };
+          } else {
+            const k = (u - 0.92) / 0.08;
+            o = B;
+            if (b.to.at === 'hang') f.stunt = { kind: 'cling', k: 1 };
             else {
               f.action = 'land';
-              f.actionK = k;
+              f.actionK = 0.3 + 0.7 * k;
             }
           }
           if (u >= 0.86) f.facing = r.facing = stationFacing(b.to, r.facing);
@@ -540,6 +533,14 @@ export function createStunt(body: StuntBody, wake: () => void) {
     /** Where he last was (screen), for handing him back to the stage. */
     get last() {
       return last;
+    },
+    /** He feels like showing off: the stunt may play next time he's free on the hero ground. */
+    invite() {
+      if (!played || run) return;
+      played = false;
+      ready = null;
+      retryAt = 0;
+      wake();
     },
     /** dev: play again (with this seed) next time he's free on the hero ground. */
     force(seed?: number) {

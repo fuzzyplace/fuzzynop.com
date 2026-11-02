@@ -55,7 +55,13 @@ export type Action =
   | 'glance' // a quick look at where he's about to go
   | 'wave' // chin up at the pointer, a proper wave
   | 'hop' // a small hop on the spot, arms lifting (a greeting)
-  | 'flinch'; // a quick recoil: leans back, hands up, a half step back, then eases
+  | 'flinch' // a quick recoil: leans back, hands up, a half step back, then eases
+  // v2.7: his own life on the page
+  | 'shake' // re-formed from ink: shakes himself off, head first, then the shoulders
+  | 'lie' // lies down for a nap (the Character turns him onto his back by `Pose.lie`); here: arms in, knees up
+  | 'reach' // front arm out to a letter at hand height, fingers closing on it
+  | 'heft' // both hands up over his head, holding something (a letter he's carrying)
+  | 'push'; // both hands forward, leaning in: nudging a word
 
 export const SH_L: P2 = [-7, -7];
 export const SH_R: P2 = [7, -7];
@@ -104,6 +110,11 @@ export const ACT_DUR: Record<Action, number> = {
   wave: 1.7,
   hop: 0.6,
   flinch: 0.6,
+  shake: 0.9,
+  lie: 1.1,
+  reach: 0.7,
+  heft: 1,
+  push: 0.8,
 };
 /** Tap: when the hand reaches the top of the hop (what he taps reacts then). */
 export const TAP_AT = 0.45;
@@ -425,6 +436,68 @@ export function actPose(action: Action | undefined, k: number, b: Body, kick = 0
       o.handR = toward(b.handR, [13, -12], w);
       o.handL = toward(b.handL, [3, -6], w);
       o.kneeL += 1.5 * w;
+      break;
+    }
+    case 'shake': {
+      // head first (quick side to side), then the shoulders and arms flap loose, a little bounce
+      const w = envelope(k, 0.08, 0.2);
+      const f = Math.sin(k * Math.PI * 9);
+      o.head += 0.22 * f * w * (k < 0.5 ? 1 : 0.5);
+      o.dx = 1.1 * Math.sin(k * Math.PI * 7 + 1) * w;
+      o.dy = 1.2 * Math.abs(Math.sin(k * Math.PI * 3)) * w;
+      o.handL = toward(b.handL, hang(SH_L, 15, 0.5 + 0.5 * f), w);
+      o.handR = toward(b.handR, hang(SH_R, 15, -0.5 - 0.5 * f), w);
+      o.kneeL += 1.2 * w;
+      o.kneeR += 1.2 * w;
+      break;
+    }
+    case 'lie': {
+      // k 0 standing → 1 lying (on his back, by the Character's turn): arms folded on his chest, knees up a little
+      const w = s01(k);
+      o.handL = [lerp(b.handL[0], 3, w), lerp(b.handL[1], -4, w)];
+      o.handR = [lerp(b.handR[0], -2, w), lerp(b.handR[1], -5, w)];
+      o.elbowL = toward([-9, 1], [-6, 3], w);
+      o.elbowR = toward([9, 1], [8, 2], w);
+      o.kneeL += 4 * w;
+      o.kneeR += 3 * w;
+      o.head += 0.15 * w;
+      break;
+    }
+    case 'reach': {
+      // front arm out and a little up to hand height, weight onto the front foot
+      const w = envelope(k, 0.35, 0.15);
+      o.handR = toward(b.handR, hang(SH_R, 16, -1.75), w);
+      o.handL = toward(b.handL, hang(SH_L, 15, 0.4), w);
+      o.dx = 1.6 * w;
+      o.R = { x: b.R.x + 1.5 * w, lift: b.R.lift };
+      o.head += 0.05 * w;
+      break;
+    }
+    case 'heft': {
+      // both hands up over his head (holding the letter there), knees soft under the weight
+      const w = envelope(k, 0.2, 0.2);
+      const bob = Math.sin(k * Math.PI * 4) * 0.6 * w;
+      o.elbowL = toward([-9, 1], [-10, -16], w);
+      o.elbowR = toward([9, 1], [10, -17], w);
+      o.handL = toward(b.handL, [-4, -30 + bob], w);
+      o.handR = toward(b.handR, [5, -31 + bob], w);
+      o.head += -0.18 * w;
+      o.kneeL += 1.5 * w;
+      o.kneeR += 1.5 * w;
+      o.dy = 1 * w;
+      break;
+    }
+    case 'push': {
+      // both hands forward at chest height, leaning into it, a shove at the middle
+      const w = envelope(k, 0.25, 0.25);
+      const shove = k > 0.35 && k < 0.65 ? Math.sin(((k - 0.35) / 0.3) * Math.PI) : 0;
+      o.elbowL = toward([-9, 1], [2, -2], w);
+      o.elbowR = toward([9, 1], [12, -1], w);
+      o.handL = toward(b.handL, [12 + shove * 2, -6], w);
+      o.handR = toward(b.handR, [20 + shove * 3, -7], w);
+      o.dx = (2 + 1.5 * shove) * w;
+      o.L = { x: b.L.x - 2.5 * w, lift: b.L.lift };
+      o.head += 0.08 * w;
       break;
     }
   }

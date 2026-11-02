@@ -4,7 +4,7 @@
  *
  * - The pointer is around (moved in the last QUIET s): he stays put and fidgets now and then.
  * - It's been quiet a while: he explores — goes and looks at something (explore.ts). Every so often
- *   the claw interrupts with an idea of its own (it's a bit possessive).
+ *   (v2.7: the stage now asks desires.ts; this stays as the simple fallback model.)
  * - After a few explorations he finds somewhere to sit, legs over the edge, for a while.
  *
  * No timers here and no clock reads: everything is a function of the inputs, so it's testable.
@@ -47,9 +47,8 @@ const ALL: readonly Fidget[] = [...FIDGETS, 'cower', 'wave'];
 export const QUIET = 5; // s without pointer attention before he wanders off on his own
 export const REST_AFTER = 3; // explorations before he looks for a seat
 export const SIT_FOR: [number, number] = [16, 28]; // s sat before he gets up again
-export const CLAW_CHANCE = 0.08; // of a quiet decision going to the claw instead of to him
 
-export type IdleChoice = { kind: 'fidget'; fidget: Fidget } | { kind: 'explore' } | { kind: 'rest' } | { kind: 'claw' };
+export type IdleChoice = { kind: 'fidget'; fidget: Fidget } | { kind: 'explore' } | { kind: 'rest' };
 export type IdleCtx = {
   quiet: number; // s since the pointer last moved / tapped / the page scrolled
   explored: number; // explorations since he last sat (or since the user was last around)
@@ -70,7 +69,6 @@ export function pickFidget(rand: () => number, recent: Fidget | readonly Fidget[
 export function decideIdle(c: IdleCtx): IdleChoice {
   if (c.quiet < QUIET || c.stay) return { kind: 'fidget', fidget: pickFidget(c.rand, c.recent, c.feel) };
   const r = c.rand();
-  if (r < CLAW_CHANCE) return { kind: 'claw' };
   if (c.explored >= REST_AFTER && r < 0.85) return { kind: 'rest' };
   if (r > 0.86) return { kind: 'fidget', fidget: pickFidget(c.rand, c.recent, c.feel) }; // a pause between finds
   return { kind: 'explore' };

@@ -41,7 +41,7 @@ describe('actions', () => {
   it('every on-the-spot action starts and ends at the standing pose', () => {
     const b = stand();
     for (const a of ACTIONS) {
-      if (a === 'swat' || a === 'jump' || a === 'climb' || a === 'fall' || a === 'sit') continue;
+      if (a === 'swat' || a === 'jump' || a === 'climb' || a === 'fall' || a === 'sit' || a === 'lie') continue; // sit, lie: k = how far down he is (they hold)
       for (const k of [0, 1]) {
         const o = actPose(a, k, b);
         expect(o.dy, `${a}@${k}`).toBeCloseTo(0, 1);

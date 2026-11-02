@@ -9,7 +9,7 @@ describe('idle', () => {
     for (let i = 0; i < 100; i++) expect(decideIdle({ quiet: QUIET - 0.5, explored: 9, rand: r }).kind).toBe('fidget');
   });
 
-  it('left alone he mostly explores; sometimes the claw has an idea', () => {
+  it('left alone he mostly explores; the claw never has an idea', () => {
     const r = rng(5);
     const kinds = new Map<string, number>();
     for (let i = 0; i < 1000; i++) {
@@ -17,7 +17,7 @@ describe('idle', () => {
       kinds.set(k, (kinds.get(k) ?? 0) + 1);
     }
     expect(kinds.get('explore')!).toBeGreaterThan(600);
-    expect(kinds.get('claw')!).toBeGreaterThan(50);
+    expect(kinds.get('claw')).toBeUndefined();
     expect(kinds.get('rest')).toBeUndefined();
   });
 

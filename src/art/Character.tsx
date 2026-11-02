@@ -43,6 +43,8 @@ export type Pose = {
   tremble?: boolean; // shaken: a stepped CSS tremor (`char-shiver`, character.css), so the stage loop can still sleep
   mood?: Mood; // how he holds himself (wary hunch, warm and open, pushing up into a pat): under every action
   stunt?: { kind: StuntAct; k: number } & StuntOpts; // ---- stunt ---- a title-stunt pose, over everything else
+  ink?: { k: number; out: boolean }; // teleport: dissolving into ink drops (out, k 0→1) or re-forming from them (in, k 0→1)
+  lie?: number; // 0..1 lying on his back (a nap): the whole figure turns about his feet
 };
 export type CharacterHandle = { set: (x: number, y: number, scale: number, pose: Pose) => void };
 
@@ -66,6 +68,42 @@ function legPts(ho: P2, hi: P2, fo: P2, fi: P2, knee: number): LegPts {
 const mix = (a: LegPts, b: LegPts, w: number): LegPts => a.map((p, i) => [lerp(p[0], b[i][0], w), lerp(p[1], b[i][1], w)]) as LegPts;
 const legPath = ([ho, hi, ko, ki, fo, fi]: LegPts) =>
   `M${f(ho[0])} ${f(ho[1])} L${f(ko[0])} ${f(ko[1])} L${f(fo[0])} ${f(fo[1])} L${f(fi[0])} ${f(fi[1])} L${f(ki[0])} ${f(ki[1])} L${f(hi[0])} ${f(hi[1])} Z`;
+/**
+ * The ink dissolve (teleport), as a function of k on the way out (re-forming plays it backwards: the
+ * drops rise and gather into him). Drops leave the body from the head down, fall to his feet and
+ * spread into small splats while the body slumps and fades; a puddle grows under him and dries away.
+ * Local units; pure and deterministic, so a reversed play retraces exactly.
+ */
+const DROPS: readonly { p: P2; r: number; vx: number; t: number }[] = [
+  { p: [1, -36], r: 2.4, vx: 6, t: 0.04 },
+  { p: [-6, -31], r: 1.8, vx: -9, t: 0.1 },
+  { p: [8, -24], r: 1.6, vx: 11, t: 0.14 },
+  { p: [-8, -8], r: 2.2, vx: -12, t: 0.18 },
+  { p: [7, -6], r: 2, vx: 10, t: 0.22 },
+  { p: [0, -2], r: 2.6, vx: 2, t: 0.26 },
+  { p: [-10, 6], r: 1.5, vx: -16, t: 0.3 },
+  { p: [10, 7], r: 1.5, vx: 15, t: 0.33 },
+  { p: [-3, 10], r: 2, vx: -5, t: 0.37 },
+  { p: [4, 14], r: 1.7, vx: 7, t: 0.41 },
+  { p: [-2, 20], r: 1.4, vx: -8, t: 0.45 },
+];
+const s01 = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+export function inkFrame(k: number) {
+  const body = 1 - s01((k - 0.05) / 0.5); // body opacity
+  const melt = s01(k / 0.62); // slump toward his feet
+  const drops = DROPS.map((d) => {
+    const u = k - d.t;
+    if (u <= 0) return null;
+    const fy = d.p[1] + 260 * u * u; // falls, accelerating
+    const landed = fy >= FOOT_Y;
+    const tl = landed ? Math.max(0, u - Math.sqrt((FOOT_Y - d.p[1]) / 260)) : 0; // time since it hit
+    const x = d.p[0] + d.vx * Math.min(u, 0.5) + (landed ? d.vx * 0.6 * tl : 0);
+    const fade = 1 - s01((k - 0.72) / 0.28);
+    return { x, y: landed ? FOOT_Y - d.r * 0.25 : fy, rx: landed ? d.r * (1.3 + tl * 3) : d.r * (0.85 + Math.min(u, 0.3)), ry: landed ? d.r * 0.38 : d.r * (1 + Math.min(u * 1.6, 0.5)), o: fade * s01(u / 0.04) };
+  });
+  const puddle = { rx: 16 * s01((k - 0.15) / 0.45), ry: 2.4 * s01((k - 0.15) / 0.45), o: 1 - s01((k - 0.7) / 0.3) };
+  return { body, melt, drops, puddle };
+}
 const armPath = (sh: P2, hand: P2, elbow?: P2) =>
   elbow ? `M${sh[0]} ${sh[1]} L${f(elbow[0])} ${f(elbow[1])} L${f(hand[0])} ${f(hand[1])}` : `M${sh[0]} ${sh[1]} L${f(hand[0])} ${f(hand[1])}`;
 
@@ -81,6 +119,10 @@ export function Character({ ref }: { ref?: Ref<CharacterHandle> }) {
     head: null as SVGGElement | null,
     bodyG: null as SVGGElement | null,
     headG: null as SVGGElement | null,
+    fx: null as SVGGElement | null,
+    ink: null as SVGGElement | null,
+    puddle: null as SVGEllipseElement | null,
+    drops: [] as (SVGEllipseElement | null)[],
   }).current;
 
   useLayoutEffect(() => setAttr(el.root, 'display', 'none'), [el]);
@@ -88,8 +130,34 @@ export function Character({ ref }: { ref?: Ref<CharacterHandle> }) {
   useImperativeHandle(
     ref,
     () => ({
-      set(x, y, scale, { swing, dangle, facing, squash, phase = 0, walk = 0, tilt = 0, rag, action, actionK = 0, kick = 0, amp = 1, aim, turn, tremble = false, mood, stunt }) {
+      set(x, y, scale, { swing, dangle, facing, squash, phase = 0, walk = 0, tilt = 0, rag, action, actionK = 0, kick = 0, amp = 1, aim, turn, tremble = false, mood, stunt, ink, lie = 0 }) {
         setAttr(el.shake, 'class', tremble ? 'char-shiver' : null);
+        // teleport: the body slumps and fades as it runs off him in drops (or gathers back up from them)
+        const fr = ink ? inkFrame(ink.out ? ink.k : 1 - ink.k) : null;
+        setAttr(el.shake, 'opacity', fr && fr.body < 1 ? f(fr.body) : null);
+        setAttr(el.ink, 'display', fr ? null : 'none');
+        if (fr) {
+          setAttr(el.puddle, 'rx', f(fr.puddle.rx));
+          setAttr(el.puddle, 'ry', f(fr.puddle.ry));
+          setAttr(el.puddle, 'opacity', f(fr.puddle.o));
+          fr.drops.forEach((d, i) => {
+            const e = el.drops[i];
+            setAttr(e, 'display', d && d.o > 0.01 ? null : 'none');
+            if (!d) return;
+            setAttr(e, 'cx', f(d.x));
+            setAttr(e, 'cy', f(d.y));
+            setAttr(e, 'rx', f(d.rx));
+            setAttr(e, 'ry', f(d.ry));
+            setAttr(e, 'opacity', f(d.o));
+          });
+        }
+        const melt = fr ? fr.melt : 0;
+        const lieA = lie > 0 ? -90 * lie : 0;
+        setAttr(
+          el.fx,
+          'transform',
+          melt || lieA ? `translate(0 ${f(FOOT_Y - 8 * lie)}) rotate(${f(lieA)}) scale(${f(1 + 0.28 * melt)} ${f(1 - 0.62 * melt)}) translate(0 ${-FOOT_Y})` : null,
+        );
         const legA = dangle * 0.35; // legs drift apart while carried
         const g = gait(phase, walk, STRIDE);
         const bob = g.bob;
@@ -167,6 +235,13 @@ export function Character({ ref }: { ref?: Ref<CharacterHandle> }) {
 
   return (
     <g ref={(e) => void (el.root = e)}>
+      <g ref={(e) => void (el.ink = e)} display="none" filter="url(#ink)">
+        <ellipse ref={(e) => void (el.puddle = e)} cx="1" cy={FOOT_Y} rx="0" ry="0" className="fill-ink" />
+        {DROPS.map((_, i) => (
+          <ellipse key={i} ref={(e) => void (el.drops[i] = e)} className="fill-ink" display="none" />
+        ))}
+      </g>
+      <g ref={(e) => void (el.fx = e)}>
       <g ref={(e) => void (el.shake = e)}>
         <g filter="url(#ink)">
           {/* legs */}
@@ -207,6 +282,7 @@ export function Character({ ref }: { ref?: Ref<CharacterHandle> }) {
             </g>
           </g>
         </g>
+      </g>
       </g>
     </g>
   );
