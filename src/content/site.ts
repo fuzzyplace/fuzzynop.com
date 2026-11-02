@@ -68,12 +68,12 @@ export const present: Chapter = {
 
 /**
  * The pop-out between Present and Future (Z, 2026-11-02): replaces the through-line question.
- * href: Z's event production showcase on The Fuzzy Place. Placeholder until he sends the URL.
+ * href: The Fuzzy Place (fuzzy.place, from Z's own site).
  */
 export const vibe = {
   statement: 'Setting the vibe has never been more important.',
   body: 'I also produce events and spaces with The\u00a0Fuzzy\u00a0Place.', // the name never breaks across lines
-  link: { label: 'See the events', href: null as string | null, soon: 'link soon' },
+  link: { label: 'See the events', href: 'https://fuzzy.place' as string | null, soon: 'link soon' },
 };
 
 export const future: Chapter = {

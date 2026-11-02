@@ -78,8 +78,8 @@ describe('layoutTree', () => {
         expect(litPath(t, null).size).toBe(0);
       });
 
-      it('labels the work and make branches only', () => {
-        expect(t.groups.map((g) => g.label)).toEqual([null, 'Work', 'Make']);
+      it('labels the work and play branches only', () => {
+        expect(t.groups.map((g) => g.label)).toEqual([null, 'Work', 'Play']);
       });
 
       it('is stable: same input, same output', () => {
@@ -90,7 +90,7 @@ describe('layoutTree', () => {
 
   it('adding one link re-lays out: one more leaf and trace, the tree grows by one row', () => {
     const before = layoutTree(circuit, 'vertical');
-    const after = layoutTree({ ...circuit, links: [...circuit.links, L('new', 'work', 3)] }, 'vertical');
+    const after = layoutTree({ ...circuit, links: [...circuit.links, L('new', 'work', 6)] }, 'vertical');
     expect(after.leaves).toHaveLength(before.leaves.length + 1);
     expect(after.traces).toHaveLength(before.traces.length + 1);
     expect(after.height - before.height).toBe(G.row);
@@ -129,8 +129,18 @@ describe('links data', () => {
   it('ids are unique; only live links carry a URL; only allowed URLs', () => {
     const ids = circuit.links.map((l) => l.id);
     expect(new Set(ids).size).toBe(ids.length);
+    // mirrors docs/CONTENT.md "Allowed links"
     const allowed = new Set([
       'https://www.linkedin.com/in/joshuaaschwartz/',
+      'https://x.com/FuzzyNop',
+      'https://github.com/fuzzyplace',
+      'https://infocondb.org/presenter/josh-schwartz-fuzzynop',
+      'https://www.pcmag.com/opinions/the-head-of-verizon-medias-red-team-has-one-simple-security-tip',
+      'https://securityconversations.com/episode/josh-schwartz-on-red-teaming-and-proactive-security-engineering/',
+      'https://www.ksat.com/news/2019/03/14/some-hackers-use-their-skills-for-good-help-with-cybersecurity/',
+      'https://fuzzy.place',
+      'https://www.youtube.com/watch?v=E_Jd_RxyoEc',
+      'https://www.skool.com/the-fuzzy-place',
       'https://soundcloud.com/fuzzynop',
       'https://open.spotify.com/artist/2KxitG0vU3vl3JaMcovgqM',
       'https://www.mixcloud.com/FZZY/',

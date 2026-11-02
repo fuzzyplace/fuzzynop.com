@@ -40,11 +40,13 @@ Copy lives in `src/content/site.ts`. Only publish what's in "Approved copy" belo
 
 Retired from the page (still Z's words): the retirement/return-to-art paragraph, "I create things" paragraph and list, "These days" areas, "What would happen if".
 
-## Allowed links (own profiles only)
-- LinkedIn https://www.linkedin.com/in/joshuaaschwartz/
-- SoundCloud https://soundcloud.com/fuzzynop
-- Spotify https://open.spotify.com/artist/2KxitG0vU3vl3JaMcovgqM · Mixcloud https://www.mixcloud.com/FZZY/ (shown on the Make branch; Z to confirm Mixcloud)
-- Public contact email: [TODO] — never personal Gmail without explicit OK.
+## Allowed links (Z, 2026-11-02: pulled from the original site and his redesign branches)
+Shown in the link tree (`src/content/links.ts`), labels neutral:
+- Root: LinkedIn https://www.linkedin.com/in/joshuaaschwartz/ · X https://x.com/FuzzyNop · GitHub https://github.com/fuzzyplace · Email (TODO, never personal Gmail without explicit OK)
+- Work: Talks https://infocondb.org/presenter/josh-schwartz-fuzzynop · Interview https://www.pcmag.com/opinions/the-head-of-verizon-medias-red-team-has-one-simple-security-tip · Podcast https://securityconversations.com/episode/josh-schwartz-on-red-teaming-and-proactive-security-engineering/ · In the news https://www.ksat.com/news/2019/03/14/some-hackers-use-their-skills-for-good-help-with-cybersecurity/ · Book time (Calendly TODO)
+- Play: The Fuzzy Place https://fuzzy.place (also the vibe card's "See the events") · Live set https://www.youtube.com/watch?v=E_Jd_RxyoEc · The crew https://www.skool.com/the-fuzzy-place · SoundCloud https://soundcloud.com/fuzzynop · Spotify https://open.spotify.com/artist/2KxitG0vU3vl3JaMcovgqM · Mixcloud https://www.mixcloud.com/FZZY/
+
+Left off by Z's choice (2026-11-02): individual talk videos (Talks points to the archive), the allied crews (Proper Villains, Pink Team, Parasol Society). Not used, pending Z: HBR article, RSAC/QCon bios, ScienceDaily, skool.com/stdc.
 
 ## Background — reference only, DO NOT PUBLISH
 Kept so Claude understands the person, not for the page. Don't surface names, employers, titles, venues, or projects from here unless Z explicitly asks.
