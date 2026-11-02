@@ -11,19 +11,18 @@
 
 **State of `release/v2` @ a51a661+ (this commit):**
 - v2.8: character fit (data-assembled, pinned plates as moving surfaces, verified + repaired), launch prep (meta, icons, manifest, 404, split CSP prod vs previews), link tree Connect / Work / Play from the original site.
-- v2.9 polish is ALSO on `release/v2` (pushed by accident while QA was running; it had passed its own verifier except two claims): shorter pins (page 4.25 → 2.25 screens longer at 1440), he can stand on a plate's top edge once its sheet lands (data-sheet), probes on pinned plates, stable nooks, gray rim on arms over ink cards, fog patch on the footer.
+- v2.9 polish (verified + repaired): shorter pins (page 4.25 → 2.25 screens longer at 1440), he can stand on a plate's top edge once its sheet lands (data-sheet), probes on pinned plates, stable nooks, gray rim on arms over ink cards, fog patch on the footer.
 - `npm run check` passes on `release/v2` including the polish commits (250 tests, 2026-11-02 end of session).
 - Last verified preview (v2.8, before polish): https://fuzzynop-redesign-preview-96t5hadzz-stdclub.vercel.app
 
-**Still running when the session ended:** a QA fix agent (workflow wf_df039935-0f9, step "qa-fix") pushing to `claude/v2.9-polish`. Findings: `docs/QA-2026-11-02.md`.
+**QA fixes are merged** (polish + QA workflow finished after wrap-up): all high and medium findings in `docs/QA-2026-11-02.md` fixed on `claude/v2.9-polish` and merged into `release/v2`: deep links land on load, nav jumps show the plate whole, no orange at rest, hero ground fades into fog, Firefox 115 plate shadow fallback, address-bar resizes no longer rebuild the stage, no iOS loupe while dragging him, phone hero contrast, 44px nav targets, 404 on-system, copy test covers 404 + manifest, idle-job scheduling (Lighthouse mobile perf 98/98/95). Verified after merge: `npm run check` (250 tests), smoke at 1440/375/reduced (no errors, all plates assembled, no overflow), deep link `#future` works.
 
 **Next steps, in order:**
-1. `git fetch origin && git log --oneline origin/release/v2..origin/claude/v2.9-polish` — merge any QA-fix commits into `release/v2` (no conflicts expected; polish branch shares history).
-2. Verify on `release/v2`: `npm run check`; Playwright smoke at 1440/375/reduced motion (scroll down/up/down, no page errors, all plates `data-printed="1"` at the bottom, zero claw uses idle); Lighthouse mobile x3 (median ≥ 95; the QA bug lens saw 87/95 once, so check perf carefully). Re-check the two failing polish claims: presence on fast scrolls at 375 and the claw/press path vs the header rule.
-3. Fix the remaining high/medium items in `docs/QA-2026-11-02.md` that the fix agent didn't (top: deep links on load, nav jump onto a tall half-built plate, orange underline at rest on the vibe link, Firefox 115 plate shadow via @property, non-passive touchmove, hero contrast on mobile, nav target sizes).
-4. Deploy a preview of `release/v2` (Vercel MCP `create_deployment`, project `fuzzynop-redesign-preview`, team `team_AtjbR0BIosNpO5la4Oefgsa0`, gitSource fuzzyplace/fuzzynop.com ref release/v2 + full sha). Branch alias: fuzzynop-redesign-preview-git-release-v2-stdclub.vercel.app.
-5. Give Z one plain-chat batch: the "needsZ" items in the QA doc, approve drafted lines (Fuzzy Place sentence, contact line, 404 "Back to fuzzynop.com"), Calendly/email (optional), cutover go-ahead.
-6. Cutover: Z runs `docs/CUTOVER_CHROME_PROMPT.md` in Claude in Chrome (GoDaddy DNS, Vercel project, PR merge), following `docs/LAUNCH.md`.
+1. Review the preview of `release/v2` (link in the session summary; branch alias fuzzynop-redesign-preview-git-release-v2-stdclub.vercel.app).
+2. Remaining low items and "needsZ" items in `docs/QA-2026-11-02.md` (vibe card width, screen-reader text for "opens in new tab", hero loop never sleeping while in view, the drafted lines).
+3. Give Z one plain-chat batch: needsZ items, approve drafted lines (Fuzzy Place sentence, contact line, 404 "Back to fuzzynop.com"), Calendly/email (optional), cutover go-ahead.
+4. Cutover: Z runs `docs/CUTOVER_CHROME_PROMPT.md` in Claude in Chrome (GoDaddy DNS, Vercel project, PR merge), following `docs/LAUNCH.md`.
+5. Not testable here: real Safari/iOS, Firefox, Android touch. Do these on devices before or right after cutover.
 
 **Environment notes:** Playwright needs `executablePath: '/opt/pw-browsers/chromium'`. Workflow worktrees start from old `main`; agents must `git checkout -B <branch> origin/release/v2` first. Workflow verifier agents without isolation can switch the MAIN checkout's branch: always check `git status -sb` before committing/pushing.
 
