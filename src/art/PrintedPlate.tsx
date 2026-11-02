@@ -33,7 +33,9 @@ import { useSize } from './useSize';
  * while it comes apart on the way back up); data-pinned ('1' while stuck: it moves in document
  * space); data-assembled ('1' whenever it's whole and the arms are gone, pinned or not: the
  * character stands on pinned plates, reading their live position; '0' from the moment the scroll
- * asks for it to come apart); data-printing ('1' while pieces are being placed) and data-arm ("baseX baseY tipX tipY",
+ * asks for it to come apart); data-sheet ('1' once the sheet is down, words may still be arriving:
+ * he may stand on its top edge, never inside; '0' from the moment the scroll asks the sheet to lift
+ * again); data-printing ('1' while pieces are being placed) and data-arm ("baseX baseY tipX tipY",
  * px from the plate's top-left, the plate-side arm) while that arm moves, including its swing back
  * to park. Probe anchors (targets.ts): the two torn top corners (lift), the top edge (peek), the
  * parked arm's tip (twitch); they come before the plate in the DOM so the plate and arm answer
@@ -49,6 +51,14 @@ const IDLE = 0.16; // s without scrolling: settle on a rest beat
 const SCROLL_PAD = 74; // html scroll-padding-top (72) + 2: an anchor jump lands just past the pin
 const START = 0.95; // the sheet starts in when the plate top is this far down the viewport
 const READY = 0.75; // a piece is placed once its slot's bottom is this far up the viewport (only before the pin)
+/**
+ * v2.9: a plate that fits sticks low enough for the character to stand on its top edge while it's
+ * pinned (his whole height + the header's clearance above it: 64 + 12 + 70 units x his scale, plus
+ * a few px), when the viewport has the room; otherwise as before.
+ */
+const ROOM = (vw: number) => (vw < 700 ? 172 : 212);
+/** The sheet counts as down (data-sheet="1", he may stand on its top edge) this far into its settle. */
+const SHEET_DOWN = 0.6;
 
 /** In-page jumps (nav links, hash changes): plates show where the scroll lands without playing. */
 let jumpUntil = 0;
@@ -79,8 +89,8 @@ type Run = { plan: Plan; groups: Group[]; key: string };
 
 const LEAVES = '.asm-w, [data-asm="unit"], [data-asm="place"]';
 
-/** Where a pinned plate sticks: a little above centre if it fits, else with its bottom in view. */
-const stickFor = (vh: number, H: number) => (H + TOP + BOTTOM <= vh ? Math.min(vh - H - BOTTOM, Math.max(TOP, (vh - H) * 0.42)) : vh - H - BOTTOM);
+/** Where a pinned plate sticks: a little above centre (with room above it for him) if it fits, else with its bottom in view. */
+const stickFor = (vh: number, H: number, room: number) => (H + TOP + BOTTOM <= vh ? Math.min(vh - H - BOTTOM, Math.max(TOP, room, (vh - H) * 0.42)) : vh - H - BOTTOM);
 
 export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right' ? 0.18 : 0.82, seed, className = '', children }: Props) {
   const track = useRef<HTMLDivElement>(null);
@@ -96,7 +106,7 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
   const puffEls = useRef<(SVGEllipseElement | null)[]>([]);
   const { w, h } = useSize(ref);
   const reduce = useReducedMotion();
-  const geo = useRef({ top: 0, trackH: 0, H: 0, vh: 1 });
+  const geo = useRef({ top: 0, trackH: 0, H: 0, vh: 1, vw: 1 });
   const ready = useRef(false); // geo measured at least once
   const run = useRef<Run | null>(null);
   const keys = useRef<{ k: Keys; key: string } | null>(null);
@@ -114,7 +124,7 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
     const tr = track.current;
     const o = outer.current;
     if (!tr || !o) return;
-    geo.current = { top: docTop(tr), trackH: tr.offsetHeight, H: o.offsetHeight, vh: document.documentElement.clientHeight };
+    geo.current = { top: docTop(tr), trackH: tr.offsetHeight, H: o.offsetHeight, vh: document.documentElement.clientHeight, vw: document.documentElement.clientWidth };
     ready.current = true;
   };
 
@@ -367,6 +377,7 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
       finish();
       setAttr(outer.current, 'data-printed', '1');
       setAttr(outer.current, 'data-assembled', '1');
+      setAttr(outer.current, 'data-sheet', '1');
       setAttr(outer.current, 'data-pinned', null);
       outer.current?.style.removeProperty('top');
       setAttr(anchor.current, 'style', null);
@@ -375,6 +386,7 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
     if (shown.current.state === '') {
       setAttr(outer.current, 'data-printed', '0');
       setAttr(outer.current, 'data-assembled', '0');
+      setAttr(outer.current, 'data-sheet', '0');
       empty();
     } else if (shown.current.state === 'done') parked();
   });
@@ -420,10 +432,10 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
     const loop = ticker.loop((now, dt) => {
       if (!ready.current) return false;
       const o = outer.current;
-      const { top, trackH, H, vh } = geo.current;
+      const { top, trackH, H, vh, vw } = geo.current;
       const v = view();
       // the pin: where it sticks, where it starts and ends (document scroll px)
-      const stick = stickFor(vh, H);
+      const stick = stickFor(vh, H, ROOM(vw));
       const pinLen = Math.max(0, trackH - H);
       const pinStart = top - stick;
       const pinEnd = pinStart + pinLen;
@@ -450,7 +462,7 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
       }
       const r = run.current;
       const p = r.plan;
-      const geoKey = `${top}|${trackH}|${H}|${vh}`;
+      const geoKey = `${top}|${trackH}|${H}|${vh}|${vw}`;
       if (!keys.current || keys.current.key !== geoKey) {
         const s0 = top - vh * START;
         const sheet = Math.min(Math.max(s0 + vh * 0.3, pinStart - vh * 0.1), top - vh * 0.4); // landed by the time its top is ~40% down
@@ -497,6 +509,10 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
       // the scroll asks for it to come apart (target below the end), a frame before anything moves
       const whole = s.t >= p.end && target >= p.end;
       setAttr(o, 'data-assembled', whole ? '1' : '0');
+      // the sheet is down (words may still be arriving): its top edge is somewhere to stand; drops,
+      // like data-assembled, the moment the scroll asks for the sheet to lift again
+      const down = p.landed + p.sheet.settle * SHEET_DOWN;
+      setAttr(o, 'data-sheet', s.t >= down && target >= down ? '1' : '0');
       setAttr(o, 'data-printed', whole && !pinned ? '1' : '0');
       // awake while catching up, or while a stop might still settle on a beat
       return s.t !== target || (!idle && target > 0 && target < p.end && !c.force);
