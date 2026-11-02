@@ -38,6 +38,7 @@ function burst(V: Voice, b: Burst) {
   const a = Math.max(0.001, (b.a ?? 0.002) * (1 + v.soft * 0.8));
   const src = ac.createBufferSource();
   src.buffer = V.noise;
+  src.loop = true; // long bursts from a late offset wrap round instead of running out
   src.playbackRate.value = (b.speed ?? 1) * V.rate;
   const f = ac.createBiquadFilter();
   f.type = b.type ?? 'bandpass';

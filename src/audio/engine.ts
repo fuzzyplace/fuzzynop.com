@@ -49,7 +49,7 @@ function createEngine(ac: AudioContext): Engine {
     layers[l].connect(master);
   }
   const pool = new VoicePool();
-  const vcas = new Map<number, GainNode>();
+  const vcas = new Map<number, { vca: GainNode; lfo: OscillatorNode | null }>();
   const arms = new ArmTracker();
   const armX = new WeakMap<object, { left: number; at: number }>();
   let band: Band = 'tolerant';
@@ -69,7 +69,8 @@ function createEngine(ac: AudioContext): Engine {
     if (!ok) return;
     if (ok.evict !== null) {
       const g = vcas.get(ok.evict);
-      g?.gain.setTargetAtTime(0, now, 0.01);
+      g?.lfo?.disconnect(); // a shaken voice's tremble would keep it wobbling about zero
+      g?.vca.gain.setTargetAtTime(0, now, 0.01);
       vcas.delete(ok.evict);
     }
     const v = variation(o.band ?? band);
@@ -95,11 +96,11 @@ function createEngine(ac: AudioContext): Engine {
       lfo.stop(t + s.dur + 0.1);
     }
     RECIPES[name]({ ac, out: vca, t, v, rate: (o.rate ?? 1) * v.rate, noise });
-    vcas.set(ok.id, vca);
+    vcas.set(ok.id, { vca, lfo });
     window.setTimeout(() => {
       vcas.delete(ok.id);
       vca.disconnect();
-    }, (t - now + s.dur + 0.4) * 1000);
+    }, (t - now + s.dur * 1.6 + 0.6) * 1000); // slack for warm (slower) attacks
     if (dev) {
       log.push({ name, t: Math.round(performance.now()) });
       if (log.length > 400) log.shift();
@@ -133,8 +134,8 @@ function createEngine(ac: AudioContext): Engine {
     plate(plan: object, t0: number, t1: number) {
       for (const c of plateCues(plan as PlanLike, t0, t1)) cue(c, 0);
     },
-    arm(key: object, x: number) {
-      const c = arms.update(key, x, 0, performance.now() / 1000);
+    arm(key: object, x: number, y: number) {
+      const c = arms.update(key, x, y, performance.now() / 1000);
       if (!c) return;
       // where the arm is on screen: its SVG's left edge, measured in a frame's read phase (never here)
       const m = armX.get(key);
