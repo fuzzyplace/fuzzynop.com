@@ -13,7 +13,7 @@ export function HexBadge({ n, tone = 'paper' }: { n: string; tone?: Tone }) {
   return (
     <svg width="40" height="35" viewBox="0 0 40 35" aria-hidden="true" className="flex-none" data-poke="spin" data-poke-reach="top" data-poke-win="">
       <polygon points="10,1 30,1 39,17.5 30,34 10,34 1,17.5" fill="none" className={stroke} strokeWidth="1.5" />
-      <text x="20" y="22" textAnchor="middle" className={`${fill} font-mono`} fontSize="11" letterSpacing="1">
+      <text x="20" y="22" textAnchor="middle" className={`${fill} type-label-small`}>
         {n}
       </text>
     </svg>

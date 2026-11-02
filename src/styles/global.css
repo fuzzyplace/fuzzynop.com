@@ -38,6 +38,16 @@
   position: absolute; inset: 0; pointer-events: none;
   background: radial-gradient(ellipse 70% 75% at 18% 72%, rgba(0,0,0,.92) 0%, rgba(0,0,0,.7) 45%, rgba(0,0,0,0) 75%);
 }
+/* phones: the h1 runs nearly full width and crosses the fog's light centre, so the shade reaches the text column */
+@media (max-width: 767.98px) {
+  .hero-shade { background: radial-gradient(ellipse 120% 70% at 35% 55%, rgba(0,0,0,.9) 0%, rgba(0,0,0,.72) 50%, rgba(0,0,0,0) 85%); }
+}
+/* the hero's black ground fades into the fog instead of ending on a straight edge. It follows the
+   (overflow-hidden) hero in flow and takes back its own height, so layout is unchanged. */
+@utility ground-tail {
+  position: relative; height: 160px; margin-bottom: -160px; pointer-events: none;
+  background: linear-gradient(to bottom, var(--md-sys-color-ink), transparent);
+}
 @utility hero-pool {
   position: absolute; bottom: -120px; width: 760px; height: 520px; transform: translateX(-50%); pointer-events: none;
   background: radial-gradient(ellipse at 50% 70%, rgba(201,201,195,.55) 0%, rgba(122,122,117,.28) 34%, rgba(0,0,0,0) 68%);
@@ -65,7 +75,7 @@
    held higher, so its shadow falls further and softer */
 @property --plate-lift { syntax: '<number>'; inherits: false; initial-value: 0; }
 @utility plate-shadow {
-  filter: drop-shadow(calc(10px + 16px * var(--plate-lift)) calc(14px + 26px * var(--plate-lift)) 0 rgba(0,0,0,calc(.55 - .22 * var(--plate-lift))));
+  filter: drop-shadow(calc(10px + 16px * var(--plate-lift, 0)) calc(14px + 26px * var(--plate-lift, 0)) 0 rgba(0,0,0,calc(.55 - .22 * var(--plate-lift, 0))));
 }
 /* v2.3 cut-outs: per-plate rotation (--plate-rot, set inline from cutout.ts) and a lift on
    hover/focus. Durations are motion tokens, which drop to 0ms under prefers-reduced-motion. */
@@ -204,6 +214,9 @@
   transition: background-color var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard);
 }
 .cta-btn:hover { background: var(--md-ref-gray-200); }
+/* external text link (vibe card): same hover as the CTA, the arrow stays gray, no orange at rest */
+.vibe-link { text-decoration: none; }
+.vibe-link:hover .vibe-link-label, .vibe-link:focus-visible .vibe-link-label { text-decoration: underline; text-decoration-color: var(--md-sys-color-accent); text-decoration-thickness: 1px; text-underline-offset: 8px; }
 .cta-btn:hover .cta-label { text-decoration: underline; text-decoration-color: var(--md-sys-color-accent); text-decoration-thickness: 1px; text-underline-offset: 6px; }
 .cta-btn--placeholder, .cta-btn--placeholder:hover { background: transparent; color: var(--md-sys-color-on-surface); box-shadow: inset 0 0 0 1px var(--md-ref-gray-500); cursor: not-allowed; }
 .cta-btn--placeholder:hover .cta-label { text-decoration: none; }
@@ -275,7 +288,7 @@
 .circuit-hex-core { fill: var(--md-sys-color-paper); }
 .circuit-node-label { line-height: 1.3; }
 .circuit-node.is-lit:not(.circuit-node--soon) .circuit-hex { transform: rotate(30deg); }
-.circuit-node.is-lit:not(.circuit-node--soon) .circuit-node-label { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+.circuit-node.is-lit:not(.circuit-node--soon) .circuit-node-label { text-decoration: underline; text-decoration-color: var(--md-sys-color-accent); text-decoration-thickness: 1px; text-underline-offset: 4px; }
 .circuit-node--soon.is-lit .circuit-hex-shell--soon { stroke: var(--md-ref-gray-700); }
 @media (prefers-reduced-motion: reduce) {
   .trace-pulse { display: none; }

@@ -34,7 +34,7 @@ export function Chapter({ ch, children }: { ch: Ch; children?: ReactNode }) {
         </p>
       )}
       {ch.list && (
-        <ul aria-label={ch.listLabel} className={`grid border-t md:grid-cols-2 ${rule} ${ch.body.length ? 'mt-10' : 'mt-6'}`}>
+        <ul className={`grid border-t md:grid-cols-2 ${rule} ${ch.body.length ? 'mt-10' : 'mt-6'}`}>
           {ch.list.map((a) => (
             <li key={a} className={`flex items-center gap-4 border-b py-5 md:odd:pr-6 ${rule}`} data-asm="unit">
               <svg width="14" height="12" viewBox="0 0 14 12" aria-hidden="true" className="flex-none">

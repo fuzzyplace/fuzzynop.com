@@ -25,15 +25,15 @@ export default function App() {
 
       <header className="header-fade fixed inset-x-0 top-0 z-40 pb-6">
         <div className="shell flex h-16 items-center justify-between">
-          <a href="#top" className="type-label-large inline-flex min-h-11 items-center text-on-surface">
+          <a href="#top" className="type-label-large inline-flex min-h-11 min-w-11 items-center justify-center text-on-surface">
             {ui.mark}
             <span className="sr-only"> {ui.markName}</span>
           </a>
           <nav aria-label={ui.primaryNav}>
-            <ul className="flex gap-5 md:gap-8">
+            <ul className="flex gap-4 md:gap-8">
               {nav.map((n) => (
                 <li key={n.id}>
-                  <a href={`#${n.id}`} className="type-label-small md:type-label-medium inline-flex min-h-11 items-center text-gray-300 transition-colors duration-200 ease-standard hover:text-on-surface">
+                  <a href={`#${n.id}`} className="type-label-small md:type-label-medium inline-flex min-h-11 min-w-11 items-center justify-center text-gray-300 transition-colors duration-[var(--md-sys-motion-duration-short4)] ease-standard hover:text-on-surface">
                     {n.label}
                   </a>
                 </li>
@@ -84,9 +84,9 @@ export default function App() {
               </p>
               <p className="mt-6" data-asm="place">
                 {vibe.link.href ? (
-                  <a href={vibe.link.href} target="_blank" rel="noopener noreferrer" className="type-label-large inline-flex min-h-11 items-center gap-2 text-on-paper underline decoration-accent decoration-1 underline-offset-8">
-                    {vibe.link.label}
-                    <span aria-hidden="true">↗</span>
+                  <a href={vibe.link.href} target="_blank" rel="noopener noreferrer" className="vibe-link type-label-large inline-flex min-h-11 items-center gap-2 text-on-paper">
+                    <span className="vibe-link-label">{vibe.link.label}</span>
+                    <span aria-hidden="true" className="text-on-paper-variant">↗</span>
                   </a>
                 ) : (
                   <span className="type-label-large inline-flex min-h-11 items-center gap-3 text-on-paper-variant">

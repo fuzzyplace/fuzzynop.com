@@ -9,7 +9,7 @@ export const site = {
   handle: 'FuzzyNop',
   url: 'https://fuzzynop.com',
   description:
-    'Josh Schwartz (FuzzyNop). Team builder, red teamer, professional bogeyman. Finding creative, empathetic security solutions for cyborgs.',
+    'Josh Schwartz (FuzzyNop). Team Builder, Red Teamer, Professional Bogeyman. Finding creative, empathetic security solutions for cyborgs.',
   footerEgg: '0x90 0x90 0x90 · nothing happened here',
   /**
    * The one call to action (HANDOFF §3.5). Mechanism TBD by Z (docs/DECISIONS.md).
@@ -42,7 +42,7 @@ export const hero = {
  * Z's voice: plain, direct, first person. Written by hand, not generated.
  * Hard rules: no em or en dashes anywhere on the page; no stock phrasing (see docs/CONTENT.md).
  */
-export type Chapter = { n: string; id: string; eyebrow: string; title: string; tone?: 'paper' | 'ink'; body: string[]; lede?: string; list?: string[]; listLabel?: string; coda?: string };
+export type Chapter = { n: string; id: string; eyebrow: string; title: string; tone?: 'paper' | 'ink'; body: string[]; lede?: string; list?: string[]; coda?: string };
 
 export const past: Chapter = {
   n: '01',
@@ -84,7 +84,6 @@ export const future: Chapter = {
   title: 'What I’m looking for',
   body: [],
   lede: 'To make a real impact, building a team, a function or a project around:',
-  listLabel: 'Areas',
   list: ['Red teaming', 'AI safety', 'Consciousness and human flourishing', 'Mental health and wellness'],
   coda: 'Also available for a full\u2011body robot transplant.', // non-breaking hyphen
 };
