@@ -380,7 +380,7 @@ export function PuppeteerStage() {
       // the free space inside each assembled paper plate (an ink plate would swallow his silhouette)
       const nooks: Perch[] = [];
       base.forEach((c, i) => {
-        if (c.el.dataset.printed !== '1' || c.el.dataset.printing === '1' || !c.el.querySelector('.plate-face.plate-paper')) return;
+        if (c.el.dataset.printed !== '1' || c.el.dataset.printing === '1' || c.el.dataset.pinned === '1' || !c.el.querySelector('.plate-face.plate-paper')) return;
         const face = c.el.querySelector<HTMLElement>('.plate-face') ?? c.el;
         const fr = face.getBoundingClientRect();
         const plate = { left: fr.left + sx, right: fr.right + sx, top: fr.top + sy, bottom: fr.bottom + sy };
@@ -613,7 +613,7 @@ export function PuppeteerStage() {
       const feet = s.char.y + FEET * sz;
       const vis = cache
         .map((c, i) => ({ c, i, top: c.top - sy, l: c.left - sx + c.ext.lo, r: c.left - sx + c.ext.hi }))
-        .filter((q) => !q.c.nook && q.c.el.dataset.printed !== '0' && q.top >= headroomK(1) && q.top < vp.h);
+        .filter((q) => !q.c.nook && q.c.el.dataset.printed !== '0' && q.c.el.dataset.pinned !== '1' && q.top >= headroomK(1) && q.top < vp.h);
       const below = vis.filter((q) => q.top >= feet - 4);
       const under = below.filter((q) => s.char.x >= q.l - 20 && s.char.x <= q.r + 20).sort((a, b) => a.top - b.top)[0];
       const off = (q: (typeof vis)[number]) => Math.max(0, q.l - s.char.x, s.char.x - q.r);
@@ -1391,7 +1391,7 @@ export function PuppeteerStage() {
         const top = p.top - sy;
         const lx = p.left - sx;
         return {
-          ok: p.spot || p.el.dataset.printed !== '0',
+          ok: p.el.dataset.printed !== '0' && p.el.dataset.pinned !== '1', // a plate being assembled, taken apart or pinned isn't somewhere to be
           left: lx,
           pt: { x: lx + p.width * p.f, y: top - FEET * scale * p.k },
           top,
@@ -2365,6 +2365,12 @@ export function PuppeteerStage() {
             loop.wake();
             return ok;
           },
+          /** the surface he's on (dev check: never an un-assembled or pinned plate while he stands on it) */
+          get surface() {
+            const s = st.current;
+            const c = s && s.idx >= 0 ? cache[s.idx] : null;
+            return c ? { id: c.id, nook: c.nook, printed: c.el.dataset.printed ?? null, pinned: c.el.dataset.pinned ?? null } : null;
+          },
           get away() {
             const s = st.current;
             return s ? { since: s.awaySince, for: s.awayFor } : null;
@@ -2463,7 +2469,7 @@ export function PuppeteerStage() {
       dirty = true;
       wake();
     });
-    mo.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['data-printed', 'data-printing'] });
+    mo.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['data-printed', 'data-printing', 'data-pinned'] });
 
     // attention: any real pointer move or tap means the visitor is about (desires.ts `quiet`); only one
     // close to him stops what he's doing on his own and pushes back his next decision
