@@ -31,7 +31,9 @@ import { useSize } from './useSize';
  * Contracts for the character: data-perch; data-printed ('1' only when assembled, the arms have
  * left and the plate isn't pinned, so its document position is fixed; '0' otherwise, including
  * while it comes apart on the way back up); data-pinned ('1' while stuck: it moves in document
- * space); data-printing ('1' while pieces are being placed) and data-arm ("baseX baseY tipX tipY",
+ * space); data-assembled ('1' whenever it's whole and the arms are gone, pinned or not: the
+ * character stands on pinned plates, reading their live position; '0' from the moment the scroll
+ * asks for it to come apart); data-printing ('1' while pieces are being placed) and data-arm ("baseX baseY tipX tipY",
  * px from the plate's top-left, the plate-side arm) while that arm moves, including its swing back
  * to park. Probe anchors (targets.ts): the two torn top corners (lift), the top edge (peek), the
  * parked arm's tip (twitch); they come before the plate in the DOM so the plate and arm answer
@@ -364,6 +366,7 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
     if (reduce) {
       finish();
       setAttr(outer.current, 'data-printed', '1');
+      setAttr(outer.current, 'data-assembled', '1');
       setAttr(outer.current, 'data-pinned', null);
       outer.current?.style.removeProperty('top');
       setAttr(anchor.current, 'style', null);
@@ -371,6 +374,7 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
     }
     if (shown.current.state === '') {
       setAttr(outer.current, 'data-printed', '0');
+      setAttr(outer.current, 'data-assembled', '0');
       empty();
     } else if (shown.current.state === 'done') parked();
   });
@@ -489,7 +493,11 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
         else render(r, s.t);
         shown.current.t = s.t;
       }
-      setAttr(o, 'data-printed', s.t >= p.end && !pinned ? '1' : '0');
+      // assembled = whole and the arms gone, pinned or not (he may stand on it); it drops the moment
+      // the scroll asks for it to come apart (target below the end), a frame before anything moves
+      const whole = s.t >= p.end && target >= p.end;
+      setAttr(o, 'data-assembled', whole ? '1' : '0');
+      setAttr(o, 'data-printed', whole && !pinned ? '1' : '0');
       // awake while catching up, or while a stop might still settle on a beat
       return s.t !== target || (!idle && target > 0 && target < p.end && !c.force);
     });

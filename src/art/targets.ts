@@ -51,13 +51,15 @@ const docRect = (r: DOMRect): Rect => ({ left: r.left + scrollX, top: r.top + sc
 
 /**
  * Every probe target that can answer right now (document px). Skips targets on a plate that isn't
- * printed yet, a print arm that isn't parked, and anything with no box (hidden at this width).
+ * whole (data-assembled), on a pinned plate (its document rect moves with the scroll, and a probe
+ * plans in document px; he can still stand on it), a print arm that isn't parked, and anything with
+ * no box (hidden at this width).
  */
 export function queryTargets(root: ParentNode = document): PokeTarget[] {
   const out: PokeTarget[] = [];
   for (const el of root.querySelectorAll('[data-poke]')) {
     const kinds = kindsOf(el);
-    if (!kinds.length || el.closest('[data-printed="0"], [data-pinned="1"]')) continue;
+    if (!kinds.length || el.closest('[data-printed]:not([data-assembled="1"]), [data-pinned="1"]')) continue;
     if (kinds.includes('twitch') && el.closest('[data-arm], [data-printing]')) continue;
     const r = el.getBoundingClientRect();
     if (r.width === 0 && r.height === 0) continue;
@@ -252,7 +254,15 @@ export function measureTitle(h1: HTMLElement | null = titleEl()): { glyphs: Glyp
     const baseline = r.top + scrollY + m.fa;
     glyphs.push({ key: `${line}:${i}`, line, i, ch, left: r.left + scrollX, right: r.right + scrollX, top: baseline - m.a, bottom: baseline + m.d, baseline });
   }
-  const obstacles = [h1.previousElementSibling, h1.nextElementSibling].filter((e): e is Element => !!e).map((e) => docRect(e.getBoundingClientRect()));
+  // the text itself (each line's box), not the block: the eyebrow's block runs the full width, its words don't
+  const obstacles: Rect[] = [];
+  for (const e of [h1.previousElementSibling, h1.nextElementSibling]) {
+    if (!e) continue;
+    range.selectNodeContents(e);
+    const lines = Array.from(range.getClientRects()).filter((r) => r.width > 1 && r.height > 1);
+    if (lines.length) for (const r of lines) obstacles.push(docRect(r));
+    else obstacles.push(docRect(e.getBoundingClientRect()));
+  }
   return { glyphs, obstacles };
 }
 
