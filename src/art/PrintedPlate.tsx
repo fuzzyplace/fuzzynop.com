@@ -1,7 +1,7 @@
 import { useReducedMotion } from './reducedMotion';
 import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
-import { armAt, groupAt, groupLines, memberOffset, paceFor, planAssembly, POST, sheetAt, union, type Box, type GroupIn, type Plan } from './assembly';
+import { armAt, follow, FOLLOW, rateFor, groupAt, groupLines, memberOffset, planAssembly, POST, puffAt, scrollKeys, sheetAt, snapBeat, timeAtScroll, union, type Box, type GroupIn, type Keys, type Plan } from './assembly';
 import { cutLayout, hashSeed, tornPath } from './cutout';
 import { MechArm, type ArmHandle } from './MechArm';
 import { clamp, type Pt } from './geometry';
@@ -9,35 +9,57 @@ import { docTop, measure, onLayout, setAttr, ticker, view, whenIdle } from './ti
 import { useSize } from './useSize';
 
 /**
- * A paper-cut content plate that shadowy arms assemble as it scrolls into view (choreography in
- * assembly.ts): two claws (one on phones) hanging from a ceiling rail carry the torn sheet in, lay
- * it down, and it flutters into its tilt while its backing layers fan out; then they place the words
- * (`data-asm` units, see `Words` and Chapter.tsx) into it one group at a time.
+ * A paper-cut content plate that shadowy arms assemble as you scroll through it (choreography in
+ * assembly.ts): two claws (one on phones) hanging from a ceiling rail carry the torn sheet in, it
+ * lands with a soft slap and a small ink puff, then they place the words (`data-asm` units, see
+ * `Words` and Chapter.tsx) one group at a time.
  *
- * Triggered, not scrubbed: it starts when the plate's top reaches 88% of the viewport and plays on
- * its own clock (~1.5–2.6 s), which runs faster if you scroll on before it's done (paceFor), so it's
- * together by the time its top is mid-screen. A plate that's already high on screen (or above it)
- * when first seen is shown assembled at once (deep links, reloads, scrolling back up).
+ * v2.7, pinned and scrubbed: the plate sits in a taller track (`.plate-track`, a spacer of about
+ * one viewport under it, `--pin` in global.css) and sticks (native `position: sticky`; scrolling is
+ * never intercepted or slowed) while you scroll through it. Scroll position picks a time on the
+ * assembly timeline (`scrollKeys`); the shown time follows it on a damped spring with a speed limit
+ * (`follow`), so pieces glide however jumpy the wheel is. Stop scrolling and it settles on the
+ * nearest rest beat ahead of you (an arm holding the next piece in the air), never half-placed.
+ * Scroll back up and it runs backwards. A tall plate (taller than the viewport) pins with its
+ * bottom in view and places its top while it scrolls in.
  *
  * Text is real DOM text throughout; only opacity and transforms of wrapper spans animate, and they
- * keep their layout position (no layout shift). Reduced motion: assembled, arm parked, nothing moves.
+ * keep their layout position (no layout shift). Reduced motion: no pin, assembled, arm parked,
+ * nothing moves. Keyboard focus inside completes it at once; in-page jumps (nav links, hash) skip
+ * the animation (the plates jumped over snap to where the scroll puts them).
  *
- * Contracts for the character: data-perch; data-printed ('0' until assembled and the arms have
- * left, then '1'); data-printing ('1' while the arms place things) and data-arm ("baseX baseY tipX
- * tipY", px from the plate's top-left, the plate-side arm) while an arm moves, including its swing
- * back up to its park spot. Probe anchors (targets.ts): the two torn top corners (lift), the top
- * edge (peek), the parked arm's tip (twitch); they come before the plate in the DOM so the plate and
- * arm answer through sibling selectors.
+ * Contracts for the character: data-perch; data-printed ('1' only when assembled, the arms have
+ * left and the plate isn't pinned, so its document position is fixed; '0' otherwise, including
+ * while it comes apart on the way back up); data-pinned ('1' while stuck: it moves in document
+ * space); data-printing ('1' while pieces are being placed) and data-arm ("baseX baseY tipX tipY",
+ * px from the plate's top-left, the plate-side arm) while that arm moves, including its swing back
+ * to park. Probe anchors (targets.ts): the two torn top corners (lift), the top edge (peek), the
+ * parked arm's tip (twitch); they come before the plate in the DOM so the plate and arm answer
+ * through sibling selectors.
  */
 const OVER = 240; // space above the plate the arms work in
 const SIDE = 44; // gutter either side of the overlay
-const TRIGGER = 0.88; // starts when the plate top is this far down the viewport
-const AT_ONCE = 0.45; // first seen higher than this (or above the viewport): shown assembled
-const AT_ONCE_FIRST = 0.6; // ...when the stage loads: a plate mostly on screen is shown assembled
 const NEAR = 1.5; // viewports: a plate this close to the screen gets its full art at once
-const TWO_ARMS = 480; // plate px: two arms from here up (desktop, tablets); phones get one, fewer units, quicker
-// dev only: `?asmSlow=3` plays the assembly 3× slower (for frame strips); the plate's clock is on data-asm-t
-const SLOW = import.meta.env.DEV ? Math.max(1, Number(new URLSearchParams(window.location.search).get('asmSlow')) || 1) : 1;
+const TWO_ARMS = 480; // plate px: two arms from here up (desktop, tablets); phones get one, fewer units
+const TOP = 88; // a pinned plate sits at least this far down (clear of the header) ...
+const BOTTOM = 24; // ... and its bottom at least this far above the viewport's
+const IDLE = 0.16; // s without scrolling: settle on a rest beat
+const SCROLL_PAD = 74; // html scroll-padding-top (72) + 2: an anchor jump lands just past the pin
+const START = 0.95; // the sheet starts in when the plate top is this far down the viewport
+const READY = 0.75; // a piece is placed once its slot's bottom is this far up the viewport (only before the pin)
+
+/** In-page jumps (nav links, hash changes): plates show where the scroll lands without playing. */
+let jumpUntil = 0;
+let jumpWired = false;
+const wireJumps = () => {
+  if (jumpWired) return;
+  jumpWired = true;
+  const jump = () => void (jumpUntil = performance.now() + 1600);
+  document.addEventListener('click', (e) => {
+    if ((e.target as Element | null)?.closest?.('a[href^="#"]')) jump();
+  });
+  window.addEventListener('hashchange', jump);
+};
 
 type Props = {
   id?: string;
@@ -51,11 +73,16 @@ type Props = {
 
 type Unit = { el: HTMLElement | SVGElement; box: Box };
 type Group = { members: Unit[]; box: Box };
-type Run = { plan: Plan; groups: Group[]; t: number; drawn: Set<number>; landed: Set<number> } | null;
+type Run = { plan: Plan; groups: Group[]; key: string };
 
 const LEAVES = '.asm-w, [data-asm="unit"], [data-asm="place"]';
 
+/** Where a pinned plate sticks: a little above centre if it fits, else with its bottom in view. */
+const stickFor = (vh: number, H: number) => (H + TOP + BOTTOM <= vh ? Math.min(vh - H - BOTTOM, Math.max(TOP, (vh - H) * 0.42)) : vh - H - BOTTOM);
+
 export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right' ? 0.18 : 0.82, seed, className = '', children }: Props) {
+  const track = useRef<HTMLDivElement>(null);
+  const anchor = useRef<HTMLSpanElement>(null);
   const outer = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLDivElement>(null);
   const sheetEl = useRef<HTMLDivElement>(null);
@@ -63,14 +90,18 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
   const layerEls = useRef<(HTMLDivElement | null)[]>([]);
   const armG = [useRef<SVGGElement>(null), useRef<SVGGElement>(null)];
   const armRef = [useRef<ArmHandle>(null), useRef<ArmHandle>(null)];
+  const puffG = useRef<SVGGElement>(null);
+  const puffEls = useRef<(SVGEllipseElement | null)[]>([]);
   const { w, h } = useSize(ref);
   const reduce = useReducedMotion();
-  const geo = useRef({ top: 0, height: 0, vh: 1 });
+  const geo = useRef({ top: 0, trackH: 0, H: 0, vh: 1 });
   const ready = useRef(false); // geo measured at least once
-  const seen = useRef(false); // the first trigger check has run
-  const sized = useRef(''); // the w×h a measurement has been queued for
-  const phase = useRef<'wait' | 'run' | 'done'>('wait');
-  const run = useRef<Run>(null);
+  const run = useRef<Run | null>(null);
+  const keys = useRef<{ k: Keys; key: string } | null>(null);
+  const st = useRef({ t: 0, v: 0 });
+  const shown = useRef<{ t: number; state: 'wait' | 'run' | 'done' | '' }>({ t: NaN, state: '' });
+  const groupKey = useRef<string[]>([]); // per group: last write ('h' hidden, 'p' placed, 'm' moving)
+  const ctl = useRef({ lastSy: NaN, dir: 1 as 1 | -1, moved: 0, held: NaN, force: false, fresh: true });
   // The plate's art (torn cut-out paths, the arms overlay) is built lazily: when the main thread is
   // idle after the first paint, one plate per idle period, or at once (before the frame paints) when
   // the plate comes near the screen. Until then it's unassembled (hidden) below the fold.
@@ -78,9 +109,10 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
   const wake = useRef<(() => void) | null>(null);
 
   const remeasure = () => {
-    const el = ref.current;
-    if (!el) return;
-    geo.current = { top: docTop(el), height: el.clientHeight, vh: document.documentElement.clientHeight };
+    const tr = track.current;
+    const o = outer.current;
+    if (!tr || !o) return;
+    geo.current = { top: docTop(tr), trackH: tr.offsetHeight, H: o.offsetHeight, vh: document.documentElement.clientHeight };
     ready.current = true;
   };
 
@@ -134,35 +166,58 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
 
   const clearUnits = () => {
     face.current?.querySelectorAll<HTMLElement | SVGElement>(LEAVES).forEach((el) => {
-      const st = el.style;
-      if (st.opacity || st.translate || st.rotate || st.scale) {
-        st.opacity = st.translate = st.rotate = st.scale = '';
-      }
+      const s = el.style;
+      if (s.opacity || s.translate || s.rotate || s.scale) s.opacity = s.translate = s.rotate = s.scale = '';
+      if (s.getPropertyValue('--asm-lift')) s.removeProperty('--asm-lift');
     });
+    groupKey.current = [];
   };
-
-  /** Assembled: no inline animation state left, arms parked / gone, perch available. */
-  const finish = () => {
-    phase.current = 'done';
-    run.current = null;
-    clearUnits();
+  const clearSheet = () => {
     const sh = sheetEl.current;
     if (sh) sh.style.transform = sh.style.opacity = sh.style.transformOrigin = '';
     layerEls.current.forEach((el, i) => el && (el.style.transform = g.current.layerRest[i]));
     ref.current?.style.removeProperty('--plate-lift');
+    setAttr(puffG.current, 'display', 'none');
+  };
+
+  /** Assembled: no inline animation state left, arms parked / gone. (data-printed follows the pin, see `step`.) */
+  const finish = () => {
+    if (shown.current.state === 'done') return;
+    shown.current.state = 'done';
+    clearUnits();
+    clearSheet();
     const o = outer.current;
     setAttr(o, 'data-asm-state', null);
     setAttr(o, 'data-printing', null);
     setAttr(o, 'data-arm', null);
-    setAttr(o, 'data-printed', '1');
     parked();
   };
+  /** Not started (or fully taken apart again): nothing shown, no arms. */
+  const empty = () => {
+    if (shown.current.state === 'wait') return;
+    shown.current.state = 'wait';
+    clearUnits();
+    clearSheet();
+    const o = outer.current;
+    setAttr(o, 'data-asm-state', 'wait');
+    setAttr(o, 'data-printing', null);
+    setAttr(o, 'data-arm', null);
+    setAttr(armG[0].current, 'display', 'none');
+    setAttr(armG[1].current, 'display', 'none');
+  };
 
-  /** Measure the units (read phase) and plan the choreography. */
-  const plan = (): Run => {
+  /** Measure the units (read phase) and plan the choreography. Transforms are cleared first so the boxes are layout boxes. */
+  const plan = (key: string): Run | null => {
     const f = face.current;
     const plate = ref.current;
     if (!f || !plate) return null;
+    const sh = sheetEl.current;
+    if (sh) sh.style.transform = '';
+    f.querySelectorAll<HTMLElement | SVGElement>(LEAVES).forEach((el) => {
+      el.style.translate = el.style.rotate = el.style.scale = '';
+    });
+    shown.current.t = NaN; // repaint after
+    groupKey.current = [];
     const { w, h, park, two, reach } = g.current;
     const mobile = !two;
     // layout boxes in plate px: centres from the rendered rects with the plate's tilt undone, sizes from layout
@@ -180,10 +235,11 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
       const cy = f.offsetHeight / 2 + vx * Math.sin(a) + vy * Math.cos(a);
       return { x: cx - bw / 2, y: cy - bh / 2, w: bw, h: bh };
     };
-    const units = (els: Iterable<HTMLElement | SVGElement>) => [...els].flatMap((el) => {
-      const box = boxOf(el);
-      return box ? [{ el, box }] : [];
-    });
+    const units = (els: Iterable<HTMLElement | SVGElement>) =>
+      [...els].flatMap((el) => {
+        const box = boxOf(el);
+        return box ? [{ el, box }] : [];
+      });
     const groups: Group[] = [];
     const modes: GroupIn['mode'][] = [];
     const push = (members: Unit[], mode: GroupIn['mode']) => {
@@ -218,19 +274,23 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
       groups.map((gr, i) => ({ box: gr.box, mode: modes[i] })),
       { w, h, side, arms: mobile ? 1 : 2, mobile, reach, seed: s0, rest: { x: park.x - SIDE, y: park.y - OVER } },
     );
-    return { plan: p, groups, t: 0, drawn: new Set(), landed: new Set() };
+    return { plan: p, groups, key };
   };
 
-  /** One frame of the assembly at the run's clock. */
-  const render = (r: NonNullable<Run>) => {
-    const { plan: p, groups, t: now } = r;
+  /** One frame of the assembly at plan time `now` (0 < now < end). */
+  const render = (r: Run, now: number) => {
+    const { plan: p, groups } = r;
     const o = outer.current;
+    if (shown.current.state !== 'run') {
+      shown.current.state = 'run';
+      setAttr(o, 'data-asm-state', 'run'); // words become inline-blocks (same layout) so they can move
+    }
     // the sheet
     const s = sheetAt(p.sheet, now);
     const sh = sheetEl.current;
     if (sh) {
       sh.style.transformOrigin = `${p.sheet.origin.x}px ${p.sheet.origin.y}px`;
-      sh.style.transform = `translate(${s.x.toFixed(1)}px, ${s.y.toFixed(1)}px) perspective(1400px) rotate(${s.rot.toFixed(2)}deg) rotateX(${s.rx.toFixed(2)}deg) scale(${s.scale.toFixed(4)})`;
+      sh.style.transform = `translate(${s.x.toFixed(1)}px, ${s.y.toFixed(1)}px) perspective(1400px) rotate(${s.rot.toFixed(2)}deg) rotateX(${s.rx.toFixed(2)}deg) scale(${s.sx.toFixed(4)}, ${s.sy.toFixed(4)})`;
       sh.style.opacity = s.opacity < 1 ? s.opacity.toFixed(3) : '';
     }
     ref.current?.style.setProperty('--plate-lift', s.lift.toFixed(3));
@@ -239,26 +299,36 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
       const k = s.fan[i];
       if (el) el.style.transform = `translate(${(ly.dx * k).toFixed(1)}px, ${(ly.dy * k).toFixed(1)}px) rotate(${(ly.rot * k).toFixed(2)}deg)`;
     });
+    // the ink puff
+    const puff = puffAt(p, now);
+    setAttr(puffG.current, 'display', puff ? null : 'none');
+    puff?.forEach((d, i) => {
+      const el = puffEls.current[i];
+      setAttr(el, 'transform', `translate(${(d.x + SIDE).toFixed(1)} ${(d.y + OVER).toFixed(1)}) rotate(${p.sheet.puff.drops[i].rot.toFixed(0)}) scale(${d.scale.toFixed(3)})`);
+      setAttr(el, 'opacity', d.opacity.toFixed(3));
+    });
     // the words
+    const keyOf = groupKey.current;
     groups.forEach((gr, i) => {
-      if (r.landed.has(i)) return;
       const q = groupAt(p.groups[i], now);
-      if (!q) return;
-      const settled = q.opacity >= 1 && q.dx === 0 && q.dy === 0 && q.rot === 0;
+      const k = !q ? 'h' : q.opacity >= 1 && q.dx === 0 && q.dy === 0 && q.rot === 0 && q.sx === 1 && q.sy === 1 ? 'p' : 'm';
+      if (k !== 'm' && keyOf[i] === k) return;
+      keyOf[i] = k;
       for (const m of gr.members) {
-        const st = m.el.style;
-        if (settled) {
-          st.translate = st.rotate = st.scale = '';
-          st.opacity = '1';
+        const ms = m.el.style;
+        if (k === 'h' || k === 'p') {
+          ms.translate = ms.rotate = ms.scale = '';
+          ms.opacity = k === 'p' ? '1' : '';
+          ms.removeProperty('--asm-lift');
           continue;
         }
-        const off = memberOffset(gr.box, m.box, q);
-        st.translate = `${off.x.toFixed(1)}px ${off.y.toFixed(1)}px`;
-        st.rotate = `${q.rot.toFixed(2)}deg`;
-        st.scale = q.scale.toFixed(4);
-        st.opacity = q.opacity.toFixed(3);
+        const off = memberOffset(gr.box, m.box, q!);
+        ms.translate = `${off.x.toFixed(1)}px ${off.y.toFixed(1)}px`;
+        ms.rotate = `${q!.rot.toFixed(2)}deg`;
+        ms.scale = `${q!.sx.toFixed(4)} ${q!.sy.toFixed(4)}`;
+        ms.opacity = q!.opacity.toFixed(3);
+        ms.setProperty('--asm-lift', q!.lift.toFixed(2));
       }
-      if (settled) r.landed.add(i);
     });
     // the arms
     let arm0: { base: Pt; tip: Pt } | null = null;
@@ -279,39 +349,30 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
     setAttr(o, 'data-arm', A ? `${(A.base.x - SIDE).toFixed(0)} ${(A.base.y - OVER).toFixed(0)} ${(A.tip.x - SIDE).toFixed(0)} ${(A.tip.y - OVER).toFixed(0)}` : null);
   };
 
-  const begin = () => {
-    phase.current = 'run';
-    setAttr(outer.current, 'data-asm-state', 'run'); // words become inline-blocks (same layout) so they can move
-    measure(() => {
-      if (phase.current !== 'run') return;
-      run.current = plan();
-      if (!run.current) finish();
-      wake.current?.();
-    });
-  };
-
-  // every render (mount, resize): set the resting state before paint; a new size queues a re-measure
+  // every render (mount, resize): a new size queues a re-measure and a re-plan
+  const sized = useRef('');
   useLayoutEffect(() => {
     const key = `${w}x${h}`;
     if (sized.current !== key) {
       sized.current = key;
-      if (phase.current === 'run') finish(); // resized mid-assembly: just show it
+      keys.current = null;
       measure(() => {
         remeasure();
         wake.current?.();
       });
     }
-    if (reduce || phase.current === 'done') {
-      if (phase.current !== 'done') finish();
-      else parked();
+    if (reduce) {
+      finish();
+      setAttr(outer.current, 'data-printed', '1');
+      setAttr(outer.current, 'data-pinned', null);
+      outer.current?.style.removeProperty('top');
+      setAttr(anchor.current, 'style', null);
       return;
     }
-    if (phase.current === 'wait') {
+    if (shown.current.state === '') {
       setAttr(outer.current, 'data-printed', '0');
-      setAttr(outer.current, 'data-asm-state', 'wait');
-      setAttr(armG[0].current, 'display', 'none');
-      setAttr(armG[1].current, 'display', 'none');
-    }
+      empty();
+    } else if (shown.current.state === 'done') parked();
   });
 
   // build the art when idle, or as soon as the plate is near the viewport (checked per scroll frame)
@@ -326,9 +387,9 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
     };
     const near = ticker.loop(() => {
       if (!ready.current) return true; // not measured yet: check again next frame
-      const { top, height } = geo.current;
+      const { top, trackH } = geo.current;
       const v = view();
-      if (top < v.sy + v.h * (1 + NEAR) && top + height > v.sy - v.h * NEAR) go(true); // committed before this frame paints
+      if (top < v.sy + v.h * (1 + NEAR) && top + trackH > v.sy - v.h * NEAR) go(true); // committed before this frame paints
       return false;
     });
     const check = () => near.wake();
@@ -345,42 +406,92 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
     };
   }, [live]);
 
-  // the trigger + the assembly clock: one ticker loop, awake only while it plays
+  // the scroll-driven clock: one ticker loop, awake while scrolling and while the shown time catches up
   const liveRef = useRef(live);
   liveRef.current = live && w > 0;
   useEffect(() => {
     if (reduce) return;
-    const loop = ticker.loop((_, dt) => {
-      if (!ready.current || phase.current === 'done') return false;
-      const { top, height, vh } = geo.current;
+    wireJumps();
+    let planning = false;
+    const loop = ticker.loop((now, dt) => {
+      if (!ready.current) return false;
+      const o = outer.current;
+      const { top, trackH, H, vh } = geo.current;
       const v = view();
-      const topFrac = (top - v.sy) / vh;
-      if (phase.current === 'wait') {
-        const first = !seen.current;
-        seen.current = true;
-        if (top - v.sy >= TRIGGER * vh) return false; // not yet
-        if (topFrac < (first ? AT_ONCE_FIRST : AT_ONCE)) {
-          finish(); // already up the screen (or past it): there's no time to watch it built
-          return false;
+      // the pin: where it sticks, where it starts and ends (document scroll px)
+      const stick = stickFor(vh, H);
+      const pinLen = Math.max(0, trackH - H);
+      const pinStart = top - stick;
+      const pinEnd = pinStart + pinLen;
+      const top$ = `${stick.toFixed(0)}px`;
+      if (o && o.style.top !== top$) o.style.top = top$;
+      // the id lands where the plate is assembled (short plates: the scroll ends at the pin's end) or at its top (tall ones)
+      setAttr(anchor.current, 'style', `top:${(stick >= TOP ? pinLen - stick + SCROLL_PAD : 0).toFixed(0)}px`);
+      const pinned = pinLen > 0 && v.sy >= pinStart && v.sy < pinEnd;
+      setAttr(o, 'data-pinned', pinned ? '1' : null);
+
+      if (!liveRef.current) return false; // its art is committed before the next frame (near check), which wakes us
+      const sizeKey = `${w}x${h}`;
+      if (!run.current || run.current.key !== sizeKey) {
+        if (!planning) {
+          planning = true;
+          measure(() => {
+            planning = false;
+            run.current = plan(sizeKey);
+            keys.current = null;
+            wake.current?.();
+          });
         }
-        if (!liveRef.current) return false; // its art is committed before the next frame (near check), which wakes us
-        begin();
-        return true;
+        return false;
       }
       const r = run.current;
-      if (!r) return true; // measuring: next frame
-      if (top + height < v.sy || top > v.sy + 2.5 * vh) {
-        finish(); // scrolled well away: done off screen
-        return false;
+      const p = r.plan;
+      const geoKey = `${top}|${trackH}|${H}|${vh}`;
+      if (!keys.current || keys.current.key !== geoKey) {
+        const s0 = top - vh * START;
+        const sheet = Math.min(Math.max(s0 + vh * 0.3, pinStart - vh * 0.1), top - vh * 0.4); // landed by the time its top is ~40% down
+        const ready = r.groups.map((gr) => top + gr.box.y + gr.box.h - vh * READY);
+        keys.current = { k: scrollKeys(p, { s0, sheet, pinStart, pinEnd, ready, tall: stick < TOP }), key: geoKey };
       }
-      r.t += (dt * paceFor(topFrac)) / SLOW;
-      if (import.meta.env.DEV) setAttr(outer.current, 'data-asm-t', r.t.toFixed(2));
-      if (r.t >= r.plan.end) {
-        finish();
-        return false;
+      const c = ctl.current;
+      // direction + idle
+      if (Number.isNaN(c.lastSy)) c.lastSy = v.sy;
+      const dy = v.sy - c.lastSy;
+      if (Math.abs(dy) > 0.5) {
+        const d = dy > 0 ? 1 : -1;
+        if (d !== c.dir) c.held = NaN;
+        c.dir = d;
+        c.moved = now;
+        c.lastSy = v.sy;
       }
-      render(r);
-      return true;
+      let target = c.force ? p.end : timeAtScroll(keys.current.k, v.sy);
+      const idle = (now - c.moved) / 1000 > IDLE;
+      if (!c.force && target > 0 && target < p.end) {
+        if (idle && Number.isNaN(c.held)) c.held = snapBeat(p.beats, target, c.dir);
+        if (!Number.isNaN(c.held)) {
+          if ((c.dir > 0 && target < c.held) || (c.dir < 0 && target > c.held)) target = c.held;
+          else c.held = NaN;
+        }
+      } else c.held = NaN;
+
+      const s = st.current;
+      const off = top + trackH < v.sy - 60 || top > v.sy + v.h + 60;
+      if (c.fresh || off || c.force || now < jumpUntil) {
+        s.t = target; // first sight, off screen, focused, or a jump: no playback
+        s.v = 0;
+        c.fresh = false;
+      } else follow(s, target, dt, { omega: FOLLOW.omega, maxRate: rateFor(p.end, two ? 3 : 2.6) });
+
+      if (s.t !== shown.current.t) {
+        if (import.meta.env.DEV) setAttr(o, 'data-asm-t', `${s.t.toFixed(2)}/${p.end.toFixed(2)}`);
+        if (s.t <= 0) empty();
+        else if (s.t >= p.end) finish();
+        else render(r, s.t);
+        shown.current.t = s.t;
+      }
+      setAttr(o, 'data-printed', s.t >= p.end && !pinned ? '1' : '0');
+      // awake while catching up, or while a stop might still settle on a beat
+      return s.t !== target || (!idle && target > 0 && target < p.end && !c.force);
     });
     const onWake = () => loop.wake();
     wake.current = onWake;
@@ -396,62 +507,79 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
       offLayout();
       window.removeEventListener('scroll', onWake);
     };
-  }, [reduce]);
+  }, [reduce, w, h, two]);
 
-  // once the art is built, check the trigger again (it may have been waiting on it)
+  // once the art is built, check again (it may have been waiting on it)
   useEffect(() => {
     if (live && w > 0) wake.current?.();
   }, [live, w]);
 
+  const nDrops = run.current?.plan.sheet.puff.drops.length ?? 11;
   return (
-    <div
-      ref={outer}
-      id={id}
-      className={`relative ${className}`}
-      data-perch={perch}
-      data-poke-host=""
-      onFocus={() => {
-        if (phase.current !== 'done') finish();
-      }}
-    >
-      <span className="plate-anchor left-0 top-0" data-poke="lift" data-poke-reach="top" data-poke-dir="-1" aria-hidden="true" />
-      <span className="plate-anchor right-0 top-0" data-poke="lift" data-poke-reach="top" data-poke-dir="1" aria-hidden="true" />
-      <span className="plate-anchor plate-anchor--edge" data-poke="peek" data-poke-reach="top" aria-hidden="true" />
-      {live && w > 0 && <span className="plate-anchor" style={{ left: park.x - SIDE - 12, top: park.y - OVER - 12 }} data-poke="twitch" data-poke-reach="dangle" aria-hidden="true" />}
-      <div ref={ref} className="plate-shadow plate-alive" style={{ '--plate-rot': `${layout.rot.toFixed(2)}deg` } as CSSProperties}>
-        <div ref={sheetEl} className="plate-sheet relative isolate">
-          {layout.layers.map((_, i) => (
-            <div
-              key={i}
-              ref={(e) => void (layerEls.current[i] = e)}
-              aria-hidden="true"
-              className={`plate-layer absolute inset-0 ${layerTone[i]} ${cut.layers[i] ? '' : 'plate-cut'}`}
-              style={{ clipPath: cut.layers[i], zIndex: -1 - i, transform: layerRest[i] }}
-            />
-          ))}
-          {/* the sheet's face: torn paper (or ink) behind the content, so words can be carried in over its edge */}
-          <div aria-hidden="true" className={`absolute inset-0 ${tone === 'paper' ? 'plate-paper' : 'plate-ink'} ${cut.face ? '' : 'plate-cut'}`} style={{ clipPath: cut.face }} />
-          <div ref={face} className={`plate-face relative ${tone === 'paper' ? 'plate-paper text-on-paper' : 'plate-ink text-on-surface'} px-7 py-10 md:px-12 md:py-14`}>
-            {children}
+    <div ref={track} className={`plate-track relative ${className}`}>
+      {id && <span ref={anchor} id={id} className="plate-target" aria-hidden="true" />}
+      <div
+        ref={outer}
+        className="plate-pin relative"
+        data-perch={perch}
+        data-poke-host=""
+        onFocus={() => {
+          ctl.current.force = true; // keyboard inside: show it whole, now
+          wake.current?.();
+        }}
+        onBlur={(e) => {
+          if (outer.current?.contains(e.relatedTarget as Node | null)) return;
+          ctl.current.force = false;
+          ctl.current.fresh = true; // back to where the scroll is, without playing
+          wake.current?.();
+        }}
+      >
+        <span className="plate-anchor left-0 top-0" data-poke="lift" data-poke-reach="top" data-poke-dir="-1" aria-hidden="true" />
+        <span className="plate-anchor right-0 top-0" data-poke="lift" data-poke-reach="top" data-poke-dir="1" aria-hidden="true" />
+        <span className="plate-anchor plate-anchor--edge" data-poke="peek" data-poke-reach="top" aria-hidden="true" />
+        {live && w > 0 && <span className="plate-anchor" style={{ left: park.x - SIDE - 12, top: park.y - OVER - 12 }} data-poke="twitch" data-poke-reach="dangle" aria-hidden="true" />}
+        <div ref={ref} className="plate-shadow plate-alive" style={{ '--plate-rot': `${layout.rot.toFixed(2)}deg` } as CSSProperties}>
+          <div ref={sheetEl} className="plate-sheet relative isolate">
+            {layout.layers.map((_, i) => (
+              <div
+                key={i}
+                ref={(e) => void (layerEls.current[i] = e)}
+                aria-hidden="true"
+                className={`plate-layer absolute inset-0 ${layerTone[i]} ${cut.layers[i] ? '' : 'plate-cut'}`}
+                style={{ clipPath: cut.layers[i], zIndex: -1 - i, transform: layerRest[i] }}
+              />
+            ))}
+            {/* the sheet's face: torn paper (or ink) behind the content, so words can be carried in over its edge */}
+            <div aria-hidden="true" className={`absolute inset-0 ${tone === 'paper' ? 'plate-paper' : 'plate-ink'} ${cut.face ? '' : 'plate-cut'}`} style={{ clipPath: cut.face }} />
+            <div ref={face} className={`plate-face relative ${tone === 'paper' ? 'plate-paper text-on-paper' : 'plate-ink text-on-surface'} px-7 py-10 md:px-12 md:py-14`}>
+              {children}
+            </div>
           </div>
         </div>
-      </div>
 
-      {live && w > 0 && (
-        <svg
-          className="pointer-events-none absolute overflow-visible"
-          style={{ left: -SIDE, top: -OVER, width: w + SIDE * 2, height: h + OVER }}
-          viewBox={`0 0 ${w + SIDE * 2} ${h + OVER}`}
-          aria-hidden="true"
-        >
-          <g ref={armG[1]} display="none">
-            <MechArm ref={armRef[1]} l1={l} l2={l} t={t * 0.9} tool="claw" toolLen={toolLen * 0.92} tether />
-          </g>
-          <g ref={armG[0]} className="plate-arm" style={{ transformOrigin: `${parkBase.x}px ${parkBase.y}px` }}>
-            <MechArm ref={armRef[0]} l1={l} l2={l} t={t} tool="claw" toolLen={toolLen} rail={{ x1: SIDE - 22, x2: SIDE + w + 22 }} tether />
-          </g>
-        </svg>
-      )}
+        {live && w > 0 && (
+          <svg
+            className="pointer-events-none absolute overflow-visible"
+            style={{ left: -SIDE, top: -OVER, width: w + SIDE * 2, height: h + OVER }}
+            viewBox={`0 0 ${w + SIDE * 2} ${h + OVER}`}
+            aria-hidden="true"
+          >
+            {/* ink pushed out from under the sheet as it lands */}
+            <g ref={puffG} display="none">
+              {Array.from({ length: nDrops }, (_, i) => (
+                <ellipse key={i} ref={(e) => void (puffEls.current[i] = e)} rx={(run.current?.plan.sheet.puff.drops[i]?.r ?? 3) * (run.current?.plan.sheet.puff.drops[i]?.long ?? 1.5)} ry={run.current?.plan.sheet.puff.drops[i]?.r ?? 3} className="fill-ink" opacity="0" />
+              ))}
+            </g>
+            <g ref={armG[1]} display="none">
+              <MechArm ref={armRef[1]} l1={l} l2={l} t={t * 0.9} tool="claw" toolLen={toolLen * 0.92} tether />
+            </g>
+            <g ref={armG[0]} className="plate-arm" style={{ transformOrigin: `${parkBase.x}px ${parkBase.y}px` }}>
+              <MechArm ref={armRef[0]} l1={l} l2={l} t={t} tool="claw" toolLen={toolLen} rail={{ x1: SIDE - 22, x2: SIDE + w + 22 }} tether />
+            </g>
+          </svg>
+        )}
+      </div>
+      <div className="plate-spacer" aria-hidden="true" />
     </div>
   );
 }
@@ -471,5 +599,40 @@ export function Words({ text }: { text: string }) {
         </Fragment>
       ))}
     </>
+  );
+}
+
+/**
+ * A plate title split into words the arms place (`.asm-w`) and letters (`data-plate-glyph="<plateId>:<index>"`,
+ * index = the letter's position in `text`) kept for letter play. Plain inline spans at rest, so the
+ * line shapes as one run (kerning, wrapping, find in page). Use inside a heading that carries the
+ * full text as its accessible name (`aria-label`); these spans are aria-hidden.
+ */
+export function TitleGlyphs({ text, plate }: { text: string; plate: string }) {
+  let i = 0;
+  const words = text.split(' ').map((word) => {
+    const start = i;
+    i += word.length + 1;
+    return { word, start };
+  });
+  return (
+    <span aria-hidden="true">
+      {words.map(({ word, start }, k) => (
+        <Fragment key={k}>
+          {k > 0 ? ' ' : ''}
+          <span className="asm-w">
+            {[...word].map((ch, j) =>
+              ch === ' ' ? (
+                ch
+              ) : (
+                <span key={j} className="plate-glyph" data-plate-glyph={`${plate}:${start + j}`}>
+                  {ch}
+                </span>
+              ),
+            )}
+          </span>
+        </Fragment>
+      ))}
+    </span>
   );
 }
