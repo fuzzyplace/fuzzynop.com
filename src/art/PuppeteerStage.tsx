@@ -1107,6 +1107,10 @@ export function PuppeteerStage() {
         }
         return teleport(s, now, { to: dest, poi, why: 'probe' });
       },
+      pinTop: (el) => {
+        const c = cache.find((q) => q.pin && !q.nook && q.el.contains(el));
+        return c?.pin ? pinTop(c.pin, viewport().sy) : null;
+      },
     });
     // ---- end probe hook ----
 

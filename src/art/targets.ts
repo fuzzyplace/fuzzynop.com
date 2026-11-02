@@ -31,7 +31,8 @@ export type PokeTarget = {
   kinds: PokeKind[];
   reach: PokeReach;
   winnable: boolean;
-  rect: Rect; // document px
+  rect: Rect; // document px, as measured (on a pinned plate it rides the scroll: see `pinned`)
+  pinned: boolean; // on a plate that's stuck right now (v2.9: probes follow its live position)
 };
 
 const isKind = (k: string): k is PokeKind => (POKE_KINDS as readonly string[]).includes(k);
@@ -51,20 +52,20 @@ const docRect = (r: DOMRect): Rect => ({ left: r.left + scrollX, top: r.top + sc
 
 /**
  * Every probe target that can answer right now (document px). Skips targets on a plate that isn't
- * whole (data-assembled), on a pinned plate (its document rect moves with the scroll, and a probe
- * plans in document px; he can still stand on it), a print arm that isn't parked, and anything with
- * no box (hidden at this width).
+ * whole (data-assembled), a print arm that isn't parked, and anything with no box (hidden at this
+ * width). v2.9: a pinned (whole) plate's targets count; they're flagged `pinned`, and the driver
+ * follows the plate's live position (the stage's pin model) for as long as the probe runs.
  */
 export function queryTargets(root: ParentNode = document): PokeTarget[] {
   const out: PokeTarget[] = [];
   for (const el of root.querySelectorAll('[data-poke]')) {
     const kinds = kindsOf(el);
-    if (!kinds.length || el.closest('[data-printed]:not([data-assembled="1"]), [data-pinned="1"]')) continue;
+    if (!kinds.length || el.closest('[data-printed]:not([data-assembled="1"])')) continue;
     if (kinds.includes('twitch') && el.closest('[data-arm], [data-printing]')) continue;
     const r = el.getBoundingClientRect();
     if (r.width === 0 && r.height === 0) continue;
     const reach = el.getAttribute('data-poke-reach');
-    out.push({ el, id: idOf(el, kinds[0]), kind: kinds[0], kinds, reach: isReach(reach) ? reach : 'top', winnable: el.hasAttribute('data-poke-win'), rect: docRect(r) });
+    out.push({ el, id: idOf(el, kinds[0]), kind: kinds[0], kinds, reach: isReach(reach) ? reach : 'top', winnable: el.hasAttribute('data-poke-win'), rect: docRect(r), pinned: !!el.closest('[data-pinned="1"]') });
   }
   return out;
 }

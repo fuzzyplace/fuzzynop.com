@@ -261,6 +261,11 @@ export type StageCtx = {
    * px); `poi` becomes his goal, and the stage calls `arrive` once he's gathered himself there.
    */
   teleportTo: (dest: { i: number; x: number } | { spot: Pt; facing: 1 | -1 }, poi: Poi, now: number) => boolean;
+  /**
+   * v2.9: the document top now of the sticky plate holding `el` (the stage's live pin model, no
+   * layout read), or null if it isn't on one. A probe on a pinned plate follows it with this.
+   */
+  pinTop?: (el: Element) => number | null;
 };
 
 type Run = {
@@ -283,6 +288,7 @@ type Run = {
   dir: number; // side he's on, for the target's response
   surf: number; // stand: the surface index
   forced: boolean;
+  pin0: number | null; // the target's sticky plate top (document px) when the look point was last set
 };
 export type ProbeLog = { t: number; id: string; kind: ProbeKind; action: ProbeAction; approach: Run['approach']; win: boolean; glanceBack: boolean; result: 'started' | 'touched' | 'won' | 'looked' | 'caught' | 'aborted' | 'done' };
 
@@ -394,6 +400,7 @@ export function createProbeDriver(ctx: StageCtx) {
       beatAt: now,
       fired: 0,
       forced,
+      pin0: ctx.pinTop?.(pt.el) ?? null,
     };
     const heist = action !== 'look' && APPROACH[kind] === 'heist';
     if (heist) {
@@ -615,6 +622,19 @@ export function createProbeDriver(ctx: StageCtx) {
     tick(s: Probed, now: number) {
       const r = run;
       if (!r) return;
+      // a target on a sticky plate: the plate holds still on screen while it's pinned, so its document
+      // position (and where he looks) moves with the scroll
+      if (r.pin0 !== null) {
+        const top = ctx.pinTop?.(r.t.el) ?? r.pin0;
+        const d = top - r.pin0;
+        if (d !== 0) {
+          const following = s.look === r.look;
+          r.look = { x: r.look.x, y: r.look.y + d };
+          if (r.hold) r.hold = { x: r.hold.x, y: r.hold.y + d };
+          if (following) s.look = r.look;
+          r.pin0 = top;
+        }
+      }
       const m = s.m.mode;
       if (r.phase === 'approach') {
         const ok = r.approach === 'walk' ? m === 'exploring' || m === 'fidget' || m === 'idle' : m === 'teleport' || m === 'idle' || m === 'fidget';
