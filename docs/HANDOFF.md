@@ -6,7 +6,37 @@
 
 ---
 
-## Current state (v2.4) — read this first (updated 2026-11-01, end of cloud session)
+## Current state (v2.8, launch prep) — read this first (updated 2026-11-02)
+Branch `claude/v2.8-launch` (on top of `claude/v2.3-living-stage-x605vc`). `npm run check` passes (248 tests). Vercel preview project: `fuzzynop-redesign-preview` (STDClub team; Vercel login required). **Launch is prepared, not performed: see [`docs/LAUNCH.md`](LAUNCH.md)** for the ordered cutover, DNS records, QA list and what's needed from Z. `main` still serves v1 on GitHub Pages, so merging into `main` is the cutover.
+
+**The page now** (copy and order in `docs/CONTENT.md` → "How it maps to the site")
+- Hero: the arm writes "Team Builder, / Red Teamer, / Professional Bogeyman", every letter its own span so he can play on it. Then Past (white), Present (black), the "Setting the vibe" pop-out (white), Future (black), Contact (white) with the CTA and the link tree. Footer `0x90 0x90 0x90 · nothing happened here`.
+- **Pinned, scroll-driven assembly** (v2.7): each plate sticks while you scroll through a spacer, and claw arms carry the sheet in and place its words in step with the scroll, both ways, with weight (wind-up, press, squash, ink puff). Scrolling is never intercepted; reduced motion shows everything placed. Details and tuning guesses: `docs/DECISIONS.md` and DESIGN_SYSTEM "Art direction".
+- **Link tree** from the original site (`src/content/links.ts`): Connect, on the FZNP root (LinkedIn, X, GitHub), Work (Talks archive, Interview, Podcast, In the news), Play (The Fuzzy Place, live set, the crew, SoundCloud, Spotify, Mixcloud). Email and Book time stay hidden in production until Z supplies them.
+
+**The character is his own agent** (v2.5 to v2.7)
+- The claw comes only when you press on him; otherwise he gets around himself (walk, jump, climb, fall) and **teleports** (ink out, ink in, a shake) when there's no route or on a whim.
+- **Needs brain** (`desires.ts`): curiosity, mischief, company, show-off and rest rise over time and pick what he does next.
+- **Trust and moods**: starts wary, a calm pointer earns trust, a grab shakes him; moods run from fearful to warm. The hidden line shows once per session at full trust.
+- **Probes**: he inspects and pokes things on the page (badges spin, plate corners lift, circuit nodes tug, the CTA rattles, the footer 0x90 hops).
+- **Title stunt**: once per page load he plays on the hero title (walk, poke, sit, flick, swing, hang).
+- **Letter play**: plate titles are per-letter spans he can use; wired, not yet seen working at the pinned scroll positions.
+- Dev builds expose `window.__puppet` (trust, fear, feel, force(activity), teleport, probe, stunt, decisions, desires, clawUses, nooks, surface, away).
+
+**Launch prep done in v2.8**
+- `index.html`: twitter title/description/image alt, `og:site_name`, `og:image:alt`, apple-touch-icon and manifest links.
+- `public/`: `apple-touch-icon.png` (paper hex with FZNP on ink, 180x180, rendered from SVG), `site.webmanifest`, `404.html` (dark, the footer egg, a link home, noindex).
+- `vercel.json`: strict CSP plus short caching for og/favicon/icons. Tested on 2026-11-02 against the production build under these headers (temp static server mirroring Vercel's headers and 404): full scroll at 1440 and 375, the character stage chunk loaded and he appeared, zero CSP violations, zero console or page errors, no horizontal scroll; unknown paths return 404 with the 404 page. Lighthouse locally: accessibility, best practices and SEO 100, same as before; performance 78 to 87 (container variance, unchanged by these edits).
+
+**Waiting on Z**
+- DNS provider access and a go-ahead date (LAUNCH.md).
+- Calendly and a public email, if wanted at launch.
+- Approve the drafted lines in `docs/CONTENT.md` (Contact block and CTA, the pop-out body line).
+- Still open from before: tuning guesses in DECISIONS (pin length, needs rates, teleport pace), touch path and Safari/Firefox on real devices.
+
+<details><summary>Earlier: v2.4 state (2026-11-01)</summary>
+
+## Current state (v2.4) (updated 2026-11-01, end of cloud session)
 Branch `claude/v2.3-living-stage-x605vc`. `npm run check` passes (117 tests). Vercel preview project: `fuzzynop-redesign-preview` (STDClub team; Vercel login required).
 
 **Main story is LOCKED: "the experiment is you", with "security is a feeling" as its heart.** See `docs/NARRATIVE.md` → "Main story — LOCKED". Every further decision should follow from it.
@@ -40,6 +70,8 @@ Branch `claude/v2.3-living-stage-x605vc`. `npm run check` passes (117 tests). Ve
   - Duck rarity.
   - Trust pace.
 - Not yet tested: touch path, Safari/Firefox (container queries), Lighthouse.
+
+</details>
 
 <details><summary>Earlier: v2.4 prototype notes</summary>
 
