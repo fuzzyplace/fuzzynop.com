@@ -1698,7 +1698,27 @@ export function PuppeteerStage() {
         const md = mode();
         if (md !== 'teleport' && md !== 'falling' && !held(md) && md !== 'stunt') {
           const mine = s.idx >= 0 ? ps[s.idx] : undefined;
-          if (!mine || !mine.ok) {
+          const routed = md === 'hopping' || md === 'exploring';
+          const feet = s.char.y + FEET * scale * s.k; // screen px
+          const underHeader = routed
+            ? s.route?.[s.leg]?.kind === 'walk' && feet > -4 && feet < headroomK(s.k) // walking along a surface the scroll took up there
+            : !!mine && mine.ok && mine.top < headroomK(cache[s.idx].k) && mine.top > -4;
+          if (underHeader) {
+            // the scroll took his surface up under the fixed header: never stands there, not even for a beat
+            s.awaySince = 0;
+            if (routed) {
+              s.route = null;
+              s.goal = null;
+              go(s, { type: md === 'hopping' ? 'arrived' : 'attend' }, now);
+            } else if (own(md)) go(s, { type: 'attend' }, now);
+            if (teleport(s, now, { ps, why: 'header' })) {
+              if (s.tele) s.tele.hop.out = 0; // half under the header: no slow ink-out there, he's just gone
+            } else {
+              s.hidden = true;
+              s.idx = -1;
+              s.pid = '';
+            }
+          } else if (!mine || !mine.ok) {
             if (md !== 'hopping' || !mine) leaveNow(s, ps, now);
             else go(s, { type: 'vanish' }, now) && (s.tele = null, leaveNow(s, ps, now)); // the plate he was headed for went away
           } else if ((!mine.visible || !mine.onX) && md !== 'hopping' && md !== 'exploring') {
@@ -1990,7 +2010,16 @@ export function PuppeteerStage() {
             go(s, { type: 'arrived' }, now);
             break;
           }
-          const ph = hopPhase(T.hop, now);
+          let ph = hopPhase(T.hop, now);
+          if (T.swapped && (s.idx < 0 || !ps[s.idx]?.ok)) {
+            // the spot he was gathering at went away under him (a pinned plate came apart, its nook with it):
+            // back through the gap, and gather again somewhere that's still there
+            T.swapped = false;
+            T.to = null;
+            if (!T.hop.instant && ph.phase !== 'gone') T.hop = { ...T.hop, at: now - T.hop.out * 1000 };
+            ph = hopPhase(T.hop, now);
+            if (ph.phase === 'out') ph = { phase: 'gone', k: 0 };
+          }
           if (!T.swapped && ph.phase !== 'out') {
             // through the gap: he's at the destination now (or, if it went away meanwhile, somewhere else)
             let j = T.to ? cache.findIndex((c) => c.id === T.to!.id) : -1;
