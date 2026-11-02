@@ -18,7 +18,7 @@ export function Chapter({ ch, children }: { ch: Ch; children?: ReactNode }) {
   const rule = ink ? 'border-on-surface/20' : 'border-ink/20';
   return (
     <>
-      <PlateHeader n={ch.n} eyebrow={ch.eyebrow} title={tieTitle(ch.title)} tone={ink ? 'ink' : 'paper'} />
+      <PlateHeader plate={ch.id} n={ch.n} eyebrow={ch.eyebrow} title={tieTitle(ch.title)} tone={ink ? 'ink' : 'paper'} />
       {ch.body.length > 0 && (
         <div className={`type-body-large max-w-[60ch] space-y-5 ${muted}`}>
           {ch.body.map((p) => (
