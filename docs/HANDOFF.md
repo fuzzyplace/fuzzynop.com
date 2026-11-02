@@ -28,11 +28,16 @@ Branch **`release/v2`** (canonical; contains everything, including the former `c
 - `public/`: `apple-touch-icon.png` (paper hex with FZNP on ink, 180x180, rendered from SVG), `site.webmanifest`, `404.html` (dark, the footer egg, a link home, noindex).
 - `vercel.json`: strict CSP plus short caching for og/favicon/icons. `*.vercel.app` hosts (previews) get a second CSP that adds the Vercel toolbar origins (`vercel.live`, its pusher socket, `vercel.com` images), so preview comments are not blocked; `fuzzynop.com` keeps the strict one. Tested on 2026-11-02 against the production build under these headers (temp static server mirroring Vercel's headers and 404): full scroll at 1440 and 375, the character stage chunk loaded and he appeared, zero CSP violations, zero console or page errors, no horizontal scroll; unknown paths return 404 with the 404 page. Lighthouse locally: accessibility, best practices and SEO 100, same as before; performance 78 to 87 (container variance, unchanged by these edits).
 
+**Polish done in v2.9** (branch `claude/v2.9-polish`, details in DECISIONS "Polish (v2.9)")
+- Pins about half as long: the page is 2.0 screens longer than unpinned at 1440 (was 4.25), 1.2 at 375 (was 2.75); tall plates pin half as long again.
+- He stands on a plate's top edge as soon as its sheet is down (`data-sheet`), has nooks in ink plates too (with a soft fog patch behind him, also on the footer), lands where the scroll will keep him, and inks a little quicker: on screen ~62% of a steady read-through at 1440 and 375 (was 30% / 37%).
+- Probes (corner lift, peek, arm twitch) work on pinned plates; nooks no longer snap when a plate un-pins; arms over black sheets get a gray rim.
+
 **Waiting on Z**
 - DNS provider access and a go-ahead date (LAUNCH.md).
 - Calendly and a public email, if wanted at launch.
 - Approve the drafted lines in `docs/CONTENT.md` (Contact block and CTA, the pop-out body line).
-- Still open from before: tuning guesses in DECISIONS (pin length, needs rates, teleport pace), touch path and Safari/Firefox on real devices.
+- Still open from before: touch path and Safari/Firefox on real devices. Tuning guesses in DECISIONS were resolved in v2.9; what is left there needs Z.
 
 <details><summary>Earlier: v2.4 state (2026-11-01)</summary>
 
