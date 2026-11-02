@@ -443,6 +443,8 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
       if (o && o.style.top !== top$) o.style.top = top$;
       // the id lands where the plate is assembled (short plates: the scroll ends at the pin's end) or at its top (tall ones)
       setAttr(anchor.current, 'style', `top:${(stick >= TOP ? pinLen - stick + SCROLL_PAD : 0).toFixed(0)}px`);
+      // v2.9: a plate taller than the view places most of itself while it scrolls in: a shorter pin (global.css)
+      setAttr(track.current, 'data-tall', stick < TOP ? '1' : null);
       const pinned = pinLen > 0 && v.sy >= pinStart && v.sy < pinEnd;
       setAttr(o, 'data-pinned', pinned ? '1' : null);
 

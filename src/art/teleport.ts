@@ -22,7 +22,9 @@ export type HopPhase = { phase: 'out' | 'gone' | 'in' | 'done'; k: number };
 /** A hop starting at `now` (ms). `far`: px between the spots (a longer beat in between); `instant`: reduced motion or nobody sees it. */
 export function startHop(now: number, far: number, instant = false): Hop {
   if (instant) return { at: now, out: 0, gap: 0, in: 0, instant: true };
-  return { at: now, out: OUT, gap: Math.min(0.4, 0.1 + far / 2400), in: IN, instant: false };
+  // a short hop (a nook to the next one in the same plate) is quicker still
+  const k = far < 320 ? 0.72 : 1;
+  return { at: now, out: OUT * k, gap: Math.min(0.4, 0.1 + far / 2400), in: IN * k, instant: false };
 }
 export function hopPhase(h: Hop, now: number): HopPhase {
   if (h.instant) return { phase: 'done', k: 1 };

@@ -565,7 +565,7 @@ export function PuppeteerStage() {
     let scrollDir: 1 | -1 = 1; // which way the visitor last scrolled
     let scrollY0 = window.scrollY;
     /** The visitor is scrolling (or just was): reappear where the scroll won't carry him straight out of view. */
-    const drift = () => (performance.now() - lastScroll < 3000 ? { dir: scrollDir, px: vp.h * 0.45 } : undefined);
+    const drift = () => (performance.now() - lastScroll < 6000 ? { dir: scrollDir, px: vp.h * 0.55 } : undefined);
     let lingerTimer = 0;
     const events: { k: string; t: number }[] = []; // dev: what he did and when (reactions, turning points)
     const note = (k: string, now: number) => {
