@@ -37,7 +37,18 @@ export function hopPhase(h: Hop, now: number): HopPhase {
 export const hopDur = (h: Hop) => h.out + h.gap + h.in;
 
 /** Somewhere he could reappear (document px, feet). `inside`: a nook in a plate. */
-export type Spot = { id: string; i: number; x: number; y: number; inside: boolean };
+export type Spot = {
+  id: string;
+  i: number;
+  x: number;
+  y: number;
+  inside: boolean;
+  /**
+   * While the page scrolls: s he'd have in view there once gathered, at today's scroll speed (the
+   * stage works it out, pinned plates included). Absent: the page is still (or it isn't known).
+   */
+  stay?: number;
+};
 export type DestOpts = {
   focus: Pt | null; // where the visitor's attention is (pointer, last tap), document px; null = the middle of the view
   view: { left: number; right: number; top: number; bottom: number }; // document px, already clear of the header
@@ -52,6 +63,11 @@ export type DestOpts = {
    */
   drift?: { dir: 1 | -1; px: number };
 };
+
+/** s he must still have in view once gathered somewhere while the page scrolls (or it isn't worth going) */
+export const STAY_MIN = 0.3;
+/** s of staying in view past which a spot is no better for it */
+export const STAY_FULL = 5;
 
 /** The best spot to reappear at, or null if none is on screen. */
 export function chooseDest(spots: readonly Spot[], o: DestOpts): Spot | null {
@@ -68,7 +84,11 @@ export function chooseDest(spots: readonly Spot[], o: DestOpts): Spot | null {
     if (o.recent?.includes(s.id)) score -= 1.2;
     if (o.prefer === 'inside') score += s.inside ? 1.5 : -0.8;
     if (o.prefer === 'outside') score += s.inside ? -1 : 0.3;
-    if (o.drift) {
+    if (s.stay !== undefined) {
+      // the scroll is moving: somewhere it'll keep him in view a while, never somewhere it takes him straight out of it
+      if (s.stay < STAY_MIN) continue;
+      score += 2.5 * Math.min(1, s.stay / STAY_FULL);
+    } else if (o.drift) {
       const room = o.drift.dir > 0 ? s.y - o.view.top : o.view.bottom - s.y;
       score -= 1.6 * Math.max(0, 1 - room / o.drift.px);
     }

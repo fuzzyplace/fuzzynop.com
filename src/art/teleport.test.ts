@@ -45,6 +45,19 @@ describe('chooseDest', () => {
     expect(chooseDest(two, { focus: { x: 620, y: 450 }, view, me: null, rand: r, drift: { dir: 1, px: 400 } })!.id).toBe('low');
     expect(chooseDest(two, { focus: { x: 620, y: 450 }, view, me: null, rand: r, drift: { dir: -1, px: 400 } })!.id).toBe('high');
   });
+  it('while the page scrolls: never where the scroll takes him straight out of view, and the longer it keeps him the better', () => {
+    const two: Spot[] = [
+      { id: 'soon', i: 0, x: 600, y: 300, inside: false, stay: 0.1 },
+      { id: 'later', i: 1, x: 640, y: 700, inside: false, stay: 3 },
+    ];
+    for (let i = 0; i < 20; i++) expect(chooseDest(two, { focus: { x: 600, y: 320 }, view, me: null, rand: Math.random })!.id).toBe('later');
+    expect(chooseDest([two[0]], { focus: null, view, me: null, rand: r })).toBeNull();
+    const kept: Spot[] = [
+      { id: 'brief', i: 0, x: 600, y: 450, inside: false, stay: 0.6 },
+      { id: 'long', i: 1, x: 640, y: 450, inside: false, stay: 5 },
+    ];
+    expect(chooseDest(kept, { focus: { x: 620, y: 250 }, view, me: null, rand: r })!.id).toBe('long');
+  });
   it('null when nothing is on screen', () => {
     expect(chooseDest([spots[3]], { focus: null, view, me: null, rand: r })).toBeNull();
   });

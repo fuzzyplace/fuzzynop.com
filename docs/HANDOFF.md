@@ -30,7 +30,7 @@ Branch **`release/v2`** (canonical; contains everything, including the former `c
 
 **Polish done in v2.9** (branch `claude/v2.9-polish`, details in DECISIONS "Polish (v2.9)")
 - Pins about half as long: the page is 2.0 screens longer than unpinned at 1440 (was 4.25), 1.2 at 375 (was 2.75); tall plates pin half as long again.
-- He stands on a plate's top edge as soon as its sheet is down (`data-sheet`), has nooks in ink plates too (with a soft fog patch behind him, also on the footer), lands where the scroll will keep him, and inks a little quicker: on screen ~62% of a steady read-through at 1440 and 375 (was 30% / 37%).
+- He stands on a plate's top edge as soon as its sheet is down (`data-sheet`), has nooks in ink plates too (with a soft fog patch behind him, also on the footer), lands where the scroll will keep him, and inks a little quicker. Presence depends on how you read: with pauses (v2.8 method: a third of a screen, 2 s pause, 3 s more on a whole plate) he is on screen ~62% at 1440 and 375 (was 30% / 37%). A steady non-stop wheel is harder (verifier pass, see DECISIONS "Verifier fixes (v2.9)"): counting only frames where his body is drawn at opacity 0.5 or more, 150 px/s gives 58-67% down / 65% up at 1440 and 48-53% down / 60% up at 375; 300 px/s gives 48-50% / 64% at 1440 and 32-35% / 57-58% at 375. The rest is mostly the tall last plate (nothing to stand on while it pins with its top off screen) and the beat between one plate un-pinning and the next sheet landing; both need a design call (see Unfinished).
 - Probes (corner lift, peek, arm twitch) work on pinned plates; nooks no longer snap when a plate un-pins; arms over black sheets get a gray rim.
 
 **Waiting on Z**
@@ -93,7 +93,8 @@ Branch `claude/v2.3-living-stage-x605vc`. `npm run check` passes (111 tests). Pr
 
 **Unfinished / not verified**
 - **Trust:** never seen in a browser. Not checked: how the tremble and cower look, whether sitting beside the pointer mid-plate covers text, where the hidden line lands near the top of the screen and at 375 px, the timer that wakes the stage, and the touch path. Grab/drop and a full scroll were smoke-tested with no runtime errors.
-- **Header overlap:** the claw can still set him on a plate whose top is near the viewport top, so his head goes under the fixed header.
+- **Header overlap:** fixed in the v2.9 verifier pass (routes on pinned plates follow the pin, a jump arc or a landing spot the scroll took up under the header sends him off at once, a stale glance-then-go route is dropped). Checked every animation frame over 16 full passes at 1440 and 375: 0 frames with his head under the header outside ink. The claw path (a press) was not re-tested.
+- **Presence on a fast steady scroll:** no surface exists while a tall plate (Contact; Future on phones) pins with its top off screen, or between a plate un-pinning and the next sheet landing. Options for Z: let him stand inside a plate while it is still being placed, or a perch on the plate's side gutter at desktop widths. Not done (both change a v2.9 contract).
 - **Duck:** the logic is in place but was never seen to trigger. Watching the printer only happens when a plate is left half-printed.
 - **Circuit tree:** link nodes carry `data-poi="node"`, but Puppeteer only reads `data-poi="splat"`, so he doesn't visit them yet. Not tested in Safari or Firefox (it relies on container queries), on real touch devices, or with Lighthouse.
 - **Small poses:** "read" and the weight shift are subtle at desktop scale.

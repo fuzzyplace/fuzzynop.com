@@ -13,7 +13,7 @@ import { PRESS, afoot, free, held, initial, own, transition, type Ev, type Machi
 import { START as NEEDS0, WHIM_GAP, choose, grow, nextIn, satisfy, type Activity, type Cursor as BrainCursor, type Needs } from './desires';
 import { INSIDE, freeSpaces, type Rect as Box } from './interior';
 import { canTrick, endLetters as endLettersOf, lettersAt, meAt, planTrick, TRICKS, type LBox, type LetterProgram, type Trick } from './letterPlay';
-import { chooseDest, hopPhase, startHop, type Hop, type Spot } from './teleport';
+import { chooseDest, hopPhase, IN, OUT, STAY_FULL, startHop, type Hop, type Spot } from './teleport';
 import { measureTitle, resetGlyphs, setGlyph, titleEl, titleMap } from './targets';
 import { createRagdoll, primeRagdoll, stepRagdoll, type RagPose, type Ragdoll } from './ragdoll';
 import { onLayout, setAttr, ticker, view as viewport } from './ticker';
@@ -121,6 +121,9 @@ const NEAR_HIM = 220; // px: the pointer this close and his own whims stop (he a
 const NAP: [number, number] = [9, 18]; // s lying down
 const INSIDE_PAD = 6; // px he keeps from words inside a plate
 const GRAVITY = 2200; // px/s², falls
+const QUICK_SCROLL = 120; // px/s of scrolling past which he inks in quicker (less of a read-through spent gathering)
+const QUICK_GAP = 0.1; // s between ink-out and ink-in then
+const QUICK_IN = 0.7; // ink-in then, vs. its usual length
 const HEADER = 64; // px of fixed header at the top of the viewport
 const TALL = 70; // character units from the top of his head (hair) to his feet
 const CLEAR = 12; // px kept between the header and the top of his head
@@ -228,6 +231,7 @@ type State = {
   hv: Pt; // smoothed screen velocity while held by hand, px/s
   fall: Fall | null;
   route: Move[] | null; // his own way to another perch
+  routeAt: { sy: number; from: number }; // the scroll his route was planned at, and the surface it starts on (pinned plates move with the scroll)
   leg: number;
   legAt: number;
   action: AnyAction | undefined;
@@ -277,7 +281,7 @@ type State = {
   hidden: boolean; // nowhere on screen to be: out of sight until there is
   run: boolean; // his current route is a run (catching up)
   lwalk: boolean; // stepping during letter play
-  pending: { poi: Poi; route: Move[] } | null; // where he's going once he's had a look (a glance first)
+  pending: { poi: Poi; route: Move[]; sy: number } | null; // where he's going once he's had a look (a glance first); `sy`: the scroll it was planned at
   reacts: string[]; // recent reactions (greetings, flourishes), for no repeats
 };
 /** A fall in document px: start, initial velocity, landing (char origin), duration. */
@@ -393,8 +397,10 @@ export function PuppeteerStage() {
     const ridePins = (sy: number) => {
       for (const c of cache) if (c.pin) c.top = c.top0 + (pinTop(c.pin, sy) - c.pin.t0);
     };
+    let docEnd = Infinity; // the furthest the page scrolls (document px), as of the last measure
     const measure = () => {
       const { sx, sy } = viewport();
+      docEnd = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
       const s = st.current;
       const prev = s && s.idx >= 0 ? cache[s.idx] : undefined;
       const pins = new Map<HTMLElement, Pin>();
@@ -565,6 +571,16 @@ export function PuppeteerStage() {
     let scrollDir: 1 | -1 = 1; // which way the visitor last scrolled
     let scrollY0 = window.scrollY;
     /** The visitor is scrolling (or just was): reappear where the scroll won't carry him straight out of view. */
+    const scrollTrail: { t: number; y: number }[] = []; // recent scroll positions (for its speed)
+    /** How fast the page is scrolling now (px/s, 0 once it has stopped for a moment). */
+    const scrollSpeed = () => {
+      const now = performance.now();
+      if (now - lastScroll > 350 || scrollTrail.length < 2) return 0;
+      const a = scrollTrail[0];
+      const b = scrollTrail[scrollTrail.length - 1];
+      return b.t - a.t > 30 ? Math.abs(b.y - a.y) / ((b.t - a.t) / 1000) : 0;
+    };
+    /** The visitor is scrolling (or just was): reappear where the scroll won't carry him straight out of view. */
     const drift = () => (performance.now() - lastScroll < 6000 ? { dir: scrollDir, px: vp.h * 0.55 } : undefined);
     let lingerTimer = 0;
     const events: { k: string; t: number }[] = []; // dev: what he did and when (reactions, turning points)
@@ -709,9 +725,25 @@ export function PuppeteerStage() {
     };
 
     // ---- getting about by ink (teleport.ts) ----
-    /** Everywhere on screen he could gather himself (document px, feet). */
-    const destSpots = (ps: Seen[], only?: (c: Perch) => boolean): Spot[] => {
+    /**
+     * s he'd have in view on `c` once gathered there `lead` s from now, if the page keeps scrolling at
+     * `v` px/s (a pinned plate stays put until its track runs out; the page stops at its ends).
+     */
+    const stayOn = (c: Perch, v: number, lead: number) => {
+      const { sy } = viewport();
+      const tall = TALL * scale * c.k;
+      let t = lead;
+      for (; t < lead + STAY_FULL; t += 0.1) {
+        const sy2 = clamp(sy + scrollDir * v * t, 0, docEnd);
+        const feet = (c.pin ? c.top0 + pinTop(c.pin, sy2) - c.pin.t0 : c.top) - sy2;
+        if (feet - tall < HEADER + CLEAR || feet > vp.h - 8) break;
+      }
+      return t - lead;
+    };
+    /** Everywhere on screen he could gather himself (document px, feet); `lead`: s until he'd be there. */
+    const destSpots = (ps: Seen[], only?: (c: Perch) => boolean, lead = 0.3 + IN): Spot[] => {
       const out: Spot[] = [];
+      const v = scrollSpeed();
       cache.forEach((c, i) => {
         if (c.spot || !ps[i]?.ok || !ps[i].visible || !ps[i].onX) return;
         if (only && !only(c)) return;
@@ -723,7 +755,8 @@ export function PuppeteerStage() {
         if (a > b) return;
         // a couple of places along it
         const xs = b - a > 160 ? [a + (b - a) * 0.25, a + (b - a) * 0.75] : [(a + b) / 2];
-        xs.forEach((x, n) => out.push({ id: `${c.id}#${n}`, i, x, y: c.top, inside: c.nook }));
+        const stay = v > 20 ? stayOn(c, v, lead) : undefined;
+        xs.forEach((x, n) => out.push({ id: `${c.id}#${n}`, i, x, y: c.top, inside: c.nook, stay }));
       });
       return out;
     };
@@ -739,10 +772,13 @@ export function PuppeteerStage() {
      */
     const teleport = (s: State, now: number, o: { to?: { i: number; x: number } | null; ps?: Seen[]; prefer?: 'inside' | 'outside'; only?: (c: Perch) => boolean; poi?: Poi | null; then?: ((now: number) => void) | null; greet?: boolean; nowhere?: boolean; why: string }): boolean => {
       let to = o.to ?? null;
+      const seen = !s.hidden && s.char.y > HEADER && s.char.y < vp.h + 40 && s.char.x > -40 && s.char.x < vp.w + 40 && s.m.mode !== 'falling';
+      const quick = scrollSpeed() > QUICK_SCROLL; // the page is on the move: he gathers sooner (or the scroll takes the spot first)
       if (!to && o.ps) {
         const { sx, sy } = viewport();
         const me = s.idx >= 0 && !s.hidden ? { x: s.char.x + sx, y: s.char.y + sy + FEET * sz } : null;
-        const d = chooseDest(destSpots(o.ps, o.only), { focus: focusDoc(), view: { left: sx, right: sx + vp.w, top: sy + HEADER + CLEAR, bottom: sy + vp.h - 8 }, me, recent: recentDest, prefer: o.prefer, rand: Math.random, drift: drift() });
+        const lead = (seen && o.why !== 'header' ? OUT : 0) + (quick ? QUICK_GAP + IN * QUICK_IN : 0.3 + IN);
+        const d = chooseDest(destSpots(o.ps, o.only, lead), { focus: focusDoc(), view: { left: sx, right: sx + vp.w, top: sy + HEADER + CLEAR, bottom: sy + vp.h - 8 }, me, recent: recentDest, prefer: o.prefer, rand: Math.random, drift: drift() });
         if (d) {
           to = { i: d.i, x: d.x };
           recentDest = [d.id, ...recentDest].slice(0, 4);
@@ -750,7 +786,6 @@ export function PuppeteerStage() {
       }
       const { sx, sy } = viewport();
       const c = to ? cache[to.i] : undefined;
-      const seen = !s.hidden && s.char.y > HEADER && s.char.y < vp.h + 40 && s.char.x > -40 && s.char.x < vp.w + 40 && s.m.mode !== 'falling';
       // nowhere on screen to go: if he's in sight he still runs off into ink (and waits out of sight)
       if (!to || !c) {
         if (!o.nowhere || !seen || reduce) return false;
@@ -762,6 +797,10 @@ export function PuppeteerStage() {
       if (!go(s, { type: 'vanish' }, now)) return false;
       const hop = startHop(now, Math.hypot(toPt.x - fromDoc.x, toPt.y - fromDoc.y), reduce);
       if (!seen && !reduce) hop.out = 0; // nobody sees him go: he just turns up
+      if (quick && !hop.instant) {
+        hop.gap = Math.min(hop.gap, QUICK_GAP);
+        hop.in *= QUICK_IN;
+      }
       s.tele = { hop, fromDoc, fromPin, kFrom: s.k, to: to && c ? { id: c.id, x: clampTo(to.x - c.left, c.ext) } : null, poi: o.poi ?? null, then: o.then ?? null, greet: !!o.greet, swapped: false, shook: false, why: o.why };
       if (o.poi) s.goal = o.poi;
       note(`teleport:${o.why}:${c?.id ?? 'nowhere'}`, now);
@@ -1011,7 +1050,7 @@ export function PuppeteerStage() {
         faceTo(s, route[0].to.x - sx);
         s.look = to;
         s.goal = poi;
-        s.pending = { poi, route };
+        s.pending = { poi, route, sy: viewport().sy };
         play(s, 'glance', now, { dur: rand(0.45, 0.95) });
         note(`glance:${poi.id}`, now);
         return;
@@ -1024,6 +1063,7 @@ export function PuppeteerStage() {
       s.route = route;
       s.leg = 0;
       s.legAt = now;
+      s.routeAt = { sy: viewport().sy, from: s.idx };
       s.ignoreBefore = now;
       go(s, { type: 'explore' }, now);
       s.idx = poi.s;
@@ -1360,6 +1400,7 @@ export function PuppeteerStage() {
         s.route = route;
         s.leg = 0;
         s.legAt = now;
+        s.routeAt = { sy: viewport().sy, from: s.idx };
         s.run = true;
         if (!go(s, { type: 'hop' }, now)) return false;
         s.idx = q.j;
@@ -1502,6 +1543,23 @@ export function PuppeteerStage() {
     let forced: Activity | null = null; // dev: `__puppet.force`
     let forcedTrick: Trick | null = null;
 
+    /** The scroll took him (or his surface) up under the fixed header: never stands there, not even for a beat. */
+    const offHeader = (s: State, now: number, ps: Seen[], md: Machine['mode']) => {
+      s.awaySince = 0;
+      if (md === 'hopping' || md === 'exploring') {
+        s.route = null;
+        s.goal = null;
+        go(s, { type: md === 'hopping' ? 'arrived' : 'attend' }, now);
+      } else if (own(md)) go(s, { type: 'attend' }, now);
+      if (teleport(s, now, { ps, why: 'header' })) {
+        if (s.tele) s.tele.hop.out = 0; // half under the header: no slow ink-out there, he's just gone
+      } else {
+        s.hidden = true;
+        s.idx = -1;
+        s.pid = '';
+      }
+    };
+
     let lastSeen: Seen[] = []; // dev: the last frame's view of the perches
     let frames = 0; // dev: frames run (to check the loop sleeps when he's settled)
     const frame = (now: number, dt: number) => {
@@ -1579,6 +1637,7 @@ export function PuppeteerStage() {
           hv: { x: 0, y: 0 },
           fall: null,
           route: null,
+          routeAt: { sy: 0, from: -1 },
           leg: 0,
           legAt: 0,
           action: undefined,
@@ -1725,30 +1784,18 @@ export function PuppeteerStage() {
           const routed = md === 'hopping' || md === 'exploring';
           const feet = s.char.y + FEET * scale * s.k; // screen px
           const underHeader = routed
-            ? s.route?.[s.leg]?.kind === 'walk' && feet > -4 && feet < headroomK(s.k) // walking along a surface the scroll took up there
-            : !!mine && mine.ok && mine.top < headroomK(cache[s.idx].k) && mine.top > -4;
-          if (underHeader) {
-            // the scroll took his surface up under the fixed header: never stands there, not even for a beat
-            s.awaySince = 0;
-            if (routed) {
-              s.route = null;
-              s.goal = null;
-              go(s, { type: md === 'hopping' ? 'arrived' : 'attend' }, now);
-            } else if (own(md)) go(s, { type: 'attend' }, now);
-            if (teleport(s, now, { ps, why: 'header' })) {
-              if (s.tele) s.tele.hop.out = 0; // half under the header: no slow ink-out there, he's just gone
-            } else {
-              s.hidden = true;
-              s.idx = -1;
-              s.pid = '';
-            }
-          } else if (!mine || !mine.ok) {
+            ? // walking along a surface the scroll took up there; mid-jump or climbing, any of him under the header
+              feet > -4 && (s.route?.[s.leg]?.kind === 'walk' ? feet < headroomK(s.k) : feet - TALL * scale * s.k < HEADER)
+            : !!mine && mine.ok && mine.top < headroomK(Math.max(s.k, cache[s.idx].k)) && mine.top > -4; // (his size as drawn, if he's still growing into it)
+          if (underHeader) offHeader(s, now, ps, md);
+          else if (!mine || !mine.ok) {
             if (md !== 'hopping' || !mine) leaveNow(s, ps, now);
             else go(s, { type: 'vanish' }, now) && (s.tele = null, leaveNow(s, ps, now)); // the plate he was headed for went away
           } else if ((!mine.visible || !mine.onX) && md !== 'hopping' && md !== 'exploring') {
             if (!s.awaySince) {
               s.awaySince = now;
               s.awayFor = lerp(COME[1], COME[0], s.needs.company) * rand(0.85, 1.15);
+              if (scrollSpeed() > QUICK_SCROLL) s.awayFor = Math.min(s.awayFor, rand(0.3, 0.5)); // you're on the move: he keeps up
               wakeIn(s.awayFor);
               note('away', now);
             } else if (freshAt > s.awaySince && (freshAt - s.awaySince) / 1000 + 1.2 < s.awayFor) {
@@ -1873,6 +1920,7 @@ export function PuppeteerStage() {
             s.route = route;
             s.leg = 0;
             s.legAt = now;
+            s.routeAt = { sy: viewport().sy, from: s.idx };
             s.run = false;
             go(s, { type: 'hop' }, now);
             s.idx = j;
@@ -1906,7 +1954,11 @@ export function PuppeteerStage() {
       if (mode() === 'fidget' && (!s.act || now >= s.act.at + s.act.dur * 1000)) {
         const pend = s.pending; // had his look: now he goes
         go(s, { type: 'done' }, now);
-        if (pend && mode() === 'idle') beginRoute(s, pend.poi, pend.route, now);
+        // the route is in document space: if the page scrolled meanwhile (a pinned plate moves with it), it's stale; he thinks again later
+        if (pend && mode() === 'idle') {
+          if (Math.abs(viewport().sy - pend.sy) <= 6) beginRoute(s, pend.poi, pend.route, now);
+          else s.goal = null;
+        }
       }
       if (mode() === 'sitting') {
         if (now >= s.sitUntil) {
@@ -2035,9 +2087,10 @@ export function PuppeteerStage() {
             break;
           }
           let ph = hopPhase(T.hop, now);
-          if (T.swapped && (s.idx < 0 || !ps[s.idx]?.ok)) {
-            // the spot he was gathering at went away under him (a pinned plate came apart, its nook with it):
-            // back through the gap, and gather again somewhere that's still there
+          if (T.swapped && (s.idx < 0 || !ps[s.idx]?.ok || ps[s.idx].top < headroomK(cache[s.idx].k))) {
+            // the spot he was gathering at went away under him (a pinned plate came apart, its nook with it),
+            // or the scroll has taken it up under the header: back through the gap, and gather again somewhere
+            // that's still there
             T.swapped = false;
             T.to = null;
             if (!T.hop.instant && ph.phase !== 'gone') T.hop = { ...T.hop, at: now - T.hop.out * 1000 };
@@ -2047,8 +2100,8 @@ export function PuppeteerStage() {
           if (!T.swapped && ph.phase !== 'out') {
             // through the gap: he's at the destination now (or, if it went away meanwhile, somewhere else)
             let j = T.to ? cache.findIndex((c) => c.id === T.to!.id) : -1;
-            if (j < 0 || !ps[j]?.ok) {
-              const d = chooseDest(destSpots(ps), { focus: focusDoc(), view: { left: sx, right: sx + vp.w, top: sy + HEADER + CLEAR, bottom: sy + vp.h - 8 }, me: null, rand: Math.random, drift: drift() });
+            if (j < 0 || !ps[j]?.ok || ps[j].top < headroomK(cache[j].k)) {
+              const d = chooseDest(destSpots(ps, undefined, scrollSpeed() > QUICK_SCROLL ? QUICK_GAP + IN * QUICK_IN : 0.3 + IN), { focus: focusDoc(), view: { left: sx, right: sx + vp.w, top: sy + HEADER + CLEAR, bottom: sy + vp.h - 8 }, me: null, rand: Math.random, drift: drift() });
               j = d ? d.i : -1;
               T.to = d ? { id: cache[d.i].id, x: clampTo(d.x - cache[d.i].left, cache[d.i].ext) } : null;
               T.poi = null;
@@ -2119,7 +2172,17 @@ export function PuppeteerStage() {
           }
           const smp = sampleMove(mv, t, 40 * (scale / 1.85));
           const prevPhase = s.walk.phase;
-          s.char = { x: smp.p.x - sx, y: smp.p.y - FEET * scale - sy };
+          // the route is in document space; a pinned plate has moved down the document with the scroll since it was planned
+          const ride = (i: number) => (i >= 0 && cache[i]?.pin ? pinTop(cache[i].pin!, sy) - pinTop(cache[i].pin!, s.routeAt.sy) : 0);
+          const rFrom = ride(s.leg > 0 ? route[s.leg - 1].onto : s.routeAt.from);
+          const rOnto = mv.kind === 'walk' ? rFrom : ride(mv.onto);
+          s.char = { x: smp.p.x - sx, y: smp.p.y - FEET * scale - sy + lerp(rFrom, rOnto, clamp(t)) };
+          if (!reduce && s.char.y + FEET * scale * s.k > -4 && s.char.y + (FEET - TALL) * scale * s.k < HEADER) {
+            // this step (a jump's arc, or a route on a plate the scroll moved) would put him under the header: gone instead
+            offHeader(s, now, ps, m.mode);
+            ink = { k: 1, out: true };
+            break;
+          }
           const dir = mv.to.x >= mv.from.x ? 1 : -1;
           if (Math.abs(mv.to.x - mv.from.x) > 1) s.facing = dir;
           if (smp.action === 'walk') s.walk = { ...s.walk, v: dir * (m.mode === 'exploring' ? limX : s.run ? limRun : lim).speed, phase: (prevPhase + Math.abs(s.char.x - prevX) / cfg.cycle) % 1 };
@@ -2748,6 +2811,8 @@ export function PuppeteerStage() {
       attnAt = performance.now();
       lastScroll = attnAt;
       const y = window.scrollY;
+      scrollTrail.push({ t: attnAt, y });
+      while (scrollTrail.length > 2 && attnAt - scrollTrail[0].t > 600) scrollTrail.shift();
       if (Math.abs(y - scrollY0) > 2) {
         scrollDir = y > scrollY0 ? 1 : -1;
         scrollY0 = y;
