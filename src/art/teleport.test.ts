@@ -37,6 +37,14 @@ describe('chooseDest', () => {
   it('honours a preference for inside', () => {
     expect(chooseDest(spots, { focus: { x: 300, y: 500 }, view, me: null, prefer: 'inside', rand: r })!.id).toBe('b');
   });
+  it('scrolling down: prefers spots the scroll will keep in view a while', () => {
+    const two: Spot[] = [
+      { id: 'high', i: 0, x: 600, y: 200, inside: false },
+      { id: 'low', i: 1, x: 640, y: 700, inside: false },
+    ];
+    expect(chooseDest(two, { focus: { x: 620, y: 450 }, view, me: null, rand: r, drift: { dir: 1, px: 400 } })!.id).toBe('low');
+    expect(chooseDest(two, { focus: { x: 620, y: 450 }, view, me: null, rand: r, drift: { dir: -1, px: 400 } })!.id).toBe('high');
+  });
   it('null when nothing is on screen', () => {
     expect(chooseDest([spots[3]], { focus: null, view, me: null, rand: r })).toBeNull();
   });

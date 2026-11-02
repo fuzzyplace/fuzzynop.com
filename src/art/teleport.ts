@@ -14,15 +14,15 @@
  */
 import type { Pt } from './geometry';
 
-export const OUT = 0.7; // s
-export const IN = 0.75; // s
+export const OUT = 0.5; // s (v2.9, was 0.7: less of a read-through spent in ink)
+export const IN = 0.55; // s (was 0.75)
 export type Hop = { at: number; out: number; gap: number; in: number; instant: boolean };
 export type HopPhase = { phase: 'out' | 'gone' | 'in' | 'done'; k: number };
 
 /** A hop starting at `now` (ms). `far`: px between the spots (a longer beat in between); `instant`: reduced motion or nobody sees it. */
 export function startHop(now: number, far: number, instant = false): Hop {
   if (instant) return { at: now, out: 0, gap: 0, in: 0, instant: true };
-  return { at: now, out: OUT, gap: Math.min(0.55, 0.12 + far / 2400), in: IN, instant: false };
+  return { at: now, out: OUT, gap: Math.min(0.4, 0.1 + far / 2400), in: IN, instant: false };
 }
 export function hopPhase(h: Hop, now: number): HopPhase {
   if (h.instant) return { phase: 'done', k: 1 };
@@ -44,6 +44,11 @@ export type DestOpts = {
   prefer?: 'inside' | 'outside';
   rand: () => number;
   near?: number; // px from the focus he likes to land (default 220): close enough to be company, not on top of you
+  /**
+   * The visitor is scrolling (1 down, -1 up): spots that the scroll is about to carry out of view
+   * (within `px` of the view's top going down, of its bottom going up) are less appealing.
+   */
+  drift?: { dir: 1 | -1; px: number };
 };
 
 /** The best spot to reappear at, or null if none is on screen. */
@@ -61,6 +66,10 @@ export function chooseDest(spots: readonly Spot[], o: DestOpts): Spot | null {
     if (o.recent?.includes(s.id)) score -= 1.2;
     if (o.prefer === 'inside') score += s.inside ? 1.5 : -0.8;
     if (o.prefer === 'outside') score += s.inside ? -1 : 0.3;
+    if (o.drift) {
+      const room = o.drift.dir > 0 ? s.y - o.view.top : o.view.bottom - s.y;
+      score -= 1.6 * Math.max(0, 1 - room / o.drift.px);
+    }
     score += o.rand() * 0.8;
     if (score > bestS) {
       bestS = score;

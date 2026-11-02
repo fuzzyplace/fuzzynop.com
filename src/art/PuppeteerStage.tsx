@@ -114,7 +114,7 @@ const SWAT = 0.42; // s per swat
 const DWELL = 0.7; // s the pointer rests over another plate before he sets off for it
 const GRAB_HAND = 0.22; // s: the claw drops in and closes on him when you press
 const CLAW_UP = 0.55; // s: after it lets go, the claw goes back up out of sight
-const COME: [number, number] = [0.9, 2.6]; // s off screen before he comes along (strong company need → the short end)
+const COME: [number, number] = [0.6, 1.8]; // (v2.9, was 0.9-2.6) s off screen before he comes along (strong company need → the short end)
 const RUN = 2.6; // running vs. his walking pace (catching up)
 const RUN_MAX = 2.8; // s: a catch-up run longer than this and he teleports instead
 const NEAR_HIM = 220; // px: the pointer this close and his own whims stop (he attends to you)
@@ -306,7 +306,10 @@ type Perch = {
   title: boolean;
   pin: Pin | null; // on a sticky plate: its document top follows the scroll while it's pinned
   top0: number; // `top` as measured (pin.t0 is the plate's document top then)
+  dark: boolean; // he'd stand against black here (inside an ink plate, on the footer): a fog patch behind him
 };
+/** Standing here he's black on black: inside an ink plate, or on the footer. */
+const darkAt = (el: HTMLElement, inside: boolean) => !!el.closest('footer') || (inside && !!el.querySelector('.plate-face.plate-ink'));
 /**
  * A sticky plate (`.plate-pin`) as measured: native sticky puts its document top at
  * clamp(scrollY + stick, lo, hi), so a frame can place it (and everything on it) with no layout read.
@@ -314,6 +317,13 @@ type Perch = {
 type Pin = { stick: number; lo: number; hi: number; t0: number };
 /** Somewhere he may be: anything that isn't a plate, or a plate that's whole (pinned or not; data-assembled). */
 const standable = (el: HTMLElement) => el.dataset.printed === undefined || el.dataset.assembled === '1';
+/**
+ * v2.9: a plate's top edge is somewhere to stand as soon as its sheet is down (data-sheet, words may
+ * still be arriving: he stands above the plate, never over its text). Its insides (nooks, spots)
+ * stay whole-and-still only (`standable` and not printing).
+ */
+const edgeOk = (el: HTMLElement) => el.dataset.printed === undefined || el.dataset.sheet === '1' || el.dataset.assembled === '1';
+const insideOk = (el: HTMLElement) => standable(el) && el.dataset.printing !== '1';
 type Pointer = { x: number; y: number; t: number };
 /** A perch as seen this frame (viewport px). */
 type Seen = { ok: boolean; left: number; pt: Pt; top: number; visible: boolean; onX: boolean; bottom: number };
@@ -329,6 +339,7 @@ export function PuppeteerStage() {
   const armRef = useRef<ArmHandle>(null);
   const tiltRef = useRef<SVGGElement>(null);
   const hideRef = useRef<SVGGElement>(null);
+  const fogRef = useRef<SVGEllipseElement>(null);
   const armWrap = useRef<SVGGElement>(null);
   const lineRef = useRef<TrustLineHandle>(null);
   const tr = useRef<Trust | null>(null); // survives resizes / the effect re-running
@@ -410,12 +421,13 @@ export function PuppeteerStage() {
         const f = parseFloat(el.dataset.perch ?? '0.5');
         const half = parseFloat(el.dataset.perchSpan ?? '');
         const ext = perchExtent(r.width, MARGIN, half > 0 ? { center: r.width * f, half } : undefined);
-        return { el, id: el.id || `p${i}`, left: r.left + sx, top: r.top + sy, width: r.width, height: r.height, f, ext, ledge: el.dataset.ledge !== undefined, k: 1, nook: false, spot: false, host: -1, wall: 0, lie: false, title: false, pin: pinOf(el), top0: r.top + sy };
+        return { el, id: el.id || `p${i}`, left: r.left + sx, top: r.top + sy, width: r.width, height: r.height, f, ext, ledge: el.dataset.ledge !== undefined, k: 1, nook: false, spot: false, host: -1, wall: 0, lie: false, title: false, pin: pinOf(el), top0: r.top + sy, dark: darkAt(el, false) };
       });
-      // the free space inside each assembled paper plate (an ink plate would swallow his silhouette)
+      // the free space inside each assembled plate (v2.9: ink plates too; a fog patch behind him there keeps his silhouette readable)
       const nooks: Perch[] = [];
       base.forEach((c, i) => {
-        if (c.el.dataset.assembled !== '1' || c.el.dataset.printing === '1' || !c.el.querySelector('.plate-face.plate-paper')) return;
+        if (c.el.dataset.assembled !== '1' || c.el.dataset.printing === '1' || !c.el.querySelector('.plate-face')) return;
+        const dark = darkAt(c.el, true);
         const face = c.el.querySelector<HTMLElement>('.plate-face') ?? c.el;
         const fr = face.getBoundingClientRect();
         const plate = { left: fr.left + sx, right: fr.right + sx, top: fr.top + sy, bottom: fr.bottom + sy };
@@ -423,7 +435,7 @@ export function PuppeteerStage() {
         const found = freeSpaces(plate, text, { inset: 14, pad: INSIDE_PAD, w: 30 * szIn, h: (TALL + 3) * szIn, lieW: 76 * szIn, titles });
         found.forEach((n, j) => {
           const width = n.right - n.left;
-          nooks.push({ el: c.el, id: `${c.id}:n${Math.round(n.left - plate.left)}:${Math.round(n.y - plate.top)}`, left: n.left, top: n.y, width, height: 0, f: 0.5, ext: { lo: 0, hi: width }, ledge: false, k: kIn, nook: true, spot: false, host: i, wall: n.wall, lie: n.lie, title: n.title, pin: c.pin, top0: n.y });
+          nooks.push({ el: c.el, id: `${c.id}:n${Math.round(n.left - plate.left)}:${Math.round(n.y - plate.top)}`, left: n.left, top: n.y, width, height: 0, f: 0.5, ext: { lo: 0, hi: width }, ledge: false, k: kIn, nook: true, spot: false, host: i, wall: n.wall, lie: n.lie, title: n.title, pin: c.pin, top0: n.y, dark });
           void j;
         });
       });
@@ -463,7 +475,7 @@ export function PuppeteerStage() {
       const id = `spot:${Math.round(x)}:${Math.round(y)}`;
       const pin = cache.find((c) => c.el === el && c.pin)?.pin ?? null;
       const top0 = pin ? y - (pinTop(pin, viewport().sy) - pin.t0) : y;
-      spots = [...spots.filter((q) => q.id !== id && (st.current?.pid === q.id || st.current?.tele?.to?.id === q.id)), { el, id, left: x, top: y, width: 0, height: 0, f: 0, ext: { lo: 0, hi: 0 }, ledge: false, k, nook: true, spot: true, host: -1, wall: 0, lie: false, title: false, pin, top0 }];
+      spots = [...spots.filter((q) => q.id !== id && (st.current?.pid === q.id || st.current?.tele?.to?.id === q.id)), { el, id, left: x, top: y, width: 0, height: 0, f: 0, ext: { lo: 0, hi: 0 }, ledge: false, k, nook: true, spot: true, host: -1, wall: 0, lie: false, title: false, pin, top0, dark: darkAt(el, true) }];
       measure();
       return id;
     };
@@ -546,6 +558,10 @@ export function PuppeteerStage() {
     const coarse = window.matchMedia('(pointer: coarse)').matches && !window.matchMedia('(hover: hover)').matches;
     const sense = { speed: 0, approach: 0, touch: coarse, gone: false, last: null as { x: number; y: number; t: number; d: number } | null };
     let lastScroll = -Infinity; // ms the page last scrolled (touch: lingering = not scrolling)
+    let scrollDir: 1 | -1 = 1; // which way the visitor last scrolled
+    let scrollY0 = window.scrollY;
+    /** The visitor is scrolling (or just was): reappear where the scroll won't carry him straight out of view. */
+    const drift = () => (performance.now() - lastScroll < 3000 ? { dir: scrollDir, px: vp.h * 0.45 } : undefined);
     let lingerTimer = 0;
     const events: { k: string; t: number }[] = []; // dev: what he did and when (reactions, turning points)
     const note = (k: string, now: number) => {
@@ -657,7 +673,7 @@ export function PuppeteerStage() {
       const feet = s.char.y + FEET * sz;
       const vis = cache
         .map((c, i) => ({ c, i, top: c.top - sy, l: c.left - sx + c.ext.lo, r: c.left - sx + c.ext.hi }))
-        .filter((q) => !q.c.nook && standable(q.c.el) && q.top >= headroomK(1) && q.top < vp.h);
+        .filter((q) => !q.c.nook && edgeOk(q.c.el) && q.top >= headroomK(1) && q.top < vp.h);
       const below = vis.filter((q) => q.top >= feet - 4);
       const under = below.filter((q) => s.char.x >= q.l - 20 && s.char.x <= q.r + 20).sort((a, b) => a.top - b.top)[0];
       const off = (q: (typeof vis)[number]) => Math.max(0, q.l - s.char.x, s.char.x - q.r);
@@ -722,7 +738,7 @@ export function PuppeteerStage() {
       if (!to && o.ps) {
         const { sx, sy } = viewport();
         const me = s.idx >= 0 && !s.hidden ? { x: s.char.x + sx, y: s.char.y + sy + FEET * sz } : null;
-        const d = chooseDest(destSpots(o.ps, o.only), { focus: focusDoc(), view: { left: sx, right: sx + vp.w, top: sy + HEADER + CLEAR, bottom: sy + vp.h - 8 }, me, recent: recentDest, prefer: o.prefer, rand: Math.random });
+        const d = chooseDest(destSpots(o.ps, o.only), { focus: focusDoc(), view: { left: sx, right: sx + vp.w, top: sy + HEADER + CLEAR, bottom: sy + vp.h - 8 }, me, recent: recentDest, prefer: o.prefer, rand: Math.random, drift: drift() });
         if (d) {
           to = { i: d.i, x: d.x };
           recentDest = [d.id, ...recentDest].slice(0, 4);
@@ -1492,7 +1508,7 @@ export function PuppeteerStage() {
         const top = p.top - sy;
         const lx = p.left - sx;
         return {
-          ok: standable(p.el) && p.el.dataset.printing !== '1', // a plate being assembled or taken apart isn't somewhere to be (a whole pinned one is)
+          ok: p.nook ? insideOk(p.el) : edgeOk(p.el), // inside: only a whole, still plate; its top edge: once the sheet is down (pinned or not)
           left: lx,
           pt: { x: lx + p.width * p.f, y: top - FEET * scale * p.k },
           top,
@@ -1728,7 +1744,7 @@ export function PuppeteerStage() {
               wakeIn(s.awayFor);
               note('away', now);
             } else if (freshAt > s.awaySince && (freshAt - s.awaySince) / 1000 + 1.2 < s.awayFor) {
-              s.awayFor = (freshAt - s.awaySince) / 1000 + rand(0.5, 1.1); // a plate just came together on screen: he's along in a moment
+              s.awayFor = (freshAt - s.awaySince) / 1000 + rand(0.4, 0.9); // a plate just came together on screen: he's along in a moment
               wakeIn(Math.max(0, s.awayFor - (now - s.awaySince) / 1000));
             } else if (now - s.awaySince >= s.awayFor * 1000) {
               s.awaySince = 0;
@@ -2024,7 +2040,7 @@ export function PuppeteerStage() {
             // through the gap: he's at the destination now (or, if it went away meanwhile, somewhere else)
             let j = T.to ? cache.findIndex((c) => c.id === T.to!.id) : -1;
             if (j < 0 || !ps[j]?.ok) {
-              const d = chooseDest(destSpots(ps), { focus: focusDoc(), view: { left: sx, right: sx + vp.w, top: sy + HEADER + CLEAR, bottom: sy + vp.h - 8 }, me: null, rand: Math.random });
+              const d = chooseDest(destSpots(ps), { focus: focusDoc(), view: { left: sx, right: sx + vp.w, top: sy + HEADER + CLEAR, bottom: sy + vp.h - 8 }, me: null, rand: Math.random, drift: drift() });
               j = d ? d.i : -1;
               T.to = d ? { id: cache[d.i].id, x: clampTo(d.x - cache[d.i].left, cache[d.i].ext) } : null;
               T.poi = null;
@@ -2423,6 +2439,18 @@ export function PuppeteerStage() {
       const pivot = Math.abs(s.swing) > 1e-4;
       setAttr(tiltRef.current, 'transform', pivot ? `rotate(${(s.swing * 180) / Math.PI} ${collar.x} ${collar.y})` : null);
       charRef.current?.set(s.char.x, s.char.y, sz, pose);
+      // black on black (an ink plate's insides, the footer): a soft fog patch behind him (fades in CSS)
+      const here = s.idx >= 0 ? cache[s.idx] : undefined;
+      const fog = fogRef.current;
+      if (fog) {
+        const on = !!here?.dark && !s.hidden && !s.tele && !s.fall && mode !== 'carried';
+        const op = on ? '1' : '0';
+        if (fog.style.opacity !== op) fog.style.opacity = op;
+        setAttr(fog, 'cx', s.char.x.toFixed(1));
+        setAttr(fog, 'cy', (s.char.y - 9 * sz).toFixed(1));
+        setAttr(fog, 'rx', (30 * sz).toFixed(1));
+        setAttr(fog, 'ry', (44 * sz).toFixed(1));
+      }
     };
     const loop = ticker.loop(frame);
     if (import.meta.env.DEV) {
@@ -2503,7 +2531,7 @@ export function PuppeteerStage() {
           get surface() {
             const s = st.current;
             const c = s && s.idx >= 0 ? cache[s.idx] : null;
-            return c ? { id: c.id, nook: c.nook, printed: c.el.dataset.printed ?? null, assembled: c.el.dataset.assembled ?? null, pinned: c.el.dataset.pinned ?? null, top: c.top - viewport().sy } : null;
+            return c ? { id: c.id, nook: c.nook, printed: c.el.dataset.printed ?? null, assembled: c.el.dataset.assembled ?? null, sheet: c.el.dataset.sheet ?? null, pinned: c.el.dataset.pinned ?? null, top: c.top - viewport().sy } : null;
           },
           /** how many places on screen he could be right now (0: nowhere, e.g. only a plate being assembled is in view) */
           get places() {
@@ -2605,10 +2633,10 @@ export function PuppeteerStage() {
     // a plate assembled or taken apart: its nooks change (and a perch may come or go)
     const mo = new MutationObserver((recs) => {
       dirty = true;
-      if (recs.some((r) => r.attributeName === 'data-assembled' && (r.target as HTMLElement).dataset.assembled === '1')) freshAt = performance.now();
+      if (recs.some((r) => (r.attributeName === 'data-assembled' && (r.target as HTMLElement).dataset.assembled === '1') || (r.attributeName === 'data-sheet' && (r.target as HTMLElement).dataset.sheet === '1'))) freshAt = performance.now();
       wake();
     });
-    mo.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['data-printed', 'data-assembled', 'data-printing', 'data-pinned'] });
+    mo.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['data-printed', 'data-assembled', 'data-sheet', 'data-printing', 'data-pinned'] });
 
     // attention: any real pointer move or tap means the visitor is about (desires.ts `quiet`); only one
     // close to him stops what he's doing on his own and pushes back his next decision
@@ -2711,6 +2739,11 @@ export function PuppeteerStage() {
     const onScroll = () => {
       attnAt = performance.now();
       lastScroll = attnAt;
+      const y = window.scrollY;
+      if (Math.abs(y - scrollY0) > 2) {
+        scrollDir = y > scrollY0 ? 1 : -1;
+        scrollY0 = y;
+      }
       if (sense.touch) {
         // staying on a section starts to count once the scrolling stops (one timer, re-armed)
         window.clearTimeout(lingerTimer);
@@ -2772,6 +2805,15 @@ export function PuppeteerStage() {
   return (
     <>
       <svg className="pointer-events-none fixed inset-0 z-30 h-full w-full overflow-visible" viewBox={`0 0 ${vp.w} ${vp.h}`} aria-hidden="true">
+        <defs>
+          <radialGradient id="char-fog">
+            <stop offset="0%" className="char-fog-stop" stopOpacity="0.5" />
+            <stop offset="55%" className="char-fog-stop" stopOpacity="0.22" />
+            <stop offset="100%" className="char-fog-stop" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        {/* behind him where he'd be black on black (ink plate insides, the footer) */}
+        <ellipse ref={fogRef} className="char-fog" fill="url(#char-fog)" style={{ opacity: 0 }} />
         <g ref={hideRef}>
           <g ref={tiltRef}>
             <Character ref={charRef} />
