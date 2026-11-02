@@ -59,6 +59,13 @@ describe('assembly plan', () => {
     expect(a.from.dx * p.arms[a.arm].side).toBeGreaterThan(0);
   });
 
+  it('when only a crossing arm can reach a title word, it is lowered in from above its row', () => {
+    const p = planAssembly(groups, { ...desk, w: 800, side: 'left', reach: 300 });
+    const b = p.groups[2];
+    expect(Math.abs(b.from.dx)).toBeLessThan(20);
+    expect(b.from.dy).toBeLessThan(-b.box.h);
+  });
+
   it('is deterministic per seed', () => {
     expect(planAssembly(groups, desk)).toEqual(planAssembly(groups, desk));
   });

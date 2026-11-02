@@ -125,12 +125,13 @@ export function planAssembly(groupsIn: GroupIn[], o: PlanOpts): Plan {
     let best = 0;
     let bestT = Infinity;
     const b = g.box;
+    // a carry from this side would pass over something already placed in its row
+    const acrossFrom = (side: 1 | -1) => carry && groups.some((p) => p.box.y < b.y + b.h && p.box.y + p.box.h > b.y && (side === 1 ? p.box.x >= b.x + b.w - 1 : p.box.x + p.box.w <= b.x + 1));
     armState.forEach((a, i) => {
       const src = sourceFor(g, a.side, carry, w, r, true);
       const post = a.side === 1 ? w + POST : -POST;
       const far = Math.abs(src.slotGrip.x - post) > (o.reach ?? Infinity);
-      // a carry from this side would pass over something already placed in its row
-      const across = carry && groups.some((p) => p.box.y < b.y + b.h && p.box.y + p.box.h > b.y && (a.side === 1 ? p.box.x >= b.x + b.w - 1 : p.box.x + p.box.w <= b.x + 1));
+      const across = acrossFrom(a.side);
       const t = a.free + moveTime(a.at, src.grip) + (far ? 10 : 0) + (across ? 0.6 : 0);
       if (t < bestT - 0.02) {
         bestT = t;
@@ -138,7 +139,8 @@ export function planAssembly(groupsIn: GroupIn[], o: PlanOpts): Plan {
       }
     });
     const a = armState[best];
-    const src = sourceFor(g, a.side, carry, w, r, false);
+    // no arm can carry it in from the side without crossing its row: it's lowered in from above instead
+    const src = sourceFor(g, a.side, carry, w, r, false, acrossFrom(a.side));
     // reading order: nothing starts before the group before it (an early arm waits at the pickup)
     const t0 = Math.max(a.free + moveTime(a.at, src.grip), lastStart + (carry ? 0.1 : 0.05));
     lastStart = t0;
@@ -192,14 +194,17 @@ export function planAssembly(groupsIn: GroupIn[], o: PlanOpts): Plan {
 }
 
 /** Where a group starts (relative to its slot) and where the claw takes it. */
-function sourceFor(g: GroupIn, side: 1 | -1, carry: boolean, w: number, r: () => number, peek: boolean) {
+function sourceFor(g: GroupIn, side: 1 | -1, carry: boolean, w: number, r: () => number, peek: boolean, above = false) {
   const b = g.box;
   const rand = peek ? () => 0.5 : r;
   // the claw holds the group's end nearest its side, near the top
   const slotGrip = { x: side === 1 ? b.x + b.w - Math.min(8, b.w * 0.2) : b.x + Math.min(8, b.w * 0.2), y: b.y + Math.min(b.h * 0.3, 12) };
   let dx: number;
   let dy: number;
-  if (carry) {
+  if (carry && above) {
+    dx = side * (8 + rand() * 10);
+    dy = -(b.h + 36 + rand() * 30);
+  } else if (carry) {
     // fetched from just beyond the plate edge on the arm's side
     const edge = side === 1 ? w + 36 + rand() * 30 : -36 - rand() * 30;
     dx = edge - slotGrip.x + (side === 1 ? b.w * 0.15 : -b.w * 0.15);
