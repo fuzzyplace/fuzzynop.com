@@ -43,10 +43,19 @@
   .hero-shade { background: radial-gradient(ellipse 120% 70% at 35% 55%, rgba(0,0,0,.9) 0%, rgba(0,0,0,.72) 50%, rgba(0,0,0,0) 85%); }
 }
 /* the hero's black ground fades into the fog instead of ending on a straight edge. It follows the
-   (overflow-hidden) hero in flow and takes back its own height, so layout is unchanged. */
+   (overflow-hidden) hero in flow and takes back its own height, so layout is unchanged. It starts a
+   little under the ground (which paints over it) so the ink filter's ragged bottom edge shows ink, not fog. */
 @utility ground-tail {
-  position: relative; height: 160px; margin-bottom: -160px; pointer-events: none;
-  background: linear-gradient(to bottom, var(--md-sys-color-ink), transparent);
+  position: relative; height: 244px; margin-top: -24px; margin-bottom: -220px; pointer-events: none;
+  /* eased (flat at the top, long soft end) so the fade has no visible starting line */
+  background: linear-gradient(to bottom,
+    var(--md-sys-color-surface-container-lowest) 16%,
+    color-mix(in srgb, var(--md-sys-color-surface-container-lowest) 90%, transparent) 30%,
+    color-mix(in srgb, var(--md-sys-color-surface-container-lowest) 72%, transparent) 46%,
+    color-mix(in srgb, var(--md-sys-color-surface-container-lowest) 46%, transparent) 62%,
+    color-mix(in srgb, var(--md-sys-color-surface-container-lowest) 20%, transparent) 80%,
+    color-mix(in srgb, var(--md-sys-color-surface-container-lowest) 6%, transparent) 92%,
+    transparent 100%);
 }
 @utility hero-pool {
   position: absolute; bottom: -120px; width: 760px; height: 520px; transform: translateX(-50%); pointer-events: none;

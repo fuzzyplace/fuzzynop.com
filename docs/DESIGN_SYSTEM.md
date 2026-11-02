@@ -122,7 +122,7 @@ M3 tokens (`--md-sys-motion-*`, Tailwind `ease-standard`, `ease-emphasized-in`):
 |---|---|---|
 | `SectionHeader` | — | `type-label-medium text-secondary` eyebrow (`01 — Before`) + `type-display-small` title. |
 | `Prose` | — | `type-body-large text-on-surface-variant`, max 60ch, 24px paragraph gap. |
-| `ExternalLink` | Text button | `type-label-large`, gray → white on hover, 1px orange underline on hover, trailing ↗ in gray. |
+| `ExternalLink` | Text button | `type-label-large`, gray → white on hover, 1px orange underline on hover, trailing ↗ in gray. The same hover on every external link: the CTA label, the vibe card link and a lit link-tree node (v2.9 QA). |
 | Lists | List | hairline-separated rows (`border-outline-variant`), mono index in `text-secondary`. |
 | `Section` | — | top hairline, `py-24 lg:py-36`, bands alternate `surface` / `surface-low` / `surface-lowest`. |
 | Buttons (if ever needed) | Outlined / Text | outlined gray or text only. Filled = white (`bg-primary`), max one per page. Never orange. |
