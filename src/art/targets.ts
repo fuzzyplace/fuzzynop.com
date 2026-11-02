@@ -57,7 +57,7 @@ export function queryTargets(root: ParentNode = document): PokeTarget[] {
   const out: PokeTarget[] = [];
   for (const el of root.querySelectorAll('[data-poke]')) {
     const kinds = kindsOf(el);
-    if (!kinds.length || el.closest('[data-printed="0"]')) continue;
+    if (!kinds.length || el.closest('[data-printed="0"], [data-pinned="1"]')) continue;
     if (kinds.includes('twitch') && el.closest('[data-arm], [data-printing]')) continue;
     const r = el.getBoundingClientRect();
     if (r.width === 0 && r.height === 0) continue;

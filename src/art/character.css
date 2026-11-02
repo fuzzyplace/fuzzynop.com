@@ -21,3 +21,11 @@
 @media (prefers-reduced-motion: reduce) {
   .char-shiver { animation: none; }
 }
+
+/* letter play on plate titles (letterPlay.ts via targets.ts setGlyph): a letter he moves is an
+   inline-block while it moves (transforms need a box), springs home when he lets go */
+[data-plate-glyph][data-glyph-block] { display: inline-block; transform-origin: 50% 100%; }
+@media (prefers-reduced-motion: no-preference) {
+  [data-plate-glyph] { transition: transform var(--md-sys-motion-duration-extra-long1) var(--md-sys-motion-easing-spring); }
+  [data-plate-glyph][data-glyph-live] { transition: none; }
+}
