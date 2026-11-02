@@ -155,6 +155,7 @@ export function Hero() {
   const l = h * (narrow ? 0.46 : 0.5);
 
   return (
+    <>
     <section ref={ref} id="top" className="relative flex min-h-[100svh] flex-col justify-end overflow-hidden">
       {/* depth layers */}
       <Depth depth={0.8} className="right-[-6%] top-[8%] opacity-90">
@@ -213,7 +214,7 @@ export function Hero() {
       )}
 
       {/* ground — the character's first perch */}
-      <div className="absolute inset-x-0 bottom-0 z-10">
+      <div className="absolute inset-x-0 bottom-0 z-10" aria-hidden="true">
         <Ground width={Math.max(w, 1)} height={groundH} />
       </div>
       {/* desktop: he walks only within the pool of light (a black silhouette vanishes on the dark ground beyond it) */}
@@ -222,5 +223,7 @@ export function Hero() {
       {!narrow &&
         LEDGES.map(([x, up]) => <Ledge key={x} style={{ left: `calc(${x * 100}% - 42px)`, bottom: groundH * 0.62 + up - 26 }} />)}
     </section>
+    <div className="ground-tail" aria-hidden="true" />
+    </>
   );
 }

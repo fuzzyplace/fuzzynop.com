@@ -18,12 +18,19 @@
         --accent: #FF6A13;
         color-scheme: dark;
       }
+      @font-face {
+        font-family: 'Share Tech Mono';
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url(/fonts/share-tech-mono-400-latin.woff2) format('woff2');
+      }
       * { box-sizing: border-box; }
       html, body { margin: 0; height: 100%; }
       body {
         background: var(--bg);
         color: var(--ink);
-        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+        font-family: "Share Tech Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
         display: grid;
         place-items: center;
         padding: 16px;
@@ -37,6 +44,9 @@
         text-decoration: none;
         border-bottom: 1px solid var(--line);
         padding-bottom: 2px;
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
       }
       a:hover { border-bottom-color: var(--accent); }
       a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 2px; }
@@ -45,7 +55,7 @@
   <body>
     <main>
       <svg viewBox="0 0 72 80" aria-hidden="true">
-        <polygon points="36,2 70,21 70,59 36,78 2,59 2,21" fill="none" stroke="#F5F5F0" stroke-width="3" />
+        <polygon points="2,40 19,10.6 53,10.6 70,40 53,69.4 19,69.4" fill="none" stroke="#F5F5F0" stroke-width="3" />
       </svg>
       <p class="code">404</p>
       <h1>0x90 0x90 0x90 · nothing happened here</h1>

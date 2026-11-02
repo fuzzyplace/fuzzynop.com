@@ -181,7 +181,7 @@ export function Ground({ width, height = 90, seed = 5 }: { width: number; height
     blades.push(<path key={i} d={`M${x - 1.4} ${height * 0.4} Q${x + lean * 0.5} ${height * 0.4 - h * 0.6} ${x + lean} ${height * 0.4 - h} Q${x + lean * 0.4 + 0.6} ${height * 0.4 - h * 0.5} ${x + 1.4} ${height * 0.4} Z`} />);
   }
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="block max-w-none" preserveAspectRatio="none">
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="block max-w-none" preserveAspectRatio="none" aria-hidden="true" focusable="false">
       <g className="fill-ink" filter="url(#ink)">
         <path d={d} />
         {blades}
