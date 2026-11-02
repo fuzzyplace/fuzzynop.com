@@ -349,8 +349,18 @@ export function PuppeteerStage() {
   const tr = useRef<Trust | null>(null); // survives resizes / the effect re-running
   const lineShown = useRef(false);
 
+  // The live viewport height, read per frame. Phones show and hide their address bar on nearly every
+  // change of scroll direction (a resize with a new innerHeight); that must not tear down and rebuild
+  // the stage (cutting off a stunt, letter play or a drag), so `vp` (the effect's dependency) only
+  // changes with the width or a large height change, and everything per frame reads `vh()`.
+  const liveH = useRef(0);
   useEffect(() => {
-    const onResize = () => setVp({ w: window.innerWidth, h: window.innerHeight });
+    const onResize = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      liveH.current = h;
+      setVp((p) => (p.w === w && Math.abs(p.h - h) < 160 ? p : { w, h }));
+    };
     onResize();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
@@ -359,6 +369,7 @@ export function PuppeteerStage() {
   // layout effect: a resize re-poses the arm in the same commit that gives it new lengths
   useLayoutEffect(() => {
     if (!vp.w) return;
+    const vh = () => liveH.current || vp.h;
     const scale = vp.w < 700 ? 1.3 : 1.85;
     const cfg = { ...WALK, cycle: 2 * STRIDE * scale }; // distance per gait cycle that keeps the planted foot still
     // a perch is only somewhere to put him if all of him fits below the fixed header: its top (his
@@ -581,7 +592,7 @@ export function PuppeteerStage() {
       return b.t - a.t > 30 ? Math.abs(b.y - a.y) / ((b.t - a.t) / 1000) : 0;
     };
     /** The visitor is scrolling (or just was): reappear where the scroll won't carry him straight out of view. */
-    const drift = () => (performance.now() - lastScroll < 6000 ? { dir: scrollDir, px: vp.h * 0.55 } : undefined);
+    const drift = () => (performance.now() - lastScroll < 6000 ? { dir: scrollDir, px: vh() * 0.55 } : undefined);
     let lingerTimer = 0;
     const events: { k: string; t: number }[] = []; // dev: what he did and when (reactions, turning points)
     const note = (k: string, now: number) => {
@@ -693,7 +704,7 @@ export function PuppeteerStage() {
       const feet = s.char.y + FEET * sz;
       const vis = cache
         .map((c, i) => ({ c, i, top: c.top - sy, l: c.left - sx + c.ext.lo, r: c.left - sx + c.ext.hi }))
-        .filter((q) => !q.c.nook && edgeOk(q.c.el) && q.top >= headroomK(1) && q.top < vp.h);
+        .filter((q) => !q.c.nook && edgeOk(q.c.el) && q.top >= headroomK(1) && q.top < vh());
       const below = vis.filter((q) => q.top >= feet - 4);
       const under = below.filter((q) => s.char.x >= q.l - 20 && s.char.x <= q.r + 20).sort((a, b) => a.top - b.top)[0];
       const off = (q: (typeof vis)[number]) => Math.max(0, q.l - s.char.x, s.char.x - q.r);
@@ -709,7 +720,7 @@ export function PuppeteerStage() {
         y1 = pick.c.top - FEET * scale;
       } else {
         x1 = x0 + vx * 0.3;
-        y1 = sy + vp.h + 200; // nothing to land on: out the bottom; he gathers himself back on screen
+        y1 = sy + vh() + 200; // nothing to land on: out the bottom; he gathers himself back on screen
       }
       const dy = y1 - y0;
       let T: number;
@@ -736,7 +747,7 @@ export function PuppeteerStage() {
       for (; t < lead + STAY_FULL; t += 0.1) {
         const sy2 = clamp(sy + scrollDir * v * t, 0, docEnd);
         const feet = (c.pin ? c.top0 + pinTop(c.pin, sy2) - c.pin.t0 : c.top) - sy2;
-        if (feet - tall < HEADER + CLEAR || feet > vp.h - 8) break;
+        if (feet - tall < HEADER + CLEAR || feet > vh() - 8) break;
       }
       return t - lead;
     };
@@ -772,13 +783,13 @@ export function PuppeteerStage() {
      */
     const teleport = (s: State, now: number, o: { to?: { i: number; x: number } | null; ps?: Seen[]; prefer?: 'inside' | 'outside'; only?: (c: Perch) => boolean; poi?: Poi | null; then?: ((now: number) => void) | null; greet?: boolean; nowhere?: boolean; why: string }): boolean => {
       let to = o.to ?? null;
-      const seen = !s.hidden && s.char.y > HEADER && s.char.y < vp.h + 40 && s.char.x > -40 && s.char.x < vp.w + 40 && s.m.mode !== 'falling';
+      const seen = !s.hidden && s.char.y > HEADER && s.char.y < vh() + 40 && s.char.x > -40 && s.char.x < vp.w + 40 && s.m.mode !== 'falling';
       const quick = scrollSpeed() > QUICK_SCROLL; // the page is on the move: he gathers sooner (or the scroll takes the spot first)
       if (!to && o.ps) {
         const { sx, sy } = viewport();
         const me = s.idx >= 0 && !s.hidden ? { x: s.char.x + sx, y: s.char.y + sy + FEET * sz } : null;
         const lead = (seen && o.why !== 'header' ? OUT : 0) + (quick ? QUICK_GAP + IN * QUICK_IN : 0.3 + IN);
-        const d = chooseDest(destSpots(o.ps, o.only, lead), { focus: focusDoc(), view: { left: sx, right: sx + vp.w, top: sy + HEADER + CLEAR, bottom: sy + vp.h - 8 }, me, recent: recentDest, prefer: o.prefer, rand: Math.random, drift: drift() });
+        const d = chooseDest(destSpots(o.ps, o.only, lead), { focus: focusDoc(), view: { left: sx, right: sx + vp.w, top: sy + HEADER + CLEAR, bottom: sy + vh() - 8 }, me, recent: recentDest, prefer: o.prefer, rand: Math.random, drift: drift() });
         if (d) {
           to = { i: d.i, x: d.x };
           recentDest = [d.id, ...recentDest].slice(0, 4);
@@ -950,7 +961,7 @@ export function PuppeteerStage() {
     /** The scene for explore.ts: usable surfaces, decor and headings in document px (measured now: rare). */
     const scene = (ps: Seen[]): Scene => {
       const { sx, sy } = viewport();
-      const view = { left: sx, right: sx + vp.w, top: sy, bottom: sy + vp.h };
+      const view = { left: sx, right: sx + vp.w, top: sy, bottom: sy + vh() };
       // he only wanders onto surfaces with room for all of him below the header (`visible`)
       const surfaces = cache.map((c, i): SceneSurface | null =>
         ps[i].ok && ps[i].visible && !c.nook
@@ -959,7 +970,7 @@ export function PuppeteerStage() {
       );
       const splats = Array.from(document.querySelectorAll<SVGElement>('[data-poi="splat"]'))
         .map((el) => el.getBoundingClientRect())
-        .filter((r) => r.width > 0 && r.bottom > 0 && r.top < vp.h && r.right > 0 && r.left < vp.w)
+        .filter((r) => r.width > 0 && r.bottom > 0 && r.top < vh() && r.right > 0 && r.left < vp.w)
         .map((r) => ({ x: r.left + sx + r.width / 2, y: r.top + sy + r.height * 0.4, r: r.width / 2 }));
       const printers: Scene['printers'] = [];
       const headings: Scene['headings'] = [];
@@ -973,12 +984,12 @@ export function PuppeteerStage() {
           const range = document.createRange();
           range.selectNodeContents(h);
           const r = range.getBoundingClientRect(); // the text itself, not the block
-          if (r.width > 0 && r.top < vp.h) headings.push({ s: i, left: r.left + sx, right: r.right + sx, top: r.top + sy });
+          if (r.width > 0 && r.top < vh()) headings.push({ s: i, left: r.left + sx, right: r.right + sx, top: r.top + sy });
         });
         // circuit-tree link nodes on this plate (the hex, not the label), on screen
         c.el.querySelectorAll<HTMLElement>('[data-poi="node"]').forEach((el) => {
           const r = (el.querySelector('svg') ?? el).getBoundingClientRect();
-          if (r.width === 0 || r.top > vp.h - 20 || r.bottom < 0) return;
+          if (r.width === 0 || r.top > vh() - 20 || r.bottom < 0) return;
           nodes.push({ s: i, x: r.left + sx + r.width / 2, y: r.top + sy + r.height / 2 });
           nodeEls.push(el);
         });
@@ -1116,7 +1127,7 @@ export function PuppeteerStage() {
     const probe = createProbeDriver({
       scale,
       vw: vp.w,
-      vh: vp.h,
+      vh: vh(),
       minTop: HEADER + CLEAR,
       feet: FEET * scale,
       perches: () => cache,
@@ -1384,7 +1395,7 @@ export function PuppeteerStage() {
     const runTo = (s: State, ps: Seen[], now: number, max = RUN_MAX): boolean => {
       if (s.idx < 0 || cache[s.idx].nook) return false;
       const { sx, sy } = viewport();
-      const f = focusDoc() ?? { x: sx + vp.w / 2, y: sy + vp.h / 2 };
+      const f = focusDoc() ?? { x: sx + vp.w / 2, y: sy + vh() / 2 };
       const ok = cache.map((_, j) => (!!ps[j]?.ok && !!ps[j]?.visible && !!ps[j]?.onX) || j === s.idx);
       const S = surfaces(ok);
       const from = { s: s.idx, x: cache[s.idx].left + s.walk.x };
@@ -1578,7 +1589,7 @@ export function PuppeteerStage() {
           left: lx,
           pt: { x: lx + p.width * p.f, y: top - FEET * scale * p.k },
           top,
-          visible: top >= headroomK(p.k) && top < vp.h - 8,
+          visible: top >= headroomK(p.k) && top < vh() - 8,
           onX: lx + p.ext.hi >= 24 && lx + p.ext.lo <= vp.w - 24,
           bottom: top + p.height,
         };
@@ -2101,7 +2112,7 @@ export function PuppeteerStage() {
             // through the gap: he's at the destination now (or, if it went away meanwhile, somewhere else)
             let j = T.to ? cache.findIndex((c) => c.id === T.to!.id) : -1;
             if (j < 0 || !ps[j]?.ok || ps[j].top < headroomK(cache[j].k)) {
-              const d = chooseDest(destSpots(ps, undefined, scrollSpeed() > QUICK_SCROLL ? QUICK_GAP + IN * QUICK_IN : 0.3 + IN), { focus: focusDoc(), view: { left: sx, right: sx + vp.w, top: sy + HEADER + CLEAR, bottom: sy + vp.h - 8 }, me: null, rand: Math.random, drift: drift() });
+              const d = chooseDest(destSpots(ps, undefined, scrollSpeed() > QUICK_SCROLL ? QUICK_GAP + IN * QUICK_IN : 0.3 + IN), { focus: focusDoc(), view: { left: sx, right: sx + vp.w, top: sy + HEADER + CLEAR, bottom: sy + vh() - 8 }, me: null, rand: Math.random, drift: drift() });
               j = d ? d.i : -1;
               T.to = d ? { id: cache[d.i].id, x: clampTo(d.x - cache[d.i].left, cache[d.i].ext) } : null;
               T.poi = null;
@@ -2446,7 +2457,7 @@ export function PuppeteerStage() {
     };
 
     const perchPosOf = (ps: Seen[], i: number, x: number): Pt => ({ x: ps[i].left + x, y: ps[i].pt.y });
-    const clawTop = (x: number): Pt => ({ x, y: -vp.h * 0.15 });
+    const clawTop = (x: number): Pt => ({ x, y: -vh() * 0.15 });
     let clawLast: Pt = { x: 0, y: 0 };
     const draw = (ink?: { k: number; out: boolean }) => {
       const s = st.current;
@@ -2768,6 +2779,16 @@ export function PuppeteerStage() {
       sense.gone = true; // the mouse left the window: he's left alone
       wake();
     };
+    // while he's held, a press-and-hold on a phone must not bring up the text-selection loupe,
+    // callout or context menu over the drag (pointerdown's preventDefault doesn't stop those)
+    const holdGuard = (on: boolean) => {
+      const r = document.documentElement.style as CSSStyleDeclaration & { webkitUserSelect: string; webkitTouchCallout?: string };
+      r.userSelect = r.webkitUserSelect = on ? 'none' : '';
+      r.setProperty('-webkit-touch-callout', on ? 'none' : '');
+    };
+    const onContextMenu = (e: Event) => {
+      if (holding) e.preventDefault();
+    };
     const onDown = (e: PointerEvent) => {
       if (e.button === 0 && onHim(e.clientX, e.clientY)) {
         e.preventDefault(); // no text selection / focus change under him
@@ -2775,6 +2796,7 @@ export function PuppeteerStage() {
         holding = true;
         hand = { x: e.clientX, y: e.clientY };
         document.documentElement.style.cursor = 'grabbing';
+        holdGuard(true);
         wake();
         return;
       }
@@ -2784,6 +2806,7 @@ export function PuppeteerStage() {
       if (!holding) return;
       holding = false;
       document.documentElement.style.cursor = '';
+      holdGuard(false);
       wake();
     };
     const onUp = (e: PointerEvent) => {
@@ -2837,6 +2860,7 @@ export function PuppeteerStage() {
     window.addEventListener('pagehide', onPageHide);
     window.addEventListener('pointermove', onMove, { passive: true });
     window.addEventListener('pointerdown', onDown);
+    window.addEventListener('contextmenu', onContextMenu);
     window.addEventListener('touchmove', onTouchMove, { passive: false });
     window.addEventListener('blur', letGo);
     window.addEventListener('pointerup', onUp, { passive: true });
@@ -2853,6 +2877,8 @@ export function PuppeteerStage() {
       timers.clear();
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('contextmenu', onContextMenu);
+      holdGuard(false);
       window.removeEventListener('touchmove', onTouchMove);
       window.removeEventListener('blur', letGo);
       document.documentElement.style.cursor = '';
@@ -2877,7 +2903,7 @@ export function PuppeteerStage() {
   const l = vp.h * 0.42;
   return (
     <>
-      <svg className="pointer-events-none fixed inset-0 z-30 h-full w-full overflow-visible" viewBox={`0 0 ${vp.w} ${vp.h}`} aria-hidden="true">
+      <svg className="pointer-events-none fixed inset-0 z-30 h-full w-full overflow-visible" aria-hidden="true">
         <defs>
           <radialGradient id="char-fog">
             <stop offset="0%" className="char-fog-stop" stopOpacity="0.42" />
