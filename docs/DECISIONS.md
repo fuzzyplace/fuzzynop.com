@@ -264,3 +264,7 @@ _v2.9 pass (2026-11-02): every tuning-only item is now resolved with its outcome
   - **Toggle label:** accessible name "Sound" (placeholder, `src/audio/copy.ts`), no visible text. Approve or replace.
   - **Placement:** the toggle sits in the header between the mark and the nav (nothing moves when it appears). Hidden below 360px wide (no room); sound still follows the stored choice there. Alternative: a footer slot. App.tsx gets one marked line to mount it.
   - **Board on previews:** the dev board loads with `?sfx=board` anywhere but fuzzynop.com (Vercel previews are production builds). Its small chunk ships in the build but is never fetched on the real domain.
+
+- [ ] **v2.11 link tree (2026-11-03, Claude):** the Contact tree is now three readable groups, Connect / Work / Play, with 44px rows. Wide (≥ 540px of plate content, so tablet and up): three columns under the FZNP hex, short traces fanning into each. Narrow: stacked groups on one trunk at the left. Roughly half the old height on desktop.
+  - **"Connect"** is a new heading for the links that hang straight off the root (LinkedIn, X, GitHub, Email). Placeholder: approve or replace.
+  - **Suno** (https://suno.com/@fuzzymmm) sits in Play right after The Fuzzy Place, first among the music links. Reorder if another feels more like the front door.
