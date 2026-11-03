@@ -1,19 +1,20 @@
 import type { Engine } from './engine';
 
 /**
- * Sound on or off: the visitor's choice (localStorage, guarded), the AudioContext (created only
- * inside a user gesture: the toggle's click, or the first press / key after a reload with sound
- * on) and the engine chunk (imported then, never before). Shared by the toggle and the dev board.
+ * Sound on or off: on by default, off once the visitor turns it off (localStorage, guarded). The
+ * AudioContext is created only inside a user gesture (browsers allow nothing before): the toggle's
+ * click, or the visitor's first press, tap or key. The engine chunk is imported then, never before.
+ * Shared by the toggle and the dev board.
  */
 
 const KEY = 'fz:sound';
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-export function stored(): boolean {
+function raw(): string | null {
   try {
-    return localStorage.getItem(KEY) === '1';
+    return localStorage.getItem(KEY);
   } catch {
-    return false;
+    return null; // blocked storage: the default, and the choice lasts this page only
   }
 }
 function store(on: boolean) {
@@ -28,8 +29,8 @@ type Ctor = typeof AudioContext;
 let ac: AudioContext | null = null;
 let engine: Engine | null = null;
 let loading: Promise<Engine> | null = null;
-/** Reduced motion: off by default, whatever was stored (the visitor can still turn it on). */
-let on = stored() && !reduced();
+/** On unless the visitor turned it off. Reduced motion: off unless they turned it on. */
+let on = reduced() ? raw() === '1' : raw() !== '0';
 const subs = new Set<() => void>();
 const emit = () => subs.forEach((f) => f());
 
@@ -64,19 +65,22 @@ export async function setSound(next: boolean): Promise<Engine | null> {
   return e;
 }
 
-/** Sound was left on: start it on the visitor's first press or key (browsers won't before). */
+/**
+ * Sound is on: start it on the visitor's first gesture (browsers won't before). Not every event
+ * counts as one everywhere (iOS wants the touch to end), so keep listening until the context runs.
+ * A gesture only starts sound that is already on; it never overrides "off".
+ */
+const GESTURES = ['pointerdown', 'pointerup', 'touchend', 'keydown'] as const;
 export function armOnGesture() {
-  if (!on || ac) return () => {};
+  if (!on || ac?.state === 'running') return () => {};
   const go = () => {
-    off();
-    if (on) void setSound(true);
+    if (!on) return off();
+    void setSound(true).then(() => {
+      if (ac?.state === 'running') off();
+    });
   };
-  const opts = { capture: true, once: true } as const;
-  const off = () => {
-    window.removeEventListener('pointerdown', go, opts);
-    window.removeEventListener('keydown', go, opts);
-  };
-  window.addEventListener('pointerdown', go, opts);
-  window.addEventListener('keydown', go, opts);
+  const opts = { capture: true, passive: true } as const;
+  const off = () => GESTURES.forEach((g) => window.removeEventListener(g, go, opts));
+  GESTURES.forEach((g) => window.addEventListener(g, go, opts));
   return off;
 }
