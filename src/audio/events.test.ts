@@ -1,24 +1,54 @@
 import { describe, expect, it } from 'vitest';
-import { JUMP, PLACE, PLATE_MAX, linesDone, pickCue, plateCues, writtenCue, type PlanLike } from './events';
-import { MOUTH_JITTER, MOUTHS, RANGE, SOUNDS } from './mix';
+import { JUMP, PLACE, PLATE_MAX, inkCue, linesDone, plateCues, puppetCues, writtenCue, type PlanLike } from './events';
+import { SOUNDS } from './mix';
 
-describe('pickCue', () => {
-  it('pops once as the claw closes on him, and for nothing else', () => {
-    expect(pickCue('grabbed', 'carried')).toEqual({ name: 'pick' });
-    expect(pickCue('carried', 'carried')).toBeNull();
-    expect(pickCue(null, 'carried')).toBeNull(); // first frame seen
-    expect(pickCue('idle', 'grabbed')).toBeNull(); // the claw is still on its way
-    expect(pickCue('carried', 'falling')).toBeNull(); // let go: silent
-    for (const m of ['idle', 'walking', 'hopping', 'sitting', 'teleport', 'stunt', 'swatting']) expect(pickCue('idle', m)).toBeNull();
+const names = (prev: string | null, m: string) => puppetCues(prev, m).map((c) => c.name);
+
+describe('puppetCues', () => {
+  it('the claw: a clamp as it closes on him, a release as it lets go', () => {
+    expect(names('grabbed', 'carried')).toEqual(['clamp']);
+    expect(names('carried', 'falling')).toEqual(['release']);
+    expect(names('carried', 'carried')).toEqual([]);
+    expect(names('idle', 'grabbed')).toEqual([]); // the claw is still on its way
+    expect(names('grabbed', 'falling')).toEqual([]); // let go before it closed: nothing to release
+  });
+  it('a soft thud when he lands after a fall, not when he vanishes mid-fall', () => {
+    expect(names('falling', 'idle')).toEqual(['land']);
+    expect(names('falling', 'teleport')).toEqual([]);
+  });
+  it('a flourish as a stunt starts, and nothing as it ends', () => {
+    expect(names('idle', 'stunt')).toEqual(['stunt']);
+    expect(names('stunt', 'idle')).toEqual([]);
+  });
+  it('nothing on the first frame seen, or for his everyday moods', () => {
+    expect(names(null, 'carried')).toEqual([]);
+    expect(names(null, 'stunt')).toEqual([]);
+    for (const m of ['walking', 'hopping', 'sitting', 'exploring', 'fidget', 'swatting', 'teleport']) expect(names('idle', m)).toEqual([]);
+    for (const m of ['walking', 'hopping', 'sitting']) expect(names(m, 'idle')).toEqual([]);
+  });
+});
+
+describe('inkCue', () => {
+  it('ink out as he runs off into it, ink in as he starts to gather', () => {
+    expect(inkCue(undefined, true)?.name).toBe('inkOut');
+    expect(inkCue(true, true)).toBeNull(); // still in it (gone counts as out)
+    expect(inkCue(true, false)?.name).toBe('inkIn');
+    expect(inkCue(false, false)).toBeNull();
+    expect(inkCue(false, undefined)).toBeNull(); // done gathering: silent
+  });
+  it('a gather with no ink-out before it still sounds; nothing on the first frame seen', () => {
+    expect(inkCue(undefined, false)?.name).toBe('inkIn');
+    expect(inkCue(null, true)).toBeNull();
+    expect(inkCue(null, false)).toBeNull();
   });
 });
 
 describe('writtenCue', () => {
-  it('pops as each tagline line is finished', () => {
+  it('a scratch as each tagline line is finished', () => {
     expect(linesDone([1, 0.4, 0])).toBe(1);
-    expect(writtenCue(0, [1, 0, 0])?.name).toBe('pop');
+    expect(writtenCue(0, [1, 0, 0])?.name).toBe('scratch');
     expect(writtenCue(1, [1, 0.9, 0])).toBeNull(); // mid-line
-    expect(writtenCue(1, [1, 1, 0])?.name).toBe('pop');
+    expect(writtenCue(1, [1, 1, 0])?.name).toBe('scratch');
   });
   it('nothing for lines already written when sound started', () => {
     expect(writtenCue(null, [1, 1, 1])).toBeNull();
@@ -33,34 +63,29 @@ const plan = (tPs: number[], mode: 'carry' | 'deal' = 'deal', landed = -1): Plan
 });
 
 describe('plateCues', () => {
-  it('one pop per thing placed, in order, body lines included', () => {
+  it('one tick per thing placed, in order, body lines included', () => {
     const cs = plateCues(plan([0.5, 0.9]), 0, 1);
-    expect(cs.map((c) => c.name)).toEqual(['pop', 'pop']);
+    expect(cs.map((c) => c.name)).toEqual(['tick', 'tick']);
     expect(cs[0].at).toBe(0);
     expect(cs[1].at).toBeGreaterThan(0);
   });
-  it('the sheet landing pops too, lowest of all', () => {
-    const [sheet] = plateCues(plan([], 'deal', 0.3), 0, 1);
-    expect(sheet.rate).toBe(PLACE.sheet.rate);
-    expect(PLACE.sheet.rate).toBeLessThan(PLACE.carry.rate);
-    expect(PLACE.carry.rate).toBeLessThan(PLACE.deal.rate);
+  it('the sheet landing is a thud, first', () => {
+    const cs = plateCues(plan([0.5], 'deal', 0.3), 0, 1);
+    expect(cs.map((c) => c.name)).toEqual(['sheet', 'tick']);
   });
-  it('every placement pop settles between 170 and 470 Hz, clear of the 150 Hz floor, at any mouth and any variation', () => {
-    const v = 2 ** (RANGE.semis / 12);
-    for (const k of ['sheet', 'carry', 'deal'] as const) {
-      for (const m of MOUTHS) {
-        expect(m.f * (1 - MOUTH_JITTER) * PLACE[k].rate / v).toBeGreaterThanOrEqual(170);
-        expect(m.f * (1 + MOUTH_JITTER) * PLACE[k].rate * v).toBeLessThanOrEqual(470);
-      }
-    }
-  });
-  it('titles sit rounder and fuller than body lines', () => {
+  it('titles sit lower and fuller than body lines', () => {
     const [carry] = plateCues(plan([0.5], 'carry'), 0, 1);
     const [deal] = plateCues(plan([0.5], 'deal'), 0, 1);
     expect(carry.rate!).toBeLessThan(deal.rate!);
     expect(carry.gain!).toBeGreaterThan(deal.gain!);
+    expect(PLACE.carry.rate).toBeLessThan(PLACE.deal.rate);
   });
-  it('a piece pops exactly once across frames', () => {
+  it('pans each piece gently by where it sits', () => {
+    const cs = plateCues(plan([0.2, 0.3, 0.4]), 0, 1);
+    for (const c of cs) expect(Math.abs(c.pan!)).toBeLessThanOrEqual(0.35);
+    expect(cs[0].pan!).toBeLessThan(cs[2].pan!);
+  });
+  it('a piece sounds exactly once across frames', () => {
     const p = plan([0.5]);
     expect(plateCues(p, 0, 0.5)).toHaveLength(1);
     expect(plateCues(p, 0.5, 0.6)).toHaveLength(0);
@@ -68,7 +93,7 @@ describe('plateCues', () => {
   it('scrolling back is silent', () => {
     expect(plateCues(plan([0.5], 'deal', 0.2), 1, 0)).toEqual([]);
   });
-  it('a fast scroll never stacks more than a few; a jump pops once', () => {
+  it('a fast scroll never stacks more than a few; a jump sounds once', () => {
     const many = plan([0.1, 0.2, 0.3, 0.4, 0.5, 0.6]);
     expect(plateCues(many, 0, 1).length).toBeLessThanOrEqual(PLATE_MAX);
     expect(plateCues(many, 0, JUMP + 0.1)).toHaveLength(1);
@@ -77,6 +102,16 @@ describe('plateCues', () => {
     expect(plateCues(plan([0.5]), NaN, 1)).toEqual([]);
   });
   it('only names sounds that exist', () => {
-    for (const c of plateCues(plan([0.5, 0.6], 'carry', 0.2), 0, 1)) expect(SOUNDS[c.name]).toBeDefined();
+    const all = [
+      ...plateCues(plan([0.5, 0.6], 'carry', 0.2), 0, 1),
+      ...puppetCues('carried', 'falling'),
+      ...puppetCues('grabbed', 'carried'),
+      ...puppetCues('falling', 'idle'),
+      ...puppetCues('idle', 'stunt'),
+      inkCue(undefined, true)!,
+      inkCue(true, false)!,
+      writtenCue(0, [1])!,
+    ];
+    for (const c of all) expect(SOUNDS[c.name]).toBeDefined();
   });
 });

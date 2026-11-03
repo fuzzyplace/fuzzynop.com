@@ -5,7 +5,7 @@ import { sound } from './copy';
 /**
  * The sound toggle: a small icon button in the header, between the mark and the nav (it takes the
  * free space there, so nothing moves when it appears). On unless the visitor turned it off;
- * turning it on plays one click so they know it worked.
+ * turning it on plays one soft low tone so they know it worked.
  */
 export function SoundToggle() {
   const on = useSyncExternalStore(subscribe, isOn, () => false);

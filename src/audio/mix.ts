@@ -2,20 +2,33 @@
  * The mix, pure (tested in mix.test.ts): the sound catalogue, how each play varies, where it sits in
  * the stereo field, and the voice cap that keeps it from piling up. No Web Audio here.
  *
- * One kind of sound: a soft, rounded mouth pop (a knock of the tongue, a lip pop), played whenever
- * the arms put something on the page, a double one when the claw picks him up, and one for the
- * toggle. No two pops are the same: each takes a different mouth shape from the last, jittered.
+ * The palette is dark, quiet and organic: a barely-there breath of fog under everything (the bed),
+ * soft felt and paper as the arms build the page, a low creak when the claw takes him, breathy ink
+ * when he runs off and gathers again, a nib on the tagline. Nothing bright, nothing musical, and no
+ * two plays alike.
  */
 
-export type Layer = 'pop' | 'ui';
+export type Layer = 'place' | 'body' | 'ui';
 
-/** layer, min seconds between two plays of the same sound, priority (2 wins a full pool), length s */
-type Spec = { layer: Layer; gap: number; pri: 1 | 2; dur: number };
+/**
+ * layer; min seconds between two plays of the same sound; priority (2 wins a full pool); length s;
+ * room: how much of it goes to the shared room (0: dry); level: its trim (linear), set by ear and
+ * by measurement (docs/SOUND.md has the numbers).
+ */
+type Spec = { layer: Layer; gap: number; pri: 1 | 2; dur: number; room: number; level: number };
 
 export const SOUNDS = {
-  pop: { layer: 'pop', gap: 0.045, pri: 1, dur: 0.12 }, // something is placed on the page
-  pick: { layer: 'pop', gap: 0.4, pri: 2, dur: 0.17 }, // the claw closes on him
-  ui: { layer: 'ui', gap: 0.1, pri: 2, dur: 0.12 }, // sound turned on
+  sheet: { layer: 'place', gap: 0.12, pri: 2, dur: 0.3, room: 0.5, level: 0.26 }, // a plate's sheet lands: felt thud
+  tick: { layer: 'place', gap: 0.045, pri: 1, dur: 0.06, room: 0.25, level: 0.54 }, // a piece is placed: paper, ink, wood
+  scratch: { layer: 'place', gap: 0.2, pri: 1, dur: 0.3, room: 0.2, level: 0.29 }, // a tagline line is written
+  clamp: { layer: 'body', gap: 0.4, pri: 2, dur: 0.34, room: 0.35, level: 0.25 }, // the claw closes on him
+  release: { layer: 'body', gap: 0.3, pri: 2, dur: 0.2, room: 0.35, level: 0.45 }, // the claw lets him go
+  inkOut: { layer: 'body', gap: 0.4, pri: 2, dur: 0.6, room: 0.4, level: 0.4 }, // he runs off into ink
+  inkIn: { layer: 'body', gap: 0.4, pri: 2, dur: 0.6, room: 0.4, level: 0.45 }, // he gathers himself out of it
+  land: { layer: 'body', gap: 0.25, pri: 1, dur: 0.16, room: 0.3, level: 0.33 }, // he lands after a fall
+  stunt: { layer: 'body', gap: 0.6, pri: 1, dur: 0.24, room: 0.3, level: 0.62 }, // a stunt starts
+  ui: { layer: 'ui', gap: 0.1, pri: 2, dur: 0.9, room: 0.3, level: 0.35 }, // sound turned on
+  hover: { layer: 'ui', gap: 0.09, pri: 1, dur: 0.02, room: 0, level: 0.75 }, // a circuit tree link is hovered or focused
 } satisfies Record<string, Spec>;
 
 export type SoundName = keyof typeof SOUNDS;
@@ -23,13 +36,34 @@ export const SOUND_NAMES = Object.keys(SOUNDS) as SoundName[];
 export const spec = (n: SoundName): Spec => SOUNDS[n];
 
 /** Layer levels under the master (linear). */
-export const LAYER_GAIN: Record<Layer, number> = { pop: 0.6, ui: 0.45 };
-/** Master level into the limiter. */
-export const MASTER = 0.45;
-/** How much of each pop goes to the room (a short, dark tail: the page has air around it). */
-export const ROOM = { wet: 0.18, seconds: 0.8 };
-/** Nothing below this reaches the speakers (low rumble is what reads as the wrong kind of noise). */
-export const FLOOR_HZ = 150;
+export const LAYER_GAIN: Record<Layer, number> = { place: 0.5, body: 0.5, ui: 0.4 };
+/** Master level into the limiter: well under typical UI sounds. */
+export const MASTER = 0.3;
+/** The shared room: a long, dark, soft tail (generated, no file). `wet`: its return level. */
+export const ROOM = { wet: 0.5, seconds: 1.6, dark: 0.1 };
+/** Nothing below this reaches the speakers (subsonic only: the thuds live just above it). */
+export const FLOOR_HZ = 45;
+/** Nothing above this either: the whole mix is lowpassed here, so it stays dark. */
+export const CEILING_HZ = 2800;
+/** Limiter: a safety net only; at these levels it should rarely touch anything. */
+export const LIMIT = { threshold: -24, ratio: 12 };
+
+/**
+ * The bed: fog breathing. `level`: its gain (linear) once faded in; `fade`: seconds to fade in;
+ * `duck`: what it drops to (share) while another sound plays; `back`: seconds to come back.
+ * `air`: the low rumble band's cutoff, `lfo`: its slow drift (Hz); `breath`: the swell (Hz, depth);
+ * `drone`: two low sines a hair apart (they beat slowly), and how loud they are next to the air.
+ */
+export const BED = {
+  level: 0.014,
+  fade: 4,
+  duck: 0.6,
+  back: 1.2,
+  air: { cut: 300, swing: 110, lfo: 0.061 },
+  hiss: { f: 760, q: 0.8, gain: 0.18, lfo: 0.037 },
+  breath: { hz: 0.087, depth: 0.35 },
+  drone: { f: 82, beat: 0.31, gain: 0.05 },
+};
 
 export type Variation = {
   rate: number; // pitch multiplier
@@ -38,8 +72,8 @@ export type Variation = {
   bright: number; // filter cutoff multiplier
 };
 
-/** Ranges for one play: ±2 semitones, about ±2 dB, up to 12 ms late, ±20% brightness. */
-export const RANGE = { semis: 2, db: 2, delay: 0.012, bright: 0.2 };
+/** Ranges for one play: ±1.5 semitones, about ±2 dB, up to 12 ms late, ±18% in filter brightness. */
+export const RANGE = { semis: 1.5, db: 2, delay: 0.012, bright: 0.18 };
 
 export function variation(rand: () => number = Math.random): Variation {
   const r = (span: number) => (rand() * 2 - 1) * span;
@@ -52,31 +86,36 @@ export function variation(rand: () => number = Math.random): Variation {
 }
 
 /**
- * A mouth shape for one pop. `f`: where the round tone settles (Hz); `drop`: it starts this many
- * times higher and falls to `f` in the first few ms (under 1: it rises a little, like a bubble),
- * so what you hear is mostly `f`; `body`/`q`: the
- * hollow the knock rings in; `d`: how long it lasts (s); `click`: how much tongue is in it.
+ * The grain of one placed piece. `f`/`q`: the band its little burst of noise rings in (Hz); `len`:
+ * how long the burst lasts (s); `knock`: a tiny damped low tone under it (Hz) and `wood`: how much of
+ * it there is (0..1); `lp`: a lowpass on the whole thing (Hz).
  */
-export type Mouth = { f: number; drop: number; body: number; q: number; d: number; click: number };
+export type Grain = { f: number; q: number; len: number; knock: number; wood: number; lp: number };
 
-/** Five mouths, roughly an o, an oo, an ah, a bubble and a cluck. All low and round. */
-export const MOUTHS: readonly Mouth[] = [
-  { f: 300, drop: 1.45, body: 640, q: 8, d: 0.07, click: 0.5 },
-  { f: 270, drop: 1.6, body: 520, q: 10, d: 0.08, click: 0.4 },
-  { f: 360, drop: 1.35, body: 820, q: 7, d: 0.06, click: 0.6 },
-  { f: 280, drop: 0.85, body: 600, q: 9, d: 0.07, click: 0.35 },
-  { f: 330, drop: 1.7, body: 720, q: 11, d: 0.055, click: 0.7 },
+/** Five materials: paper, ink, wood, card, felt. All small, low and muted. */
+export const GRAINS: readonly Grain[] = [
+  { f: 900, q: 1.2, len: 0.014, knock: 230, wood: 0.25, lp: 1700 }, // paper
+  { f: 620, q: 2.2, len: 0.02, knock: 180, wood: 0.35, lp: 1300 }, // ink: a soft wet dab
+  { f: 760, q: 3.5, len: 0.01, knock: 290, wood: 0.7, lp: 1500 }, // wood
+  { f: 1050, q: 1.6, len: 0.012, knock: 260, wood: 0.45, lp: 1900 }, // card
+  { f: 520, q: 1, len: 0.024, knock: 160, wood: 0.3, lp: 1100 }, // felt
 ];
-/** Each mouth is nudged this much (±, as a share) on every play. */
-export const MOUTH_JITTER = 0.14;
+/** Each grain is nudged this much (±, as a share) on every play. */
+export const GRAIN_JITTER = 0.15;
 
-/** The next mouth: any but the last one, nudged. */
-export function nextMouth(last: number, rand: () => number = Math.random): { i: number; m: Mouth } {
-  const n = MOUTHS.length;
-  const i = last >= 0 && last < n ? (last + 1 + Math.floor(rand() * (n - 1))) % n : Math.floor(rand() * n) % n;
-  const j = (x: number) => x * (1 + (rand() * 2 - 1) * MOUTH_JITTER);
-  const b = MOUTHS[i];
-  return { i, m: { f: j(b.f), drop: 1 + (b.drop - 1) * j(1), body: j(b.body), q: j(b.q), d: j(b.d), click: j(b.click) } };
+/** The next shape from a table: any but the last one, every field nudged by ±jitter. */
+export function nextShape<T extends Record<string, number>>(
+  table: readonly T[],
+  last: number,
+  jitter: number,
+  rand: () => number = Math.random,
+): { i: number; s: T } {
+  const n = table.length;
+  const i = n > 1 && last >= 0 && last < n ? (last + 1 + Math.floor(rand() * (n - 1))) % n : Math.floor(rand() * n) % n;
+  const b = table[i];
+  const s = {} as Record<string, number>;
+  for (const k of Object.keys(b)) s[k] = b[k] * (1 + (rand() * 2 - 1) * jitter);
+  return { i, s: s as T };
 }
 
 /** Stereo position for a screen x: gentle, never hard left or right. */
@@ -92,8 +131,8 @@ export function panFor(x: number, w: number): number {
  * within its gap (one that comes too soon waits for it, up to `wait` s, rather than being lost); a full pool only takes something more important, and drops the least important.
  * Each admitted voice comes with a duck: the busier the pool, the quieter the newcomer.
  */
-export const CAPS: Record<Layer, number> = { pop: 3, ui: 1 };
-export const MAX_VOICES = 4;
+export const CAPS: Record<Layer, number> = { place: 3, body: 2, ui: 1 };
+export const MAX_VOICES = 5;
 
 type Active = { id: number; name: SoundName; layer: Layer; pri: number; end: number };
 /** `at`: when it plays (later than asked if it was held back to keep its gap). */
