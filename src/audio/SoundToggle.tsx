@@ -4,8 +4,8 @@ import { sound } from './copy';
 
 /**
  * The sound toggle: a small icon button in the header, between the mark and the nav (it takes the
- * free space there, so nothing moves when it appears). Off unless the visitor turned it on.
- * `data-sfx-silent`: its own click isn't a ui click (turning on plays its own).
+ * free space there, so nothing moves when it appears). On unless the visitor turned it off;
+ * turning it on plays one click so they know it worked.
  */
 export function SoundToggle() {
   const on = useSyncExternalStore(subscribe, isOn, () => false);
@@ -15,7 +15,6 @@ export function SoundToggle() {
       type="button"
       aria-pressed={on}
       aria-label={sound.label}
-      data-sfx-silent=""
       onClick={() =>
         void setSound(!on).then((e) => {
           if (e && !on) e.play('ui');

@@ -1,23 +1,21 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { setSound } from './control';
-import { SOUND_NAMES, spec, type Band, type Layer, type SoundName } from './mix';
+import { SOUND_NAMES, spec, type Layer, type SoundName } from './mix';
 
 /**
- * Dev sound board (`?sfx=board`, never on fuzzynop.com): plays every sound on demand, in any mood,
- * panned anywhere, so Z can audition them on a preview. Not part of the page; English labels here
+ * Dev sound board (`?sfx=board`, never on fuzzynop.com): plays every sound on demand, panned
+ * anywhere, so Z can audition them on a preview. Not part of the page; English labels here
  * are dev tooling, not site copy.
  */
-const LAYERS: Layer[] = ['breath', 'body', 'machine', 'ui'];
-const BANDS: Band[] = ['shaken', 'wary', 'tolerant', 'warm'];
+const LAYERS: Layer[] = ['tick', 'ui'];
 
 export function Board() {
-  const [band, setBand] = useState<Band>('tolerant');
   const [pan, setPan] = useState(0);
   const [open, setOpen] = useState(true);
   const play = async (name: SoundName) => {
     const e = await setSound(true);
-    e?.play(name, { band, pan });
+    e?.play(name, { pan });
   };
   const all = async () => {
     for (const n of SOUND_NAMES) {
@@ -26,7 +24,7 @@ export function Board() {
     }
   };
   return createPortal(
-    <div data-sfx-silent="" className="type-label-small fixed bottom-4 left-4 z-50 max-h-[70vh] w-72 overflow-auto border border-gray-700 bg-surface p-3 text-on-surface">
+    <div className="type-label-small fixed bottom-4 left-4 z-50 max-h-[70vh] w-72 overflow-auto border border-gray-700 bg-surface p-3 text-on-surface">
       <div className="flex items-center justify-between gap-2">
         <span>sfx board (dev)</span>
         <button type="button" className="min-h-11 px-2 text-gray-300 hover:text-on-surface" onClick={() => setOpen(!open)} aria-expanded={open}>
@@ -35,14 +33,6 @@ export function Board() {
       </div>
       {open && (
         <>
-          <label className="mt-2 flex items-center justify-between gap-2">
-            mood
-            <select value={band} onChange={(e) => setBand(e.target.value as Band)} className="bg-surface text-on-surface">
-              {BANDS.map((b) => (
-                <option key={b}>{b}</option>
-              ))}
-            </select>
-          </label>
           <label className="mt-2 flex items-center justify-between gap-2">
             pan {pan.toFixed(1)}
             <input className="accent-gray-300" type="range" min={-1} max={1} step={0.1} value={pan} onChange={(e) => setPan(Number(e.target.value))} />
