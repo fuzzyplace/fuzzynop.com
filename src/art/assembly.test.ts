@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { armAt, follow, groupAt, groupLines, memberOffset, planAssembly, puffAt, scrollKeys, sheetAt, sheetCornerAt, snapBeat, timeAtScroll, TIMING, type GroupIn, type PlanOpts } from './assembly';
+import { armAt, asmShare, follow, groupAt, groupLines, memberOffset, planAssembly, puffAt, scrollKeys, sheetAt, sheetCornerAt, snapBeat, timeAtScroll, TIMING, type GroupIn, type PlanOpts } from './assembly';
 
 const groups: GroupIn[] = [
   { box: { x: 48, y: 56, w: 160, h: 36 }, mode: 'carry' }, // badge row
@@ -122,6 +122,19 @@ describe('scroll → time', () => {
     for (let i = 1; i < k.s.length; i++) {
       expect(k.s[i]).toBeGreaterThan(k.s[i - 1]);
       expect(k.t[i]).toBeGreaterThan(k.t[i - 1]);
+    }
+  });
+
+  it('v2.11: with a share, it is whole by then and stays whole through the read pause', () => {
+    for (const [vw, tall] of [[1440, false], [375, false], [1440, true], [375, true]] as const) {
+      const share = asmShare(vw, tall);
+      expect(share).toBeGreaterThan(0.2);
+      expect(share).toBeLessThan(0.6);
+      const k3 = scrollKeys(p, { ...geo, share });
+      const whole = geo.pinStart + (geo.pinEnd - geo.pinStart) * share;
+      expect(timeAtScroll(k3, whole)).toBe(p.end);
+      // the read pause is at least as long as a third of the pin
+      expect(geo.pinEnd - whole).toBeGreaterThanOrEqual((geo.pinEnd - geo.pinStart) / 3);
     }
   });
 

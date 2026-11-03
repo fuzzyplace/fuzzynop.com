@@ -1495,7 +1495,11 @@ export function PuppeteerStage() {
         watch: true,
         vanish: now - s.whimAt > WHIM_GAP * 1000,
       };
-      let a = forced ?? choose(s.needs, { band: fl, cursor: cur, quiet: (now - attnAt) / 1000, can }, s.did, Math.random);
+      // v2.11: the intro. Once per page load, soon after he arrives on the hero ground and the title is
+      // written, he plays on it whatever his mood (he's showing off for a newcomer); later stunts are earned
+      const intro = introTries < 2 && s.stuntAt === -Infinity && s.idx === gi && gi >= 0 && fl !== 'shaken' && titleEl()?.getAttribute('data-written') === '1' && viewport().sy < 40;
+      if (intro) introTries++;
+      let a = forced ?? (intro ? 'stunt' : choose(s.needs, { band: fl, cursor: cur, quiet: (now - attnAt) / 1000, can }, s.did, Math.random));
       let ok = false;
       switch (a) {
         case 'explore':
@@ -1552,6 +1556,7 @@ export function PuppeteerStage() {
       note(`want:${a}`, now);
     };
     const decisions: { t: number; a: Activity; at: string }[] = []; // dev: what he chose and when
+    let introTries = 0; // v2.11: the intro stunt, asked for at most twice per page load
     let forced: Activity | null = null; // dev: `__puppet.force`
     let forcedTrick: Trick | null = null;
 
@@ -2527,13 +2532,14 @@ export function PuppeteerStage() {
       const here = s.idx >= 0 ? cache[s.idx] : undefined;
       const fog = fogRef.current;
       if (fog) {
-        const on = !!here?.dark && !s.hidden && !s.tele && !s.fall && mode !== 'carried';
-        const op = on ? '1' : '0';
+        // v2.11: his own small light, always with him (screen blend: it lifts dark and fog, does nothing
+        // on white paper); fuller where he'd be black on black, gone while he's ink or out of sight
+        const op = s.hidden || s.tele ? '0' : here?.dark ? '1' : '0.6';
         if (fog.style.opacity !== op) fog.style.opacity = op;
         setAttr(fog, 'cx', s.char.x.toFixed(1));
-        setAttr(fog, 'cy', (s.char.y - 9 * sz).toFixed(1));
-        setAttr(fog, 'rx', (36 * sz).toFixed(1));
-        setAttr(fog, 'ry', (50 * sz).toFixed(1));
+        setAttr(fog, 'cy', (s.char.y - 22 * sz).toFixed(1));
+        setAttr(fog, 'rx', (58 * sz).toFixed(1));
+        setAttr(fog, 'ry', (70 * sz).toFixed(1));
       }
     };
     const loop = ticker.loop(frame);
@@ -2905,17 +2911,20 @@ export function PuppeteerStage() {
   const l = vp.h * 0.42;
   return (
     <>
-      <svg className="pointer-events-none fixed inset-0 z-30 h-full w-full overflow-visible" aria-hidden="true">
+      {/* his light: a soft glow around him so he never disappears into the dark (v2.11). Its own layer
+          so it can screen-blend with the page under it (lifts dark and fog, nothing on white paper) */}
+      <svg className="char-light pointer-events-none fixed inset-0 z-30 h-full w-full overflow-visible" aria-hidden="true">
         <defs>
           <radialGradient id="char-fog">
-            <stop offset="0%" className="char-fog-stop" stopOpacity="0.42" />
-            <stop offset="45%" className="char-fog-stop" stopOpacity="0.2" />
-            <stop offset="75%" className="char-fog-stop" stopOpacity="0.07" />
+            <stop offset="0%" className="char-fog-stop" stopOpacity="0.5" />
+            <stop offset="35%" className="char-fog-stop" stopOpacity="0.26" />
+            <stop offset="65%" className="char-fog-stop" stopOpacity="0.09" />
             <stop offset="100%" className="char-fog-stop" stopOpacity="0" />
           </radialGradient>
         </defs>
-        {/* behind him where he'd be black on black (ink plate insides, the footer) */}
         <ellipse ref={fogRef} className="char-fog" fill="url(#char-fog)" style={{ opacity: 0 }} />
+      </svg>
+      <svg className="pointer-events-none fixed inset-0 z-30 h-full w-full overflow-visible" aria-hidden="true">
         <g ref={hideRef}>
           <g ref={tiltRef}>
             <Character ref={charRef} />

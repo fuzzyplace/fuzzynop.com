@@ -439,13 +439,32 @@ export const union = (bs: Box[]): Box => {
  * the pin, while the plate still moves). tall: taller than the viewport; it places each piece as
  * soon as its slot is in view while it scrolls in.
  */
-export type PinGeo = { s0: number; sheet: number; pinStart: number; pinEnd: number; ready: number[]; tall?: boolean };
+/** `share`: the part of the pin the assembly uses (0..1); the rest is a pause to read it, whole and still pinned. */
+export type PinGeo = { s0: number; sheet: number; pinStart: number; pinEnd: number; ready: number[]; tall?: boolean; share?: number };
+
+/**
+ * v2.11: the pin is two parts, assembly then a read pause (the plate stays pinned, whole, words
+ * still). Heights in svh, mirrored in global.css (.plate-spacer). The pause is what lets a reader
+ * finish the text before it scrolls on, without having to stop at just the right moment.
+ */
+export const PIN = {
+  phone: { asm: 30, read: 60 },
+  wide: { asm: 45, read: 65 },
+  tallPhone: { asm: 15, read: 45 },
+  tallWide: { asm: 22, read: 45 },
+} as const;
+export const WIDE = 840;
+/** The share of the pin that assembles (the rest is the read pause), for a viewport width and plate kind. */
+export function asmShare(vw: number, tall: boolean): number {
+  const k = tall ? (vw >= WIDE ? PIN.tallWide : PIN.tallPhone) : vw >= WIDE ? PIN.wide : PIN.phone;
+  return k.asm / (k.asm + k.read);
+}
 export type Keys = { s: number[]; t: number[] };
 
 /** Keyframes scroll ↔ time: the sheet lands at `sheet`, presses spread by their time over the pin (never before their slot is in view), done a little before the pin ends. */
 export function scrollKeys(p: Plan, g: PinGeo): Keys {
   const sheetT = p.landed + p.sheet.settle * 0.4;
-  const done = g.pinEnd - (g.pinEnd - g.pinStart) * 0.1;
+  const done = g.pinStart + (g.pinEnd - g.pinStart) * 0.9 * (g.share ?? 1);
   const s = [g.s0, Math.min(g.sheet, done)];
   const t = [0, sheetT];
   let ls = s[1];

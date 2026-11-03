@@ -1,7 +1,7 @@
 import { useReducedMotion } from './reducedMotion';
 import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
-import { armAt, follow, FOLLOW, rateFor, groupAt, groupLines, memberOffset, planAssembly, POST, puffAt, scrollKeys, sheetAt, snapBeat, timeAtScroll, union, type Box, type GroupIn, type Keys, type Plan } from './assembly';
+import { armAt, asmShare, follow, FOLLOW, rateFor, groupAt, groupLines, memberOffset, planAssembly, POST, puffAt, scrollKeys, sheetAt, snapBeat, timeAtScroll, union, type Box, type GroupIn, type Keys, type Plan } from './assembly';
 import { cutLayout, hashSeed, tornPath } from './cutout';
 import { MechArm, type ArmHandle } from './MechArm';
 import { clamp, type Pt } from './geometry';
@@ -472,7 +472,10 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
       const top$ = `${stick.toFixed(0)}px`;
       if (o && o.style.top !== top$) o.style.top = top$;
       // the id lands where the plate is assembled (short plates: the scroll ends at the pin's end) or at its top (tall ones)
-      setAttr(anchor.current, 'style', `top:${(stick >= TOP ? pinLen - stick + SCROLL_PAD : 0).toFixed(0)}px`);
+      // v2.11: a jump lands a little way into the read pause (whole, pinned, words still)
+      const share = asmShare(vw, stick < TOP);
+      const readAt = pinLen * (share + (1 - share) * 0.25);
+      setAttr(anchor.current, 'style', `top:${(stick >= TOP ? readAt - stick + SCROLL_PAD : 0).toFixed(0)}px`);
       landHash(id, anchor.current);
       // v2.9: a plate taller than the view places most of itself while it scrolls in: a shorter pin (global.css)
       setAttr(track.current, 'data-tall', stick < TOP ? '1' : null);
@@ -500,7 +503,7 @@ export function PrintedPlate({ id, side, tone = 'paper', perch = side === 'right
         const s0 = top - vh * START;
         const sheet = Math.min(Math.max(s0 + vh * 0.3, pinStart - vh * 0.1), top - vh * 0.4); // landed by the time its top is ~40% down
         const ready = r.groups.map((gr) => top + gr.box.y + gr.box.h - vh * READY);
-        keys.current = { k: scrollKeys(p, { s0, sheet, pinStart, pinEnd, ready, tall: stick < TOP }), key: geoKey };
+        keys.current = { k: scrollKeys(p, { s0, sheet, pinStart, pinEnd, ready, tall: stick < TOP, share }), key: geoKey };
       }
       const c = ctl.current;
       // a jump to this plate shows it whole where it lands (a tall plate's anchor is its top, mid-assembly);

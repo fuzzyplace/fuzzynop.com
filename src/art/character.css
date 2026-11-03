@@ -33,4 +33,10 @@
 /* v2.9: a soft fog patch behind him where he would be black on black (inside an ink plate, on the
    footer); the stage moves it with him and toggles its opacity */
 .char-fog { pointer-events: none; transition: opacity var(--md-sys-motion-duration-long2) var(--md-sys-motion-easing-standard); }
-.char-fog-stop { stop-color: var(--md-ref-gray-500); }
+.char-fog-stop { stop-color: var(--md-ref-gray-400); }
+/* his light lifts what's behind him (screen: no effect on white paper) and breathes, slowly */
+.char-light { mix-blend-mode: screen; }
+@media (prefers-reduced-motion: no-preference) {
+  .char-light { animation: char-light-breathe 6s var(--md-sys-motion-easing-standard) infinite alternate; }
+}
+@keyframes char-light-breathe { from { opacity: 0.8; } to { opacity: 1; } }
