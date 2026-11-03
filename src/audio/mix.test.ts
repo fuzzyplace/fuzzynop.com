@@ -1,10 +1,45 @@
 import { describe, expect, it } from 'vitest';
-import { CAPS, MAX_VOICES, PAN_WIDTH, RANGE, SOUND_NAMES, SOUNDS, VoicePool, panFor, spec, variation } from './mix';
+import { CAPS, MAX_VOICES, MOUTH_JITTER, MOUTHS, PAN_WIDTH, RANGE, SOUND_NAMES, SOUNDS, VoicePool, nextMouth, panFor, spec, variation } from './mix';
 
 describe('the palette', () => {
-  it('is only ticks: short, and nothing that lingers', () => {
-    expect(SOUND_NAMES.sort()).toEqual(['pick', 'tick', 'ui']);
-    for (const n of SOUND_NAMES) expect(SOUNDS[n].dur).toBeLessThanOrEqual(0.06);
+  it('is only pops: short, and nothing that lingers', () => {
+    expect([...SOUND_NAMES].sort()).toEqual(['pick', 'pop', 'ui']);
+    for (const n of SOUND_NAMES) expect(SOUNDS[n].dur).toBeLessThanOrEqual(0.15);
+  });
+  it('every mouth is low and round: settles between 200 and 450 Hz, rings under 1 kHz, gone in under 0.1 s', () => {
+    for (const m of MOUTHS) {
+      const hi = 1 + MOUTH_JITTER;
+      const lo = 1 - MOUTH_JITTER;
+      expect(m.f * lo).toBeGreaterThanOrEqual(200);
+      expect(m.f * hi).toBeLessThanOrEqual(450);
+      expect(m.body * hi).toBeLessThan(1000);
+      expect(m.d * hi).toBeLessThan(0.1);
+    }
+  });
+});
+
+describe('nextMouth', () => {
+  it('never takes the same mouth twice in a row, and uses them all', () => {
+    let last = -1;
+    const seen = new Set<number>();
+    for (let i = 0; i < 400; i++) {
+      const { i: k } = nextMouth(last);
+      expect(k).not.toBe(last);
+      seen.add(k);
+      last = k;
+    }
+    expect(seen.size).toBe(MOUTHS.length);
+  });
+  it('nudges each one within its jitter, and never the same twice', () => {
+    for (let i = 0; i < 300; i++) {
+      const { i: k, m } = nextMouth(i % MOUTHS.length);
+      const b = MOUTHS[k];
+      for (const key of ['f', 'body', 'q', 'd', 'click'] as const) expect(Math.abs(m[key] / b[key] - 1)).toBeLessThanOrEqual(MOUTH_JITTER + 1e-9);
+      expect(Math.abs((m.drop - 1) / (b.drop - 1) - 1)).toBeLessThanOrEqual(MOUTH_JITTER + 1e-9);
+    }
+    const a = nextMouth(0).m;
+    const b = nextMouth(0).m;
+    expect(a.f === b.f && a.body === b.body).toBe(false);
   });
 });
 
@@ -45,19 +80,20 @@ describe('panFor', () => {
 describe('VoicePool', () => {
   it('keeps the same sound apart by its gap', () => {
     const p = new VoicePool();
-    expect(p.admit('tick', 0)).not.toBeNull();
-    expect(p.admit('tick', spec('tick').gap / 2)).toBeNull();
-    expect(p.admit('tick', spec('tick').gap + 0.01)).not.toBeNull();
+    expect(p.admit('pop', 0)).not.toBeNull();
+    expect(p.admit('pop', spec('pop').gap / 2)).toBeNull();
+    expect(p.admit('pop', spec('pop').gap + 0.01)).not.toBeNull();
   });
   it('caps a layer, and only something more important gets in', () => {
     const p = new VoicePool();
-    expect(p.admit('tick', 0, 10)).not.toBeNull();
-    expect(p.admit('tick', 0.2, 10)).not.toBeNull();
-    expect(p.count('tick')).toBe(CAPS.tick);
-    expect(p.admit('tick', 0.4, 10)).toBeNull(); // same priority: dropped
-    const hit = p.admit('pick', 0.4, 10); // more important: evicts a tick
+    expect(p.admit('pop', 0, 10)).not.toBeNull();
+    expect(p.admit('pop', 0.2, 10)).not.toBeNull();
+    expect(p.admit('pop', 0.4, 10)).not.toBeNull();
+    expect(p.count('pop')).toBe(CAPS.pop);
+    expect(p.admit('pop', 0.6, 10)).toBeNull(); // same priority: dropped
+    const hit = p.admit('pick', 0.6, 10); // more important: evicts a pop
     expect(hit?.evict).not.toBeNull();
-    expect(p.count('tick')).toBe(CAPS.tick);
+    expect(p.count('pop')).toBe(CAPS.pop);
   });
   it('never more than the cap at once, and voices free up when they end', () => {
     const p = new VoicePool();
@@ -69,7 +105,7 @@ describe('VoicePool', () => {
   });
   it('ducks a newcomer more the busier it is', () => {
     const p = new VoicePool();
-    const a = p.admit('tick', 0, 5)!;
+    const a = p.admit('pop', 0, 5)!;
     const b = p.admit('ui', 0, 5)!;
     expect(a.duck).toBe(1);
     expect(b.duck).toBeLessThan(a.duck);

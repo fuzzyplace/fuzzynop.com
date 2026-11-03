@@ -1,12 +1,12 @@
 import { peekView } from '../art/ticker';
 import { sfx } from './bus';
-import { pickCue, plateCues, type Cue, type PlanLike } from './events';
-import { LAYER_GAIN, MASTER, panFor, ROOM, spec, variation, VoicePool, type Layer, type SoundName } from './mix';
+import { linesDone, pickCue, plateCues, writtenCue, type Cue, type PlanLike } from './events';
+import { FLOOR_HZ, LAYER_GAIN, MASTER, panFor, ROOM, spec, variation, VoicePool, type Layer, type SoundName } from './mix';
 import { makeNoise, makeRoom, RECIPES } from './synth';
 
 /**
  * The sound engine (its own chunk, loaded the first time sound starts). One AudioContext: voices →
- * per-layer gain → master (dry, plus a little room) → limiter → speakers. It takes over the bus
+ * per-layer gain → master (dry, plus a little room) → highpass floor → limiter → speakers. It takes over the bus
  * (`sfx`) while on, and suspends the context while off or while the page is hidden.
  */
 
@@ -28,7 +28,7 @@ export function getEngine(ac: AudioContext): Engine {
 
 function createEngine(ac: AudioContext): Engine {
   const noise = makeNoise(ac);
-  // master: a soft limiter keeps two ticks at once from ever getting loud
+  // master: a soft limiter keeps a few pops at once from ever getting loud; a floor under it cuts rumble
   const limiter = ac.createDynamicsCompressor();
   limiter.threshold.value = -20;
   limiter.knee.value = 6;
@@ -37,13 +37,17 @@ function createEngine(ac: AudioContext): Engine {
   limiter.release.value = 0.2;
   const master = ac.createGain();
   master.gain.value = MASTER;
-  master.connect(limiter).connect(ac.destination);
-  // the room: a short dark tail under the dry ticks
+  const floor = ac.createBiquadFilter();
+  floor.type = 'highpass';
+  floor.frequency.value = FLOOR_HZ;
+  floor.connect(limiter).connect(ac.destination);
+  master.connect(floor);
+  // the room: a short dark tail under the dry pops
   const room = ac.createConvolver();
   room.buffer = makeRoom(ac);
   const wet = ac.createGain();
   wet.gain.value = ROOM.wet;
-  room.connect(wet).connect(limiter);
+  room.connect(wet).connect(floor);
   master.connect(room);
   const layers = {} as Record<Layer, GainNode>;
   for (const l of Object.keys(LAYER_GAIN) as Layer[]) {
@@ -54,6 +58,7 @@ function createEngine(ac: AudioContext): Engine {
   const pool = new VoicePool();
   const vcas = new Map<number, GainNode>();
   let mode: string | null = null;
+  let lines: number | null = null;
   let on = false;
 
   const dev = import.meta.env.DEV;
@@ -107,6 +112,11 @@ function createEngine(ac: AudioContext): Engine {
       mode = m;
       if (c) cue(c, panFor(x, peekView().w || window.innerWidth));
     },
+    written(q: readonly number[]) {
+      const c = writtenCue(lines, q);
+      lines = linesDone(q);
+      if (c) cue(c, 0.15);
+    },
     plate(plan: object, t0: number, t1: number) {
       for (const c of plateCues(plan as PlanLike, t0, t1)) cue(c, 0);
     },
@@ -127,6 +137,7 @@ function createEngine(ac: AudioContext): Engine {
     } else {
       sfx.on = false;
       mode = null;
+      lines = null;
       void ac.suspend();
     }
   }

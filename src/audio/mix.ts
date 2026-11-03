@@ -1,20 +1,21 @@
 /**
  * The mix, pure (tested in mix.test.ts): the sound catalogue, how each play varies, where it sits in
- * the stereo field, and the voice cap that keeps it sparse. No Web Audio here.
+ * the stereo field, and the voice cap that keeps it from piling up. No Web Audio here.
  *
- * The palette is deliberately small: a tick when a piece of the page is placed, a catch when the
- * claw picks him up, and the toggle's own click. Nothing else he or the arms do makes a sound.
+ * One kind of sound: a soft, rounded mouth pop (a knock of the tongue, a lip pop), played whenever
+ * the arms put something on the page, a double one when the claw picks him up, and one for the
+ * toggle. No two pops are the same: each takes a different mouth shape from the last, jittered.
  */
 
-export type Layer = 'tick' | 'ui';
+export type Layer = 'pop' | 'ui';
 
 /** layer, min seconds between two plays of the same sound, priority (2 wins a full pool), length s */
 type Spec = { layer: Layer; gap: number; pri: 1 | 2; dur: number };
 
 export const SOUNDS = {
-  tick: { layer: 'tick', gap: 0.09, pri: 1, dur: 0.03 }, // a piece lands on its plate
-  pick: { layer: 'tick', gap: 0.4, pri: 2, dur: 0.05 }, // the claw closes on him
-  ui: { layer: 'ui', gap: 0.1, pri: 2, dur: 0.03 }, // sound turned on
+  pop: { layer: 'pop', gap: 0.045, pri: 1, dur: 0.1 }, // something is placed on the page
+  pick: { layer: 'pop', gap: 0.4, pri: 2, dur: 0.14 }, // the claw closes on him
+  ui: { layer: 'ui', gap: 0.1, pri: 2, dur: 0.1 }, // sound turned on
 } satisfies Record<string, Spec>;
 
 export type SoundName = keyof typeof SOUNDS;
@@ -22,11 +23,13 @@ export const SOUND_NAMES = Object.keys(SOUNDS) as SoundName[];
 export const spec = (n: SoundName): Spec => SOUNDS[n];
 
 /** Layer levels under the master (linear). */
-export const LAYER_GAIN: Record<Layer, number> = { tick: 0.5, ui: 0.4 };
+export const LAYER_GAIN: Record<Layer, number> = { pop: 0.6, ui: 0.45 };
 /** Master level into the limiter. */
-export const MASTER = 0.4;
-/** How much of each tick goes to the room (a short, dark tail: the page has air around it). */
-export const ROOM = { wet: 0.22, seconds: 0.9 };
+export const MASTER = 0.45;
+/** How much of each pop goes to the room (a short, dark tail: the page has air around it). */
+export const ROOM = { wet: 0.18, seconds: 0.8 };
+/** Nothing below this reaches the speakers (low rumble is what reads as the wrong kind of noise). */
+export const FLOOR_HZ = 150;
 
 export type Variation = {
   rate: number; // pitch multiplier
@@ -35,8 +38,8 @@ export type Variation = {
   bright: number; // filter cutoff multiplier
 };
 
-/** Ranges for one play: ±0.6 semitone, about ±1.5 dB, up to 8 ms late, ±10% brightness. */
-export const RANGE = { semis: 0.6, db: 1.5, delay: 0.008, bright: 0.1 };
+/** Ranges for one play: ±2 semitones, about ±2 dB, up to 12 ms late, ±20% brightness. */
+export const RANGE = { semis: 2, db: 2, delay: 0.012, bright: 0.2 };
 
 export function variation(rand: () => number = Math.random): Variation {
   const r = (span: number) => (rand() * 2 - 1) * span;
@@ -46,6 +49,33 @@ export function variation(rand: () => number = Math.random): Variation {
     delay: rand() * RANGE.delay,
     bright: 1 + r(RANGE.bright),
   };
+}
+
+/**
+ * A mouth shape for one pop. `f`: where the round tone settles (Hz); `drop`: it starts this many
+ * times higher and falls to `f` (under 1: it rises a little, like a bubble); `body`/`q`: the
+ * hollow the knock rings in; `d`: how long it lasts (s); `click`: how much tongue is in it.
+ */
+export type Mouth = { f: number; drop: number; body: number; q: number; d: number; click: number };
+
+/** Five mouths, roughly an o, an oo, an ah, a bubble and a cluck. All low and round. */
+export const MOUTHS: readonly Mouth[] = [
+  { f: 300, drop: 1.7, body: 640, q: 8, d: 0.07, click: 0.5 },
+  { f: 250, drop: 2, body: 520, q: 10, d: 0.08, click: 0.4 },
+  { f: 360, drop: 1.5, body: 820, q: 7, d: 0.06, click: 0.6 },
+  { f: 280, drop: 0.8, body: 600, q: 9, d: 0.07, click: 0.35 },
+  { f: 330, drop: 2.3, body: 720, q: 11, d: 0.055, click: 0.7 },
+];
+/** Each mouth is nudged this much (±, as a share) on every play. */
+export const MOUTH_JITTER = 0.14;
+
+/** The next mouth: any but the last one, nudged. */
+export function nextMouth(last: number, rand: () => number = Math.random): { i: number; m: Mouth } {
+  const n = MOUTHS.length;
+  const i = last >= 0 && last < n ? (last + 1 + Math.floor(rand() * (n - 1))) % n : Math.floor(rand() * n) % n;
+  const j = (x: number) => x * (1 + (rand() * 2 - 1) * MOUTH_JITTER);
+  const b = MOUTHS[i];
+  return { i, m: { f: j(b.f), drop: 1 + (b.drop - 1) * j(1), body: j(b.body), q: j(b.q), d: j(b.d), click: j(b.click) } };
 }
 
 /** Stereo position for a screen x: gentle, never hard left or right. */
@@ -61,8 +91,8 @@ export function panFor(x: number, w: number): number {
  * within its gap; a full pool only takes something more important, and drops the least important.
  * Each admitted voice comes with a duck: the busier the pool, the quieter the newcomer.
  */
-export const CAPS: Record<Layer, number> = { tick: 2, ui: 1 };
-export const MAX_VOICES = 3;
+export const CAPS: Record<Layer, number> = { pop: 3, ui: 1 };
+export const MAX_VOICES = 4;
 
 type Active = { id: number; name: SoundName; layer: Layer; pri: number; end: number };
 export type Admit = { id: number; duck: number; evict: number | null } | null;

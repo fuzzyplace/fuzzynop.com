@@ -8,7 +8,7 @@ import { SOUND_NAMES, spec, type Layer, type SoundName } from './mix';
  * anywhere, so Z can audition them on a preview. Not part of the page; English labels here
  * are dev tooling, not site copy.
  */
-const LAYERS: Layer[] = ['tick', 'ui'];
+const LAYERS: Layer[] = ['pop', 'ui'];
 
 export function Board() {
   const [pan, setPan] = useState(0);

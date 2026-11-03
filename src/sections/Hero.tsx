@@ -8,6 +8,7 @@ import { clamp, easeInOut, lerp, type Pt } from '../art/geometry';
 import { splitLine } from '../art/glyphs';
 import { measure, notifyLayout, peekView, setAttr, ticker, view } from '../art/ticker';
 import { useSize } from '../art/useSize';
+import { sfx } from '../audio/bus'; // ---- sfx hook ----
 
 /**
  * The arm writes the tagline line by line, then withdraws and idles.
@@ -77,6 +78,7 @@ export function Hero() {
       if (el && clips.current[i] !== c) el.style.clipPath = clips.current[i] = c;
     });
     setAttr(title.current, 'data-written', done ? '1' : null);
+    if (sfx.on) sfx.written(q); // ---- sfx hook ----
     if (!w) return;
 
     // arm geometry — the base rides the ceiling rail, trailing the tip, so reach stays modest

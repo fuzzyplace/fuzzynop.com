@@ -1,6 +1,6 @@
 # Sound (v2.10)
 
-Minimal and atmospheric: a quiet tick when a key piece of the page (a title, the CTA, the badges) is placed, a small catch when the claw picks him up, and nothing else. Every sound is a few milliseconds of high, filtered noise with a tiny pitched ping under it, sent into a short dark room tail so the page has some air around it. Nothing sits below about 2 kHz (the first pass had low thumps and noise bursts that read as the wrong kind of noise; they're gone). All synthesised with Web Audio; no samples, no assets, no CSP change. Every play varies a little (about ±0.6 semitone, ±1.5 dB, up to 8 ms late, ±10% brightness).
+One sound, in many shapes: a soft, rounded mouth pop, low and wide (a tongue knock, a lip pop), every time the arms put something on the page. Each pop is a sine that falls fast into a low note (200 to 450 Hz) plus a 3 ms tongue impulse ringing in a resonant "mouth" (a bandpass between about 450 Hz and 1 kHz), gone within a tenth of a second, with a little dark room behind it. There are five mouth shapes (roughly an o, an oo, an ah, a bubble that rises, a cluck); a pop never uses the same one as the last, every shape is nudged ±14% each time, and each play also varies ±2 semitones, ±2 dB, up to 12 ms late and ±20% in tone. So no two are alike. A highpass floor at 150 Hz keeps out the low rumble the first version had. All synthesised with Web Audio; no samples, no assets, no CSP change.
 
 ## Rules as built
 - **On by default.** Browsers allow no sound before a gesture, so it starts on the visitor's first press, tap or key (pointer, touch end or key; it keeps listening until the context is actually running, which iOS needs). Nothing plays before that, and the AudioContext isn't created before that.
@@ -12,29 +12,31 @@ Minimal and atmospheric: a quiet tick when a key piece of the page (a title, the
 - **One ticker:** the two hooks run inside existing ticker steps and are one property read (`sfx.on`) when off. No React state per frame.
 
 ## Mix
-Voices → layer gain (tick 0.5, ui 0.4) → master 0.4 → dry + room (generated 0.9 s dark tail, 22% wet) → limiter (-20 dB, 14:1) → speakers. At most 3 voices at once (2 ticks, 1 ui); the same sound never twice within its gap (tick 90 ms, pick 400 ms); a full pool drops a tick for a pick; a newcomer is ducked by `1/sqrt(1 + 0.5 × voices playing)`. Pan follows the piece or the character, never past ±0.5.
+Voices → layer gain (pop 0.6, ui 0.45) → master 0.45 → dry + room (generated 0.8 s dark tail, 18% wet) → highpass floor 150 Hz → limiter (-20 dB, 14:1) → speakers. At most 4 voices at once (3 pops, 1 ui); the same sound never twice within its gap (pop 45 ms, pick 400 ms); a full pool drops a pop for a pick; a newcomer is ducked by `1/sqrt(1 + 0.5 × voices playing)`. Pan follows the piece or the character, never past ±0.5.
 
 ## Every sound and its trigger
 | Sound | Trigger |
 |---|---|
-| tick | a key piece of a plate lands in its slot as you scroll: the carried ones (titles, the CTA, the badge row), 14 across the page. Body lines are placed in silence (44 of them; ticking each made the plates chatter). Forwards only: scrolling back up is silent. At most 2 per frame of a fast scroll; a jump (nav link) ticks once. |
-| pick | the claw closes on him after you press him (grabbed → carried). Letting go is silent. |
+| pop | anything the arms put on the page as you scroll: the sheet landing (lowest), each title, the CTA and the badge row (round and full), each body line (smaller, a little higher). 58 pieces across the page plus 5 sheets. Forwards only: scrolling back up is silent. At most 3 per frame of a fast scroll; a jump (nav link) pops once. |
+| pop | each line of the hero tagline as the arm finishes writing it (only if sound is already running: it's written before most people press anything). |
+| pick | the claw closes on him after you press him: two pops close together, the second smaller and higher. Letting go is silent. |
 | ui | the toggle turning sound on (so you know it worked). |
 
-Silent on purpose: his footsteps, breathing, actions, moods, teleports, letter play, the probes and pokes, the arms moving, the sheet landing, link clicks, the hero tagline (it's written before anyone has pressed anything, so it couldn't play anyway).
+Silent on purpose: his footsteps, breathing, actions, moods, teleports, letter play, the probes and pokes, the arms moving through the air, link clicks.
 
 ## Where it hooks in
 All sound code is in `src/audio/`. Existing files have one-line calls marked `// ---- sfx hook ----`:
 - `PuppeteerStage.tsx`: `draw()` passes his mode and screen x (`pickCue`).
 - `PrintedPlate.tsx`: the scroll clock, during playback only (`plateCues`; `assembly.ts` untouched).
+- `Hero.tsx`: `draw()` passes each tagline line's reveal (`writtenCue`).
 - `App.tsx`: mounts `<Sound />` in the header.
 
 ## Try it
-- Any page: press anywhere (sound starts), scroll the plates in, press and hold him.
+- Any page: press anywhere (sound starts), scroll the plates in, press and hold him. Reload and press straight away to hear the tagline lines.
 - Audition: add `?sfx=board` to a local or preview URL (not fuzzynop.com). Plays each sound, panned anywhere.
 - Dev builds: `window.__sfx` has `log` (what played and when) and `count`.
 
 ## Needs Z
-- Loudness of the ticks (`LAYER_GAIN`, `MASTER` in `mix.ts`), and how much room (`ROOM`).
+- Loudness (`LAYER_GAIN`, `MASTER` in `mix.ts`), how much room (`ROOM`), and the five mouth shapes (`MOUTHS`: note, fall, hollow, length, how much tongue).
 - The toggle's accessible name ("Sound" is a placeholder), and placement below 360px wide (hidden there now).
 - Whether on by default is final (browsers still hold it until the first gesture).

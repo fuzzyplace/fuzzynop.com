@@ -1,9 +1,10 @@
-import { ROOM, type SoundName, type Variation } from './mix';
+import { nextMouth, ROOM, type Mouth, type SoundName, type Variation } from './mix';
 
 /**
- * The sounds themselves, synthesised with Web Audio: very short high noise ticks with a small
- * pitched ping under each, nothing below about 2 kHz (low thumps read as the wrong kind of noise).
- * No samples. Each recipe builds its nodes into `out` (the voice's gain) starting at `t`.
+ * The sounds themselves, synthesised with Web Audio: a rounded mouth pop. A sine that falls fast
+ * into its note (the round part) and a tiny noise impulse ringing in a resonant bandpass (the
+ * tongue knocking in a hollow), both gone within a tenth of a second. No samples. Each recipe
+ * builds its nodes into `out` (the voice's gain) starting at `t`; every pop takes a new mouth.
  */
 
 export type Voice = { ac: BaseAudioContext; out: AudioNode; t: number; v: Variation; rate: number; noise: AudioBuffer };
@@ -34,53 +35,53 @@ export function makeRoom(ac: BaseAudioContext, seconds = ROOM.seconds): AudioBuf
 
 const EPS = 0.0001;
 
-/** A highpassed noise tick. */
-function tick(V: Voice, o: { at?: number; f: number; d: number; g: number }) {
+/** One pop in the given mouth, scaled by `g`. */
+function pop(V: Voice, m: Mouth, g: number, at = 0) {
   const { ac, out, v } = V;
-  const t = V.t + (o.at ?? 0);
+  const t = V.t + at;
+  const r = V.rate;
+  // the round part: falls (or rises a touch) into its note within the first third
+  const osc = ac.createOscillator();
+  osc.frequency.setValueAtTime(m.f * m.drop * r, t);
+  osc.frequency.exponentialRampToValueAtTime(m.f * r, t + m.d * 0.35);
+  const og = ac.createGain();
+  og.gain.setValueAtTime(EPS, t);
+  og.gain.linearRampToValueAtTime(0.32 * g, t + 0.002);
+  og.gain.exponentialRampToValueAtTime(EPS, t + m.d);
+  osc.connect(og).connect(out);
+  osc.start(t);
+  osc.stop(t + m.d + 0.02);
+  // the knock: a 3 ms tongue impulse ringing in the mouth's hollow
   const src = ac.createBufferSource();
   src.buffer = V.noise;
-  src.playbackRate.value = V.rate;
-  const f = ac.createBiquadFilter();
-  f.type = 'highpass';
-  f.frequency.value = o.f * v.bright;
-  const g = ac.createGain();
-  g.gain.setValueAtTime(EPS, t);
-  g.gain.linearRampToValueAtTime(o.g, t + 0.001);
-  g.gain.exponentialRampToValueAtTime(EPS, t + 0.001 + o.d);
-  src.connect(f).connect(g).connect(out);
-  src.start(t, Math.random() * 1.5, o.d + 0.02);
+  src.playbackRate.value = r;
+  const bp = ac.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = m.body * r * v.bright;
+  bp.Q.value = m.q;
+  const ng = ac.createGain();
+  ng.gain.setValueAtTime(EPS, t);
+  ng.gain.linearRampToValueAtTime(m.click * g * 2.2, t + 0.0008);
+  ng.gain.exponentialRampToValueAtTime(EPS, t + 0.003);
+  src.connect(ng).connect(bp).connect(out);
+  src.start(t, Math.random() * 1.5, 0.01);
 }
 
-/** A tiny sine ping that gives the tick a pitch. */
-function ping(V: Voice, o: { at?: number; f: number; d: number; g: number }) {
-  const { ac, out } = V;
-  const t = V.t + (o.at ?? 0);
-  const osc = ac.createOscillator();
-  osc.frequency.value = o.f * V.rate;
-  const g = ac.createGain();
-  g.gain.setValueAtTime(EPS, t);
-  g.gain.linearRampToValueAtTime(o.g, t + 0.002);
-  g.gain.exponentialRampToValueAtTime(EPS, t + 0.002 + o.d);
-  osc.connect(g).connect(out);
-  osc.start(t);
-  osc.stop(t + o.d + 0.03);
-}
+/** The last mouth used, so the next pop never repeats it. */
+let last = -1;
+const mouth = () => {
+  const n = nextMouth(last);
+  last = n.i;
+  return n.m;
+};
 
 export const RECIPES: Record<SoundName, (V: Voice) => void> = {
-  tick: (V) => {
-    tick(V, { f: 4500, d: 0.005, g: 0.18 });
-    ping(V, { f: 3100, d: 0.018, g: 0.02 });
-  },
+  pop: (V) => pop(V, mouth(), 1),
   pick: (V) => {
-    // the claw catching: two small ticks close together, the second a touch higher
-    tick(V, { f: 3500, d: 0.005, g: 0.16 });
-    ping(V, { f: 2300, d: 0.014, g: 0.018 });
-    tick(V, { at: 0.024, f: 5000, d: 0.004, g: 0.12 });
-    ping(V, { at: 0.024, f: 2900, d: 0.012, g: 0.014 });
+    // the claw catching him: two pops close together, the second smaller and a touch higher
+    pop(V, mouth(), 1);
+    const m = mouth();
+    pop(V, { ...m, f: m.f * 1.25, body: m.body * 1.15 }, 0.6, 0.04);
   },
-  ui: (V) => {
-    tick(V, { f: 4000, d: 0.004, g: 0.14 });
-    ping(V, { f: 2600, d: 0.01, g: 0.02 });
-  },
+  ui: (V) => pop(V, mouth(), 0.7),
 };
