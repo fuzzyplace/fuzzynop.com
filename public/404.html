@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Not found / FuzzyNop</title>
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#0A0A0A" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <style>
+      /* standalone page: values mirror src/styles/tokens.css (gray-990, gray-100, gray-400, gray-600, accent) */
+      :root {
+        --bg: #0A0A0A;
+        --ink: #F5F5F0;
+        --muted: #A6A6A2;
+        --line: #6E6E6A;
+        --accent: #FF6A13;
+        color-scheme: dark;
+      }
+      @font-face {
+        font-family: 'Share Tech Mono';
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url(/fonts/share-tech-mono-400-latin.woff2) format('woff2');
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Share Tech Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+        display: grid;
+        place-items: center;
+        padding: 16px;
+      }
+      main { text-align: center; max-width: 32rem; }
+      svg { display: block; margin: 0 auto 2rem; width: 72px; height: 80px; }
+      .code { margin: 0 0 0.5rem; font-size: 0.875rem; letter-spacing: 0.2em; color: var(--muted); }
+      h1 { margin: 0 0 2rem; font-size: 1.125rem; font-weight: 400; letter-spacing: 0.05em; }
+      a {
+        color: var(--ink);
+        text-decoration: none;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 2px;
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+      }
+      a:hover { border-bottom-color: var(--accent); }
+      a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 2px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <svg viewBox="0 0 72 80" aria-hidden="true">
+        <polygon points="2,40 19,10.6 53,10.6 70,40 53,69.4 19,69.4" fill="none" stroke="#F5F5F0" stroke-width="3" />
+      </svg>
+      <p class="code">404</p>
+      <h1>0x90 0x90 0x90 · nothing happened here</h1>
+      <a href="/">Back to fuzzynop.com</a>
+    </main>
+  </body>
+</html>
