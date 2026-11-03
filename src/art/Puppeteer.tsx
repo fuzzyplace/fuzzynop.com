@@ -11,8 +11,11 @@ export function Puppeteer() {
   const [Stage, setStage] = useState<ComponentType | null>(null);
   useEffect(() => {
     let live = true;
+    // v2.12: fetch the chunk straight away (in parallel with the first paint), mount it once idle,
+    // so he's on the page for the entrance even on a slow connection or device
+    const chunk = import('./PuppeteerStage');
     const off = whenIdle(() => {
-      import('./PuppeteerStage').then((m) => {
+      chunk.then((m) => {
         if (live) setStage(() => m.PuppeteerStage);
       });
     }, true);
