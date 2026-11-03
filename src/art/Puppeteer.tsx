@@ -7,21 +7,31 @@ import { whenIdle } from './ticker';
  * plates' deferred art), so it never competes with the hero for the first paint. Until then
  * nothing renders here (he isn't on the page yet; the claw brings him in as before).
  */
+/** ms after the first render by which he is mounted, idle or not. */
+const MOUNT_DEADLINE = 700;
+
 export function Puppeteer() {
   const [Stage, setStage] = useState<ComponentType | null>(null);
   useEffect(() => {
     let live = true;
-    // v2.12: fetch the chunk straight away (in parallel with the first paint), mount it once idle,
-    // so he's on the page for the entrance even on a slow connection or device
+    // v2.12: fetch the chunk straight away (in parallel with the first paint).
+    // v2.13: mount it when the main thread is idle OR after a hard deadline, whichever comes first: a busy
+    // page keeps producing short idle slices and could hold him off screen for seconds
     const chunk = import('./PuppeteerStage');
-    const off = whenIdle(() => {
+    let mounted = false;
+    const mount = () => {
+      if (mounted) return;
+      mounted = true;
       chunk.then((m) => {
         if (live) setStage(() => m.PuppeteerStage);
       });
-    }, true);
+    };
+    const off = whenIdle(mount, true);
+    const deadline = window.setTimeout(mount, MOUNT_DEADLINE);
     return () => {
       live = false;
       off();
+      window.clearTimeout(deadline);
     };
   }, []);
   return Stage ? <Stage /> : null;
