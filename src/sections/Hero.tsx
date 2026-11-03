@@ -178,9 +178,9 @@ export function Hero() {
         <Splatter size={200} seed={9} />
       </Depth>
 
-      <div className="shell relative z-10 pb-44 pt-40">
+      <div className="hero-copy shell relative z-10 pb-44 pt-40">
         <p className="type-label-medium text-gray-300">{hero.eyebrow}</p>
-        <h1 ref={title} aria-label={text.join(' ')} className="type-display-large mt-6 text-on-surface">
+        <h1 ref={title} aria-label={text.join(' ')} className="hero-title type-display-large mt-6 text-on-surface">
           {text.map((line, i) => (
             <span
               key={line}
