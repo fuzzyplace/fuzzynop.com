@@ -176,7 +176,6 @@ describe('links data', () => {
       'https://fuzzy.place',
       'https://suno.com/@fuzzymmm',
       'https://www.youtube.com/watch?v=E_Jd_RxyoEc',
-      'https://www.skool.com/the-fuzzy-place',
       'https://soundcloud.com/fuzzynop',
       'https://open.spotify.com/artist/2KxitG0vU3vl3JaMcovgqM',
       'https://www.mixcloud.com/FZZY/',

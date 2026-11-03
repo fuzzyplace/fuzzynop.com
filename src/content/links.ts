@@ -53,10 +53,9 @@ export const circuit: CircuitData = {
     { id: 'fuzzy-place', branch: 'make', label: 'The Fuzzy Place', href: 'https://fuzzy.place', status: 'live', order: 1, kind: 'art' },
     { id: 'suno', branch: 'make', label: 'Suno', href: 'https://suno.com/@fuzzymmm', status: 'live', order: 2, kind: 'sound' },
     { id: 'live-set', branch: 'make', label: 'Live set', href: 'https://www.youtube.com/watch?v=E_Jd_RxyoEc', status: 'live', order: 3, kind: 'sound' },
-    { id: 'crew', branch: 'make', label: 'The crew', href: 'https://www.skool.com/the-fuzzy-place', status: 'live', order: 4, kind: 'community' },
-    { id: 'soundcloud', branch: 'make', label: 'SoundCloud', href: 'https://soundcloud.com/fuzzynop', status: 'live', order: 5, kind: 'sound' },
-    { id: 'spotify', branch: 'make', label: 'Spotify', href: 'https://open.spotify.com/artist/2KxitG0vU3vl3JaMcovgqM', status: 'live', order: 6, kind: 'sound' },
-    { id: 'mixcloud', branch: 'make', label: 'Mixcloud', href: 'https://www.mixcloud.com/FZZY/', status: 'live', order: 7, kind: 'sound' },
+    { id: 'soundcloud', branch: 'make', label: 'SoundCloud', href: 'https://soundcloud.com/fuzzynop', status: 'live', order: 4, kind: 'sound' },
+    { id: 'spotify', branch: 'make', label: 'Spotify', href: 'https://open.spotify.com/artist/2KxitG0vU3vl3JaMcovgqM', status: 'live', order: 5, kind: 'sound' },
+    { id: 'mixcloud', branch: 'make', label: 'Mixcloud', href: 'https://www.mixcloud.com/FZZY/', status: 'live', order: 6, kind: 'sound' },
   ],
 };
 

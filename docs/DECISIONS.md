@@ -85,6 +85,11 @@
 - **Sound** (docs/SOUND.md): dark, organic, quiet palette with a faint fog bed; still on by default after the first press, toggle in the header, off remembered.
 - **Link tree:** Connect / Work / Play columns (stacked on phones), Suno added to Play after The Fuzzy Place.
 
+### v2.12 entrance (2026-11-03, Z: "a big entrance ... always appear when the page first loads ... the initial fun stunt on page load after the headline is printed")
+- **Big entrance:** on load (at the top, motion allowed) he drops in from above the page onto the hero ground, limbs loose, and lands hard (bigger squash, landing sound). Reduced motion: unchanged (no drop, no stunt).
+- **Title stunt every load:** the moment the headline is printed he goes up onto the letters and plays (intro program: desktop always walks the top row, letters sagging, and pokes one, plus one more; phones poke plus one more). Re-asked until it plays; scrolling away still ends it. Later stunts stay earned. Everything else about him unchanged.
+- **The crew** link removed from Play.
+
 ## Open assumptions — Z to confirm
 
 _v2.9 pass (2026-11-02): every tuning-only item is now resolved with its outcome. What is still unchecked **needs Z** (likeness, copy and links, design taste, launch details), apart from the v2.9 entry at the end, whose values are measured choices for Z to feel out._

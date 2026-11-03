@@ -162,12 +162,22 @@ const same = (a: Station, b: Station) => a.at === b.at && (a.at === 'ground' || 
  * he ends on the ground (after a hang) or wherever the last one left him (the stage's claw fetches
  * him). Always ends with a look back and a cleanup beat. An empty site gives glance + cleanup.
  */
-export function stuntProgram(seed: number, site: StuntSite, opts: { mobile?: boolean } = {}): StuntProgram {
+/**
+ * v2.12 `intro`: the entrance show on page load. It always climbs onto the letters and messes with
+ * them: desktop walks the top row (letters sag) and pokes one, plus one more; mobile pokes plus one more.
+ */
+export function stuntProgram(seed: number, site: StuntSite, opts: { mobile?: boolean; intro?: boolean } = {}): StuntProgram {
   const mobile = !!opts.mobile;
   const r = rng(seed);
   const pool = VARIATIONS.filter((v) => available(v, site) && (!mobile || MOBILE_OK.includes(v)));
-  const want = mobile ? 1 : r() < 0.55 ? 2 : 3;
+  const want = opts.intro ? (mobile ? 2 : 3) : mobile ? 1 : r() < 0.55 ? 2 : 3;
   const chosen: Variation[] = [];
+  if (opts.intro) {
+    for (const v of mobile ? (['poke'] as const) : (['walk', 'poke'] as const)) {
+      const i = pool.indexOf(v);
+      if (i >= 0) chosen.push(pool.splice(i, 1)[0]);
+    }
+  }
   while (chosen.length < want && pool.length) {
     const total = pool.reduce((a, v) => a + WEIGHT[v], 0);
     let x = r() * total;

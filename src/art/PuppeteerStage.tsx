@@ -231,6 +231,7 @@ type State = {
   ragW: number; // 0..1 blend of the ragdoll pose (eases out after he lands)
   hv: Pt; // smoothed screen velocity while held by hand, px/s
   fall: Fall | null;
+  entrance?: boolean; // v2.12: the first drop onto the page (a harder landing)
   route: Move[] | null; // his own way to another perch
   routeAt: { sy: number; from: number }; // the scroll his route was planned at, and the surface it starts on (pinned plates move with the scroll)
   leg: number;
@@ -1495,11 +1496,7 @@ export function PuppeteerStage() {
         watch: true,
         vanish: now - s.whimAt > WHIM_GAP * 1000,
       };
-      // v2.11: the intro. Once per page load, soon after he arrives on the hero ground and the title is
-      // written, he plays on it whatever his mood (he's showing off for a newcomer); later stunts are earned
-      const intro = introTries < 2 && s.stuntAt === -Infinity && s.idx === gi && gi >= 0 && fl !== 'shaken' && titleEl()?.getAttribute('data-written') === '1' && viewport().sy < 40;
-      if (intro) introTries++;
-      let a = forced ?? (intro ? 'stunt' : choose(s.needs, { band: fl, cursor: cur, quiet: (now - attnAt) / 1000, can }, s.did, Math.random));
+      let a = forced ?? choose(s.needs, { band: fl, cursor: cur, quiet: (now - attnAt) / 1000, can }, s.did, Math.random);
       let ok = false;
       switch (a) {
         case 'explore':
@@ -1556,7 +1553,12 @@ export function PuppeteerStage() {
       note(`want:${a}`, now);
     };
     const decisions: { t: number; a: Activity; at: string }[] = []; // dev: what he chose and when
-    let introTries = 0; // v2.11: the intro stunt, asked for at most twice per page load
+    /**
+     * v2.12: the entrance show. Once per page load, as soon as the headline is printed and he's on the
+     * hero ground, he plays on the title (an intro program: up onto the letters, messing with them),
+     * whatever his mood. Until it has played (and while the visitor is at the top) he stays put for it.
+     */
+    const introOwed = (s: State) => !reduce && s.stuntAt === -Infinity && viewport().sy < 40 && heroGround() >= 0;
     let forced: Activity | null = null; // dev: `__puppet.force`
     let forcedTrick: Trick | null = null;
 
@@ -1706,9 +1708,25 @@ export function PuppeteerStage() {
           reacts: [],
         };
         const s0 = st.current;
-        s0.char = { x: s0.char.x, y: -400 }; // not on screen yet: he turns up
-        if (!teleport(s0, now, { to: { i: i0, x: cache[i0].left + x0 }, why: 'enter' })) armIdle(now);
-        s0.hidden = false;
+        const v0 = viewport();
+        if (!reduce && i0 === heroGround() && v0.sy < 40) {
+          // v2.12: the big entrance. He drops in from above the page onto the hero ground, limbs loose,
+          // lands hard (squash, the landing sound), catches his breath, then plays on the title
+          const xd = cache[i0].left + x0;
+          const y0 = v0.sy - 160;
+          const y1 = cache[i0].top - FEET * scale;
+          s0.char = { x: xd - v0.sx, y: y0 - v0.sy };
+          s0.rd = createRagdoll(0.25);
+          primeRagdoll(s0.rd, collarOf(s0), { x: 0, y: 0 });
+          s0.fall = { x0: xd, y0, vx: 0, vy: 0, x1: xd, y1, T: Math.max(0.3, Math.sqrt((2 * Math.max(0, y1 - y0)) / GRAVITY)), to: i0 };
+          s0.m = { mode: 'falling', plan: null, since: now };
+          s0.hidden = false;
+          s0.entrance = true;
+        } else {
+          s0.char = { x: s0.char.x, y: -400 }; // not on screen yet: he turns up
+          if (!teleport(s0, now, { to: { i: i0, x: cache[i0].left + x0 }, why: 'enter' })) armIdle(now);
+          s0.hidden = false;
+        }
       }
       const s = st.current;
       sz = scale * s.k;
@@ -1778,6 +1796,10 @@ export function PuppeteerStage() {
         go(s, { type: 'vanish' }, now);
         s.tele = null;
         leaveNow(s, ps, now);
+      } else if (!s.stuntAsk && introOwed(s) && s.idx === heroGround() && mode() === 'idle' && titleEl()?.getAttribute('data-written') === '1') {
+        stunt.intro(); // v2.12: the headline is printed: the show starts (asked again until it plays)
+        s.stuntAsk = now;
+        wakeIn(0.05);
       } else if (!reduce && s.stuntAsk) {
         const gi = heroGround();
         const onGround = gi >= 0 && mode() === 'idle' && s.idx === gi;
@@ -1958,7 +1980,7 @@ export function PuppeteerStage() {
           wakeIn(SIT_REST - still);
         }
       }
-      if (mode() === 'idle' && s.idx >= 0 && !reduce && now >= s.idleAt && !s.walk.walking && !s.holdUntil && !s.act && !s.patting && s.stepGoal === null && !s.turnPending && !s.stuntAsk && !s.awaySince) {
+      if (mode() === 'idle' && s.idx >= 0 && !reduce && now >= s.idleAt && !s.walk.walking && !s.holdUntil && !s.act && !s.patting && s.stepGoal === null && !s.turnPending && !s.stuntAsk && !s.awaySince && !(introOwed(s) && s.idx === heroGround())) {
         if (cache[s.idx].spot) {
           // a one-off spot (done with the probe / the letters): on to somewhere proper
           teleport(s, now, { ps, why: 'done' });
@@ -2077,7 +2099,8 @@ export function PuppeteerStage() {
           ragdoll = true;
           if (u >= 1) {
             s.fall = null;
-            s.squash = 0.16;
+            s.squash = s.entrance ? 0.32 : 0.16;
+            s.entrance = false;
             if (f.to >= 0 && cache[f.to]) {
               play(s, 'land', now);
               s.idx = f.to;
