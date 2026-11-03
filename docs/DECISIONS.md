@@ -90,6 +90,14 @@
 - **Title stunt every load:** the moment the headline is printed he goes up onto the letters and plays (intro program: desktop always walks the top row, letters sagging, and pokes one, plus one more; phones poke plus one more). Re-asked until it plays; scrolling away still ends it. Later stunts stay earned. Everything else about him unchanged.
 - **The crew** link removed from Play.
 
+### v2.13 always visible (2026-11-03, Z: "fix the root cause to ensure he always appears")
+- **Root cause:** he could only stand on page elements, and while the reader was inside a tall plate that was pinned and still printing (its top edge under the header, its insides not yet whole) there was nowhere at all. Every fallback then set him hidden and the loop went to sleep with nothing scheduled to bring him back; a few paths also left a route playing unseen, or failed to start their own teleport.
+- **The screen floor:** a few places along the bottom of the view that ride with the scroll (`floors()` in `PuppeteerStage.tsx`). Used only when nowhere real will do (`chooseFloor` in `teleport.ts`, which picks the spot covering the least text); never walked to; he leaves it for somewhere real after 1.2 s as soon as there is somewhere. A drop with nothing below lands on it too. Phones use the smaller inside size there.
+- **Watchdog** (`watchdog.ts`): out of sight for no good reason for 1.2 s (not mid-teleport, not mid-fall, not in your hand, page not hidden) and he inks back in at the best place on screen. It schedules its own wake, so a sleeping loop can't strand him.
+- **Coming along after a scroll:** 0.4 to 0.85 s off screen before he follows (was 0.6 to 1.8 s); a surface scrolled clean past the top now counts as under the header (he goes at once).
+- **Measured** (60 runs, 5 viewports, live harness): on screen 97.5% of the time (was 81.6%); invisibility episodes over 1.5 s outside page load: 0 (was 136 over 1 s, worst 14 s). Reduced motion: no change in how he moves, and he is never left out of sight.
+- **Assumption for Z:** standing at the bottom edge of the screen (often in the side margin on desktop) is an acceptable place to wait while a plate prints. Tuning: `FLOOR_GAP`, `FLOOR_STAY`, `COME`, `WATCH_AFTER`.
+
 ## Open assumptions — Z to confirm
 
 _v2.9 pass (2026-11-02): every tuning-only item is now resolved with its outcome. What is still unchecked **needs Z** (likeness, copy and links, design taste, launch details), apart from the v2.9 entry at the end, whose values are measured choices for Z to feel out._
