@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chooseDest, hopDur, hopPhase, startHop, type Spot } from './teleport';
+import { chooseDest, chooseFloor, chooseReal, hopDur, hopPhase, startHop, type Spot } from './teleport';
 
 describe('hop timing', () => {
   it('runs out, a beat, in, done', () => {
@@ -60,5 +60,48 @@ describe('chooseDest', () => {
   });
   it('null when nothing is on screen', () => {
     expect(chooseDest([spots[3]], { focus: null, view, me: null, rand: r })).toBeNull();
+  });
+});
+
+describe('the screen floor (v2.13: he always has somewhere to be)', () => {
+  const view = { left: 0, right: 1440, top: 140, bottom: 892 };
+  const r = () => 0.5;
+  const floor: Spot[] = [
+    { id: 'floor:0#0', i: 10, x: 72, y: 886, inside: false, floor: true },
+    { id: 'floor:2#0', i: 12, x: 720, y: 886, inside: false, floor: true },
+    { id: 'floor:4#0', i: 14, x: 1368, y: 886, inside: false, floor: true },
+  ];
+  it('is never chosen while somewhere real will do', () => {
+    const real: Spot = { id: 'plate', i: 0, x: 600, y: 500, inside: false };
+    for (let i = 0; i < 20; i++) expect(chooseDest([...floor, real], { focus: { x: 300, y: 300 }, view, me: null, rand: Math.random })!.id).toBe('plate');
+    expect(chooseReal(floor, { focus: null, view, me: null, rand: r })).toBeNull();
+  });
+  it('is chosen when nothing real is on screen', () => {
+    const off: Spot = { id: 'below', i: 1, x: 600, y: 1600, inside: false };
+    expect(chooseDest([off, ...floor], { focus: null, view, me: null, rand: r })?.floor).toBe(true);
+  });
+  it('is chosen even when every real spot is ruled out (under the pointer, scrolling out of view)', () => {
+    const under: Spot = { id: 'under', i: 2, x: 600, y: 500, inside: false };
+    const leaving: Spot = { id: 'leaving', i: 3, x: 900, y: 300, inside: false, stay: 0.05 };
+    const d = chooseDest([under, leaving, ...floor], { focus: { x: 600, y: 500 }, view, me: null, rand: Math.random });
+    expect(d?.floor).toBe(true);
+  });
+  it('ignores the pointer and the scroll for the floor itself', () => {
+    const one: Spot[] = [{ ...floor[1], stay: 0 }];
+    expect(chooseDest(one, { focus: { x: 720, y: 880 }, view, me: null, rand: r, drift: { dir: 1, px: 400 } })?.id).toBe('floor:2#0');
+  });
+  it('prefers the floor spot that covers the least reading', () => {
+    const cover = (s: Spot) => (s.id === 'floor:4#0' ? 0 : 0.7);
+    for (let i = 0; i < 20; i++) expect(chooseFloor(floor, { focus: null, view, me: null, rand: Math.random, cover })!.id).toBe('floor:4#0');
+  });
+  it('then one away from your attention', () => {
+    expect(chooseFloor(floor, { focus: { x: 80, y: 860 }, view, me: null, rand: r })!.id).toBe('floor:4#0');
+  });
+  it('somewhere other than where he is, unless it is the only one', () => {
+    expect(chooseFloor(floor, { focus: { x: 1368, y: 700 }, view, me: { x: 72, y: 886 }, rand: r })!.id).not.toBe('floor:0#0');
+    expect(chooseFloor([floor[0]], { focus: null, view, me: { x: 72, y: 886 }, rand: r })!.id).toBe('floor:0#0');
+  });
+  it('null only when there is no floor either', () => {
+    expect(chooseDest([], { focus: null, view, me: null, rand: r })).toBeNull();
   });
 });

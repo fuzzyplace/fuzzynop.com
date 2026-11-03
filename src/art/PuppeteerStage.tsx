@@ -13,7 +13,8 @@ import { PRESS, afoot, free, held, initial, own, transition, type Ev, type Machi
 import { START as NEEDS0, WHIM_GAP, choose, grow, nextIn, satisfy, type Activity, type Cursor as BrainCursor, type Needs } from './desires';
 import { INSIDE, freeSpaces, type Rect as Box } from './interior';
 import { canTrick, endLetters as endLettersOf, lettersAt, meAt, planTrick, TRICKS, type LBox, type LetterProgram, type Trick } from './letterPlay';
-import { chooseDest, hopPhase, IN, OUT, STAY_FULL, startHop, type Hop, type Spot } from './teleport';
+import { chooseDest, chooseReal, hopDur, hopPhase, IN, OUT, STAY_FULL, startHop, type DestOpts, type Hop, type Spot } from './teleport';
+import { WATCH_AFTER, overdue, unseen } from './watchdog';
 import { measureTitle, resetGlyphs, setGlyph, titleEl, titleMap } from './targets';
 import { createRagdoll, primeRagdoll, stepRagdoll, type RagPose, type Ragdoll } from './ragdoll';
 import { onLayout, setAttr, ticker, view as viewport } from './ticker';
@@ -115,7 +116,9 @@ const SWAT = 0.42; // s per swat
 const DWELL = 0.7; // s the pointer rests over another plate before he sets off for it
 const GRAB_HAND = 0.22; // s: the claw drops in and closes on him when you press
 const CLAW_UP = 0.55; // s: after it lets go, the claw goes back up out of sight
-const COME: [number, number] = [0.6, 1.8]; // (v2.9, was 0.9-2.6) s off screen before he comes along (strong company need → the short end)
+const COME: [number, number] = [0.4, 0.85]; // (v2.13, was 0.6-1.8) s off screen before he comes along (strong company need → the short end): never much more than a second
+const FLOOR_GAP = 14; // px from the bottom of the view to his feet on the screen floor (v2.13: the place he can always be)
+const FLOOR_STAY = 1.2; // s on the screen floor before he goes somewhere real (if there is somewhere)
 const RUN = 2.6; // running vs. his walking pace (catching up)
 const RUN_MAX = 2.8; // s: a catch-up run longer than this and he teleports instead
 const NEAR_HIM = 220; // px: the pointer this close and his own whims stop (he attends to you)
@@ -280,7 +283,9 @@ type State = {
   afterStep: ((now: number) => void) | null;
   slowUntil: number; // following at a careful pace until then
   greetAt: number; // arrived somewhere new: greet the visitor then (0 = no)
-  hidden: boolean; // nowhere on screen to be: out of sight until there is
+  hidden: boolean; // out of sight (v2.13: only for a moment: the screen floor is always somewhere to be)
+  floorTry: number; // ms he last tried to leave the screen floor for somewhere real
+  lostAt: number; // ms he went out of sight for no good reason (watchdog.ts; 0: he's seen)
   run: boolean; // his current route is a run (catching up)
   lwalk: boolean; // stepping during letter play
   pending: { poi: Poi; route: Move[]; sy: number } | null; // where he's going once he's had a look (a glance first); `sy`: the scroll it was planned at
@@ -313,7 +318,10 @@ type Perch = {
   pin: Pin | null; // on a sticky plate: its document top follows the scroll while it's pinned
   top0: number; // `top` as measured (pin.t0 is the plate's document top then)
   dark: boolean; // he'd stand against black here (inside an ink plate, on the footer): a fog patch behind him
+  floor: boolean; // v2.13: the screen floor (rides the bottom of the view; never walked to, left as soon as there's somewhere real)
 };
+/** Somewhere reached by ink only, never part of a walking route: a nook, a spot, the screen floor. */
+const walkless = (c: Perch) => c.nook || c.floor;
 /** Standing here he's black on black: inside an ink plate, or on the footer. */
 const darkAt = (el: HTMLElement, inside: boolean) => !!el.closest('footer') || (inside && !!el.querySelector('.plate-face.plate-ink'));
 /**
@@ -345,6 +353,7 @@ export function PuppeteerStage() {
   const armRef = useRef<ArmHandle>(null);
   const tiltRef = useRef<SVGGElement>(null);
   const hideRef = useRef<SVGGElement>(null);
+  const floorRef = useRef<HTMLDivElement>(null);
   const fogRef = useRef<SVGEllipseElement>(null);
   const armWrap = useRef<SVGGElement>(null);
   const lineRef = useRef<TrustLineHandle>(null);
@@ -411,6 +420,55 @@ export function PuppeteerStage() {
       for (const c of cache) if (c.pin) c.top = c.top0 + (pinTop(c.pin, sy) - c.pin.t0);
     };
     let docEnd = Infinity; // the furthest the page scrolls (document px), as of the last measure
+    // ---- v2.13: the screen floor ----
+    // Somewhere he can always be: a few places along the bottom of the view, kept there whatever the
+    // scroll (a sticky surface that never un-sticks, so ridePins, stayOn and the teleport ride all
+    // just work). Only ever a fallback: chosen when nowhere real will do, and left as soon as
+    // somewhere real turns up (FLOOR_STAY). Which of them: the one covering the least reading.
+    const floorK = vp.w >= 840 ? 1 : INSIDE; // smaller on a phone: he covers less
+    let safeB = 0; // px of the device's bottom safe area (measured off the floor element)
+    const floorY = () => vh() - FLOOR_GAP - safeB; // viewport px of his feet on the floor
+    const floors = (sx: number, sy: number): Perch[] => {
+      const el = floorRef.current;
+      if (!el) return [];
+      safeB = parseFloat(getComputedStyle(el).paddingBottom) || 0;
+      let k = floorK;
+      if (floorY() < headroomK(k)) k = INSIDE;
+      if (floorY() < headroomK(k)) return []; // a view barely taller than the header: nowhere at all
+      const half = 15 * scale * k;
+      const xs = [44 + half, vp.w * 0.25, vp.w * 0.5, vp.w * 0.75, vp.w - 44 - half].filter((x, n, a) => x >= 44 + half && x <= vp.w - 44 - half && a.findIndex((y) => Math.abs(y - x) < 2 * half) === n);
+      const y = floorY();
+      return xs.map((x, n) => ({ el, id: `floor:${n}`, left: sx + x, top: sy + y, width: 0, height: 0, f: 0, ext: { lo: 0, hi: 0 }, ledge: false, k, nook: false, spot: false, host: -1, wall: 0 as const, lie: false, title: false, pin: { stick: y, lo: -1e9, hi: 1e9, t0: sy + y }, top0: sy + y, dark: false, floor: true }));
+    };
+    /** The view's height can change without a re-measure (a phone's address bar): the floor follows it. */
+    const keepFloor = () => {
+      const y = floorY();
+      for (const c of cache) if (c.floor && c.pin && c.pin.stick !== y) c.pin.stick = y;
+    };
+    /** How much reading he'd cover standing at a floor spot, 0..1 (layout reads: only when a floor is being chosen). */
+    const isText = (el: Element | null) => !!el && !!el.closest('p, h1, h2, h3, h4, h5, li, a, button, dt, dd, blockquote, figcaption, label, time, code, pre, input, textarea, [data-poke]');
+    const floorCover = (q: Spot): number => {
+      const c = cache[q.i];
+      if (!c?.floor) return 0;
+      const { sx, sy } = viewport();
+      const x = q.x - sx;
+      const feet = q.y - sy;
+      const k = scale * c.k;
+      let hit = 0;
+      let n = 0;
+      for (const dx of [-11, 0, 11])
+        for (const dy of [4, 20, 38, 56]) {
+          n++;
+          if (isText(document.elementFromPoint(x + dx * k, feet - dy * k))) hit++;
+        }
+      return hit / n;
+    };
+    /** Black under him on the floor here (the footer, an ink plate): his light comes up fuller. */
+    const floorDark = (c: Perch, x: number) => {
+      const { sx, sy } = viewport();
+      const el = document.elementFromPoint(x - sx, c.top - sy - 20 * scale * c.k);
+      return !!el && (!!el.closest('footer') || !!el.closest('.plate-ink'));
+    };
     const measure = () => {
       const { sx, sy } = viewport();
       docEnd = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
@@ -440,7 +498,7 @@ export function PuppeteerStage() {
         const f = parseFloat(el.dataset.perch ?? '0.5');
         const half = parseFloat(el.dataset.perchSpan ?? '');
         const ext = perchExtent(r.width, MARGIN, half > 0 ? { center: r.width * f, half } : undefined);
-        return { el, id: el.id || `p${i}`, left: r.left + sx, top: r.top + sy, width: r.width, height: r.height, f, ext, ledge: el.dataset.ledge !== undefined, k: 1, nook: false, spot: false, host: -1, wall: 0, lie: false, title: false, pin: pinOf(el), top0: r.top + sy, dark: darkAt(el, false) };
+        return { el, id: el.id || `p${i}`, left: r.left + sx, top: r.top + sy, width: r.width, height: r.height, f, ext, ledge: el.dataset.ledge !== undefined, k: 1, nook: false, spot: false, host: -1, wall: 0, lie: false, title: false, pin: pinOf(el), top0: r.top + sy, dark: darkAt(el, false), floor: false };
       });
       // the free space inside each assembled plate (v2.9: ink plates too; a fog patch behind him there keeps his silhouette readable)
       const nooks: Perch[] = [];
@@ -458,7 +516,7 @@ export function PuppeteerStage() {
         found.forEach((m, j) => {
           const n = { ...m, left: m.left + plate.left, right: m.right + plate.left, y: m.y + plate.top };
           const width = n.right - n.left;
-          nooks.push({ el: c.el, id: `${c.id}:n${Math.round(m.left)}:${Math.round(m.y)}`, left: n.left, top: n.y, width, height: 0, f: 0.5, ext: { lo: 0, hi: width }, ledge: false, k: kIn, nook: true, spot: false, host: i, wall: n.wall, lie: n.lie, title: n.title, pin: c.pin, top0: n.y, dark });
+          nooks.push({ el: c.el, id: `${c.id}:n${Math.round(m.left)}:${Math.round(m.y)}`, left: n.left, top: n.y, width, height: 0, f: 0.5, ext: { lo: 0, hi: width }, ledge: false, k: kIn, nook: true, spot: false, host: i, wall: n.wall, lie: n.lie, title: n.title, pin: c.pin, top0: n.y, dark, floor: false });
           void j;
         });
       });
@@ -468,7 +526,7 @@ export function PuppeteerStage() {
         q.pin = pinOf(q.el);
         q.top0 = q.top; // a fresh pin's t0 is where it is now
       }
-      cache = [...base, ...nooks, ...spots];
+      cache = [...base, ...nooks, ...spots, ...floors(sx, sy)];
       if (!s) return;
       // keep him on the same surface (by id), or the nearest nook in the same plate
       let i = cache.findIndex((c) => c.id === s.pid);
@@ -485,6 +543,7 @@ export function PuppeteerStage() {
         });
       }
       if (s.idx >= 0 || s.tele) s.idx = i;
+      if (s.m.mode === 'falling' && s.fall && s.fall.to >= 0) s.fall.to = i; // the fall lands where he's headed (idx), as re-measured
       // the surface he stands on resized (window resize, late layout): keep his place on it proportionally
       const now = s.idx >= 0 ? cache[s.idx] : undefined;
       if (now) {
@@ -498,7 +557,7 @@ export function PuppeteerStage() {
       const id = `spot:${Math.round(x)}:${Math.round(y)}`;
       const pin = cache.find((c) => c.el === el && c.pin)?.pin ?? null;
       const top0 = pin ? y - (pinTop(pin, viewport().sy) - pin.t0) : y;
-      spots = [...spots.filter((q) => q.id !== id && (st.current?.pid === q.id || st.current?.tele?.to?.id === q.id)), { el, id, left: x, top: y, width: 0, height: 0, f: 0, ext: { lo: 0, hi: 0 }, ledge: false, k, nook: true, spot: true, host: -1, wall: 0, lie: false, title: false, pin, top0, dark: darkAt(el, true) }];
+      spots = [...spots.filter((q) => q.id !== id && (st.current?.pid === q.id || st.current?.tele?.to?.id === q.id)), { el, id, left: x, top: y, width: 0, height: 0, f: 0, ext: { lo: 0, hi: 0 }, ledge: false, k, nook: true, spot: true, host: -1, wall: 0, lie: false, title: false, pin, top0, dark: darkAt(el, true), floor: false }];
       measure();
       return id;
     };
@@ -516,7 +575,7 @@ export function PuppeteerStage() {
     // walking routes are between real surfaces only: nooks and spots are reached by teleport
     const surfaces = (ok: boolean[]): Surface[] =>
       cache.map((c, i) =>
-        ok[i] && !c.nook ? { left: c.left + c.ext.lo, right: c.left + c.ext.hi, y: c.top, bottom: c.top + c.height, x0: c.left, x1: c.left + c.width } : { left: Infinity, right: -Infinity, y: Infinity },
+        ok[i] && !walkless(c) ? { left: c.left + c.ext.lo, right: c.left + c.ext.hi, y: c.top, bottom: c.top + c.height, x0: c.left, x1: c.left + c.width } : { left: Infinity, right: -Infinity, y: Infinity },
       );
 
     // ---- stunt hook: the title stunt (stuntDriver.ts), when he feels like showing off ----
@@ -704,13 +763,16 @@ export function PuppeteerStage() {
     const startFall = (s: State) => {
       const { sx, sy } = viewport();
       const feet = s.char.y + FEET * sz;
-      const vis = cache
+      const all = cache
         .map((c, i) => ({ c, i, top: c.top - sy, l: c.left - sx + c.ext.lo, r: c.left - sx + c.ext.hi }))
-        .filter((q) => !q.c.nook && edgeOk(q.c.el) && q.top >= headroomK(1) && q.top < vh());
+        .filter((q) => !q.c.nook && edgeOk(q.c.el) && q.top >= headroomK(q.c.k) && q.top < vh());
+      const vis = all.filter((q) => !q.c.floor);
+      // v2.13: nothing real to land on? the screen floor catches him (he never drops out of the page)
+      const floorPick = all.filter((q) => q.c.floor).sort((a, b) => Math.abs(a.l - s.char.x) - Math.abs(b.l - s.char.x))[0];
       const below = vis.filter((q) => q.top >= feet - 4);
       const under = below.filter((q) => s.char.x >= q.l - 20 && s.char.x <= q.r + 20).sort((a, b) => a.top - b.top)[0];
       const off = (q: (typeof vis)[number]) => Math.max(0, q.l - s.char.x, s.char.x - q.r);
-      const pick = under ?? below.sort((a, b) => off(a) + 0.3 * (a.top - feet) - (off(b) + 0.3 * (b.top - feet)))[0] ?? vis.sort((a, b) => off(a) - off(b))[0];
+      const pick = under ?? below.sort((a, b) => off(a) + 0.3 * (a.top - feet) - (off(b) + 0.3 * (b.top - feet)))[0] ?? vis.sort((a, b) => off(a) - off(b))[0] ?? floorPick;
       const x0 = s.char.x + sx;
       const y0 = s.char.y + sy;
       const vx = clamp(s.hv.x, -900, 900);
@@ -769,7 +831,7 @@ export function PuppeteerStage() {
         // a couple of places along it
         const xs = b - a > 160 ? [a + (b - a) * 0.25, a + (b - a) * 0.75] : [(a + b) / 2];
         const stay = v > 20 ? stayOn(c, v, lead) : undefined;
-        xs.forEach((x, n) => out.push({ id: `${c.id}#${n}`, i, x, y: c.top, inside: c.nook, stay }));
+        xs.forEach((x, n) => out.push({ id: `${c.id}#${n}`, i, x, y: c.top, inside: c.nook, stay, floor: c.floor || undefined }));
       });
       return out;
     };
@@ -779,11 +841,15 @@ export function PuppeteerStage() {
       return v ? { x: v.x + sx, y: v.y + sy } : null;
     };
     let recentDest: string[] = [];
+    const destOpts = (me: Pt | null, prefer?: 'inside' | 'outside'): DestOpts => {
+      const { sx, sy } = viewport();
+      return { focus: focusDoc(), view: { left: sx, right: sx + vp.w, top: sy + HEADER + CLEAR, bottom: sy + vh() - 8 }, me, recent: recentDest, prefer, rand: Math.random, drift: drift(), cover: floorCover };
+    };
     /**
      * Run off into ink and gather himself at `to` (perch index + document x), or wherever is best near
      * your attention when `to` is null. `then` runs once he's re-formed (and shaken himself off).
      */
-    const teleport = (s: State, now: number, o: { to?: { i: number; x: number } | null; ps?: Seen[]; prefer?: 'inside' | 'outside'; only?: (c: Perch) => boolean; poi?: Poi | null; then?: ((now: number) => void) | null; greet?: boolean; nowhere?: boolean; why: string }): boolean => {
+    const teleport = (s: State, now: number, o: { to?: { i: number; x: number } | null; ps?: Seen[]; prefer?: 'inside' | 'outside'; only?: (c: Perch) => boolean; poi?: Poi | null; then?: ((now: number) => void) | null; greet?: boolean; nowhere?: boolean; fallback?: boolean; why: string }): boolean => {
       let to = o.to ?? null;
       const seen = !s.hidden && s.char.y > HEADER && s.char.y < vh() + 40 && s.char.x > -40 && s.char.x < vp.w + 40 && s.m.mode !== 'falling';
       const quick = scrollSpeed() > QUICK_SCROLL; // the page is on the move: he gathers sooner (or the scroll takes the spot first)
@@ -791,7 +857,8 @@ export function PuppeteerStage() {
         const { sx, sy } = viewport();
         const me = s.idx >= 0 && !s.hidden ? { x: s.char.x + sx, y: s.char.y + sy + FEET * sz } : null;
         const lead = (seen && o.why !== 'header' ? OUT : 0) + (quick ? QUICK_GAP + IN * QUICK_IN : 0.3 + IN);
-        const d = chooseDest(destSpots(o.ps, o.only, lead), { focus: focusDoc(), view: { left: sx, right: sx + vp.w, top: sy + HEADER + CLEAR, bottom: sy + vh() - 8 }, me, recent: recentDest, prefer: o.prefer, rand: Math.random, drift: drift() });
+        // v2.13: somewhere real if there is; else the screen floor (unless it's only a whim: then he stays put)
+        const d = (o.fallback === false ? chooseReal : chooseDest)(destSpots(o.ps, o.only, lead), destOpts(me, o.prefer));
         if (d) {
           to = { i: d.i, x: d.x };
           recentDest = [d.id, ...recentDest].slice(0, 4);
@@ -966,7 +1033,7 @@ export function PuppeteerStage() {
       const view = { left: sx, right: sx + vp.w, top: sy, bottom: sy + vh() };
       // he only wanders onto surfaces with room for all of him below the header (`visible`)
       const surfaces = cache.map((c, i): SceneSurface | null =>
-        ps[i].ok && ps[i].visible && !c.nook
+        ps[i].ok && ps[i].visible && !walkless(c)
           ? { left: c.left + c.ext.lo, right: c.left + c.ext.hi, y: c.top, bottom: c.top + c.height, x0: c.left, x1: c.left + c.width, ledge: c.ledge, plate: c.el.dataset.printed !== undefined }
           : null,
       );
@@ -1140,7 +1207,7 @@ export function PuppeteerStage() {
         const s = st.current!;
         const sx = viewport().sx;
         const ok = cache.map((_, j) => (!!ps[j]?.ok && !!ps[j]?.visible) || j === s.idx);
-        if (!ok[i] || s.idx < 0 || cache[s.idx].nook || cache[i].nook) return null;
+        if (!ok[i] || s.idx < 0 || walkless(cache[s.idx]) || walkless(cache[i])) return null;
         const S = surfaces(ok);
         const r = planRoute(S, { s: s.idx, x: cache[s.idx].left + s.walk.x }, { s: i, x: clamp(x, S[i].left, S[i].right) }, limX);
         return r && r.every((m) => m.to.x >= sx + 40 && m.to.x <= sx + vp.w - 40) ? r : null;
@@ -1157,7 +1224,7 @@ export function PuppeteerStage() {
       teleportTo: (dest, poi, now) => {
         const s = st.current!;
         if ('spot' in dest) {
-          const host = cache.find((c) => !c.nook && c.left <= dest.spot.x && c.left + c.width >= dest.spot.x && c.top <= dest.spot.y && c.top + c.height >= dest.spot.y);
+          const host = cache.find((c) => !walkless(c) && c.left <= dest.spot.x && c.left + c.width >= dest.spot.x && c.top <= dest.spot.y && c.top + c.height >= dest.spot.y);
           const id = addSpot(dest.spot.x, dest.spot.y, kIn, host?.el ?? document.body);
           const i = cache.findIndex((c) => c.id === id);
           return i >= 0 && teleport(s, now, { to: { i, x: dest.spot.x }, poi: { ...poi, s: i }, why: 'probe' });
@@ -1165,7 +1232,7 @@ export function PuppeteerStage() {
         return teleport(s, now, { to: dest, poi, why: 'probe' });
       },
       pinTop: (el) => {
-        const c = cache.find((q) => q.pin && !q.nook && q.el.contains(el));
+        const c = cache.find((q) => q.pin && !walkless(q) && q.el.contains(el));
         return c?.pin ? pinTop(c.pin, viewport().sy) : null;
       },
     });
@@ -1386,16 +1453,38 @@ export function PuppeteerStage() {
     const limRun = { ...lim, speed: lim.speed * RUN };
     /** The surface under him is going away (or he's nowhere): off it at once, never floating. */
     const leaveNow = (s: State, ps: Seen[], now: number) => {
-      if (s.idx >= 0 && cache[s.idx] && !cache[s.idx].nook && ps[s.idx]?.visible && afoot(s.m.mode) && s.m.mode !== 'hopping' && runTo(s, ps, now, 1.6)) return note('hop-off', now);
+      if (s.idx >= 0 && cache[s.idx] && !walkless(cache[s.idx]) && ps[s.idx]?.visible && afoot(s.m.mode) && s.m.mode !== 'hopping' && runTo(s, ps, now, 1.6)) return note('hop-off', now);
       if (teleport(s, now, { ps, nowhere: s.idx >= 0, why: s.idx < 0 ? 'nowhere' : 'plate-gone' })) return;
-      // nowhere on screen to be: he keeps out of sight until there is
+      outOfSight(s, now);
+    };
+    /**
+     * Nowhere on screen at all (not even the screen floor: a view barely taller than the header). Out
+     * of sight for now, as a clean idle (no route left playing unseen), trying again shortly.
+     */
+    let lostCount = 0; // dev: times he had to go out of sight with the page visible (should stay 0)
+    const outOfSight = (s: State, now: number) => {
+      if (!document.hidden) lostCount++;
+      note('out-of-sight', now);
+      const md = s.m.mode;
+      s.route = null;
+      s.goal = null;
+      if (md === 'stunt') {
+        stunt.stop();
+        go(s, { type: 'done' }, now);
+      } else if (md === 'hopping' || md === 'falling') go(s, { type: 'arrived' }, now);
+      else if (own(md)) go(s, { type: 'attend' }, now);
+      else if (md === 'walking') go(s, { type: 'stop' }, now);
+      else if (md === 'swatting') go(s, { type: 'clear' }, now);
+      s.fall = null;
       s.hidden = true;
       s.idx = -1;
       s.pid = '';
+      wakeIn(0.4);
     };
     /** A quick run (walk / jump / climb / drop) onto a surface on screen near your attention. */
     const runTo = (s: State, ps: Seen[], now: number, max = RUN_MAX): boolean => {
-      if (s.idx < 0 || cache[s.idx].nook) return false;
+      // (only from where a route can start: setting one up from any other mode would leave it half-made)
+      if (s.idx < 0 || walkless(cache[s.idx]) || (s.m.mode !== 'idle' && s.m.mode !== 'walking')) return false;
       const { sx, sy } = viewport();
       const f = focusDoc() ?? { x: sx + vp.w / 2, y: sy + vh() / 2 };
       const ok = cache.map((_, j) => (!!ps[j]?.ok && !!ps[j]?.visible && !!ps[j]?.onX) || j === s.idx);
@@ -1403,7 +1492,7 @@ export function PuppeteerStage() {
       const from = { s: s.idx, x: cache[s.idx].left + s.walk.x };
       const cand = cache
         .map((c, j) => ({ c, j, x: clamp(f.x, S[j].left, S[j].right) }))
-        .filter((q) => q.j !== s.idx && ok[q.j] && !q.c.nook && Number.isFinite(S[q.j].left) && ps[q.j]?.visible)
+        .filter((q) => q.j !== s.idx && ok[q.j] && !walkless(q.c) && Number.isFinite(S[q.j].left) && ps[q.j]?.visible)
         .sort((a, b) => Math.hypot(a.x - f.x, a.c.top - f.y) - Math.hypot(b.x - f.x, b.c.top - f.y))
         .slice(0, 3);
       for (const q of cand) {
@@ -1433,12 +1522,12 @@ export function PuppeteerStage() {
     const visit = (s: State, ps: Seen[], now: number): boolean => {
       const f = focusDoc();
       if (!f || s.idx < 0) return false;
-      if (!cache[s.idx].nook) {
+      if (!walkless(cache[s.idx])) {
         const ok = cache.map((_, j) => (!!ps[j]?.ok && !!ps[j]?.visible && !!ps[j]?.onX) || j === s.idx);
         const S = surfaces(ok);
         let best: { j: number; x: number; d: number } | null = null;
         cache.forEach((c, j) => {
-          if (!ok[j] || c.nook || !Number.isFinite(S[j].left)) return;
+          if (!ok[j] || walkless(c) || !Number.isFinite(S[j].left)) return;
           const x = clamp(f.x + (f.x > c.left + s.walk.x ? -1 : 1) * keepGap(tr.current!, now), S[j].left, S[j].right);
           const d = Math.hypot(x - f.x, (c.top - f.y) * 0.7);
           if (!best || d < best.d) best = { j, x, d };
@@ -1453,7 +1542,7 @@ export function PuppeteerStage() {
           }
         }
       }
-      return teleport(s, now, { ps, greet: true, why: 'visit' });
+      return teleport(s, now, { ps, greet: true, fallback: false, why: 'visit' });
     };
     /** He watches something for a while: you, or an arm assembling a plate. */
     const watch = (s: State, now: number) => {
@@ -1485,7 +1574,7 @@ export function PuppeteerStage() {
       const here = cache[s.idx];
       const gi = heroGround();
       const can: Partial<Record<Activity, boolean>> = {
-        explore: !here.nook,
+        explore: !walkless(here),
         inside: cache.some((c, i) => c.nook && !c.spot && i !== s.idx && vis(c, i)),
         probe: fl !== 'shaken' && !probe.busy,
         letters: fl !== 'shaken' && (cache.some((c, i) => c.nook && c.title && vis(c, i)) || (gi >= 0 && !!ps[gi]?.visible)),
@@ -1530,7 +1619,7 @@ export function PuppeteerStage() {
           ok = watch(s, now);
           break;
         case 'vanish':
-          ok = teleport(s, now, { ps, greet: true, why: 'whim' });
+          ok = teleport(s, now, { ps, greet: true, fallback: false, why: 'whim' });
           if (ok) s.whimAt = now;
           break;
         case 'fidget':
@@ -1572,14 +1661,28 @@ export function PuppeteerStage() {
       } else if (own(md)) go(s, { type: 'attend' }, now);
       if (teleport(s, now, { ps, why: 'header' })) {
         if (s.tele) s.tele.hop.out = 0; // half under the header: no slow ink-out there, he's just gone
-      } else {
-        s.hidden = true;
-        s.idx = -1;
-        s.pid = '';
-      }
+      } else outOfSight(s, now);
     };
 
+    /** The watchdog's way back: a quick ink-in at the best place on screen (he isn't seen leaving: he just turns up). */
+    const rescue = (s: State, now: number, ps: Seen[]) => {
+      watchFires++;
+      note(`watchdog:${s.m.mode}:${s.hidden ? 'hidden' : 'off'}`, now);
+      if (s.m.mode === 'teleport') {
+        s.tele = null; // a hop that never finished
+        go(s, { type: 'arrived' }, now);
+      }
+      s.idx = -1;
+      s.pid = '';
+      s.hidden = true;
+      if (teleport(s, now, { ps, why: 'watchdog' })) {
+        s.hidden = false;
+        if (s.tele && !s.tele.hop.instant) s.tele.hop.gap = Math.min(s.tele.hop.gap, QUICK_GAP);
+      } else outOfSight(s, now);
+    };
     let lastSeen: Seen[] = []; // dev: the last frame's view of the perches
+    let floorWakeFor = -1; // the arrival (machine `since`) a wake to leave the floor was set for
+    let watchFires = 0; // dev: times the watchdog had to put him back on screen
     let frames = 0; // dev: frames run (to check the loop sleeps when he's settled)
     const frame = (now: number, dt: number) => {
       if (import.meta.env.DEV) frames++;
@@ -1588,6 +1691,7 @@ export function PuppeteerStage() {
         dirty = false;
       }
       const { sx, sy } = viewport();
+      keepFloor(); // the screen floor stays at the bottom of the view (its height can change under us)
       ridePins(sy); // surfaces on pinned plates: where the scroll has them now
       const ps: Seen[] = cache.map((p) => {
         const top = p.top - sy;
@@ -1608,7 +1712,7 @@ export function PuppeteerStage() {
       if (!st.current) {
         // he arrives on his own: gathers himself out of ink on the hero ground (or wherever's on screen)
         const gi = heroGround();
-        const start = gi >= 0 && ps[gi].visible ? gi : ps.findIndex((q, i) => q.ok && q.visible && !cache[i].nook);
+        const start = gi >= 0 && ps[gi].visible ? gi : ps.findIndex((q, i) => q.ok && q.visible && !walkless(cache[i]));
         const i0 = Math.max(0, start);
         const x0 = home(i0);
         st.current = {
@@ -1702,6 +1806,8 @@ export function PuppeteerStage() {
           slowUntil: 0,
           greetAt: 0,
           hidden: true,
+          floorTry: 0,
+          lostAt: 0,
           run: false,
           lwalk: false,
           pending: null,
@@ -1724,8 +1830,12 @@ export function PuppeteerStage() {
           s0.entrance = true;
         } else {
           s0.char = { x: s0.char.x, y: -400 }; // not on screen yet: he turns up
-          if (!teleport(s0, now, { to: { i: i0, x: cache[i0].left + x0 }, why: 'enter' })) armIdle(now);
-          s0.hidden = false;
+          // on the start perch if it's somewhere to be, else wherever's best on screen (the floor at worst)
+          s0.idx = -1;
+          s0.pid = '';
+          const there = start >= 0 && ps[i0].ok && ps[i0].visible && ps[i0].onX;
+          if (teleport(s0, now, { to: there ? { i: i0, x: cache[i0].left + x0 } : null, ps, why: 'enter' })) s0.hidden = false;
+          else outOfSight(s0, now); // nowhere at all yet: out of sight (not parked at y -400), the retry and the watchdog bring him
         }
       }
       const s = st.current;
@@ -1793,9 +1903,7 @@ export function PuppeteerStage() {
       if (mode() === 'stunt' && stunt.scrolled(sy)) {
         stunt.stop(); // letters spring home; he gathers himself somewhere on screen (below)
         s.idx = -1;
-        go(s, { type: 'vanish' }, now);
-        s.tele = null;
-        leaveNow(s, ps, now);
+        leaveNow(s, ps, now); // (v2.13: straight into the teleport: going 'vanish' first left teleport() nothing to start)
       } else if (!s.stuntAsk && introOwed(s) && s.idx === heroGround() && mode() === 'idle' && titleEl()?.getAttribute('data-written') === '1') {
         stunt.intro(); // v2.12: the headline is printed: the show starts (asked again until it plays)
         s.stuntAsk = now;
@@ -1824,12 +1932,15 @@ export function PuppeteerStage() {
           const feet = s.char.y + FEET * scale * s.k; // screen px
           const underHeader = routed
             ? // walking along a surface the scroll took up there; mid-jump or climbing, any of him under the header
-              feet > -4 && (s.route?.[s.leg]?.kind === 'walk' ? feet < headroomK(s.k) : feet - TALL * scale * s.k < HEADER)
-            : !!mine && mine.ok && mine.top < headroomK(Math.max(s.k, cache[s.idx].k)) && mine.top > -4; // (his size as drawn, if he's still growing into it)
+              (s.route?.[s.leg]?.kind === 'walk' ? feet < headroomK(s.k) : feet - TALL * scale * s.k < HEADER)
+            : !!mine && mine.ok && mine.top < headroomK(Math.max(s.k, cache[s.idx].k)); // (his size as drawn, if he's still growing into it; v2.13: also when one scroll step took it clean past the top)
           if (underHeader) offHeader(s, now, ps, md);
           else if (!mine || !mine.ok) {
             if (md !== 'hopping' || !mine) leaveNow(s, ps, now);
-            else go(s, { type: 'vanish' }, now) && (s.tele = null, leaveNow(s, ps, now)); // the plate he was headed for went away
+            else {
+              s.route = null; // the plate he was headed for went away: off the route, into ink (v2.13: teleport() goes 'vanish' itself)
+              leaveNow(s, ps, now);
+            }
           } else if ((!mine.visible || !mine.onX) && md !== 'hopping' && md !== 'exploring') {
             if (!s.awaySince) {
               s.awaySince = now;
@@ -1846,9 +1957,23 @@ export function PuppeteerStage() {
             }
           } else s.awaySince = 0;
         }
-        if (s.hidden && mode() !== 'teleport' && s.idx < 0) {
-          // nowhere to be yet: try again (layout / scroll wake us)
+        if (s.hidden && mode() !== 'teleport' && mode() !== 'falling' && !held(mode())) {
+          // out of sight: back on screen (v2.13: whatever his idx says; the floor means there's always somewhere)
+          s.idx = -1;
+          s.pid = '';
           if (teleport(s, now, { ps, why: 'return' })) s.hidden = false;
+          else wakeIn(0.4); // (a view too short for him: keep trying, without keeping the loop awake)
+        }
+        // ---- v2.13: on the screen floor: off it to somewhere real as soon as there is somewhere ----
+        const fc = s.idx >= 0 ? cache[s.idx] : undefined;
+        if (fc?.floor && mode() === 'idle' && !s.act && !s.letters) {
+          if (now - s.m.since > FLOOR_STAY * 1000 && now - s.floorTry > 350) {
+            s.floorTry = now;
+            if (!teleport(s, now, { ps, only: (c) => !c.floor, fallback: false, greet: freeNow(s), why: 'floor-up' }) && scrollSpeed() > 0) wakeIn(0.4); // the scroll settling can make somewhere good
+          } else if (floorWakeFor !== s.m.since) {
+            floorWakeFor = s.m.since;
+            wakeIn(Math.max(0.05, FLOOR_STAY - (now - s.m.since) / 1000));
+          }
         }
       }
 
@@ -1938,13 +2063,13 @@ export function PuppeteerStage() {
       if (held(mode()) && !holding) go(s, { type: 'release' }, now);
 
       // ---- his own ideas: the pointer rests over another printed plate → find a way there ----
-      if (free(mode()) && mode() !== 'swatting' && s.idx >= 0 && !cache[s.idx].nook && !reduce && p && p.t > s.ignoreBefore && (fl === 'tolerant' || fl === 'warm') && !overHead) {
+      if (free(mode()) && mode() !== 'swatting' && s.idx >= 0 && !walkless(cache[s.idx]) && !reduce && p && p.t > s.ignoreBefore && (fl === 'tolerant' || fl === 'warm') && !overHead) {
         // ledges are small: a generous zone above them counts as resting over them
         const over = (q: (typeof ps)[number], i: number) =>
           cache[i].ledge
             ? p.x >= q.left - 24 && p.x <= q.left + cache[i].width + 24 && p.y >= q.top - 110 && p.y <= q.bottom + 16
             : p.x >= q.left && p.x <= q.left + cache[i].width && p.y >= q.top - 40 && p.y <= q.bottom;
-        const j = ps.findIndex((q, i) => i !== s.idx && !cache[i].nook && q.ok && q.visible && over(q, i));
+        const j = ps.findIndex((q, i) => i !== s.idx && !walkless(cache[i]) && q.ok && q.visible && over(q, i));
         if (j !== s.want) {
           s.want = j;
           s.wantSince = now;
@@ -1971,7 +2096,7 @@ export function PuppeteerStage() {
       // ---- left to himself: sit by a resting pointer, or his needs choose what he does ----
       const near = company(s, p);
       const still = p ? (now - p.t) / 1000 : 0;
-      if (mode() === 'idle' && s.idx >= 0 && !reduce && !s.walk.walking && !s.holdUntil && !s.act && !s.patting && s.stepGoal === null && near && fl === 'warm' && !uneasy(tr.current!, now) && !cache[s.idx].spot) {
+      if (mode() === 'idle' && s.idx >= 0 && !reduce && !s.walk.walking && !s.holdUntil && !s.act && !s.patting && s.stepGoal === null && near && fl === 'warm' && !uneasy(tr.current!, now) && !cache[s.idx].spot && !cache[s.idx].floor) {
         // fully at ease and the pointer resting right by him: he sits down beside it
         const by = Math.abs(near.p.x - s.char.x) < 110 && Math.abs(near.p.y - s.char.y) < 240;
         if (by && still >= SIT_REST) sitBeside(s, near.p, now);
@@ -1984,7 +2109,7 @@ export function PuppeteerStage() {
         if (cache[s.idx].spot) {
           // a one-off spot (done with the probe / the letters): on to somewhere proper
           teleport(s, now, { ps, why: 'done' });
-        } else decide(s, ps, now);
+        } else if (!cache[s.idx].floor) decide(s, ps, now); // (on the screen floor he only waits for somewhere real: above)
         if (mode() === 'idle') armIdle(now, 'nothing');
       }
 
@@ -2013,7 +2138,7 @@ export function PuppeteerStage() {
       if (!reduce && (free(mode()) || mode() === 'fidget') && now > s.duckUntil && !s.letters) {
         const head = { x: s.char.x + sx, y: s.char.y + sy - 14 * sz };
         cache.forEach((c, i) => {
-          if (c.nook) return;
+          if (walkless(c)) return;
           const a = c.el.dataset.arm; // assembling, or swinging back up off the finished plate
           const was = s.arms[i];
           s.arms[i] = a ?? '';
@@ -2110,12 +2235,13 @@ export function PuppeteerStage() {
               s.holdUntil = now + 1500; // catches his breath before following again
               go(s, { type: 'arrived' }, now);
             } else {
-              // fell out of sight: he'll gather himself back on screen
+              // fell out of sight (v2.13: only if not even the floor was there): he gathers himself back on screen
               s.idx = -1;
               s.pid = '';
               s.hidden = true;
               go(s, { type: 'arrived' }, now);
               if (teleport(s, now, { ps, why: 'fell' })) s.hidden = false;
+              else outOfSight(s, now);
             }
           }
           break;
@@ -2140,22 +2266,22 @@ export function PuppeteerStage() {
           if (!T.swapped && ph.phase !== 'out') {
             // through the gap: he's at the destination now (or, if it went away meanwhile, somewhere else)
             let j = T.to ? cache.findIndex((c) => c.id === T.to!.id) : -1;
-            if (j < 0 || !ps[j]?.ok || ps[j].top < headroomK(cache[j].k)) {
-              const d = chooseDest(destSpots(ps, undefined, scrollSpeed() > QUICK_SCROLL ? QUICK_GAP + IN * QUICK_IN : 0.3 + IN), { focus: focusDoc(), view: { left: sx, right: sx + vp.w, top: sy + HEADER + CLEAR, bottom: sy + vh() - 8 }, me: null, rand: Math.random, drift: drift() });
+            // (v2.13: on screen, not just clear of the header: an explicit destination can have scrolled out the bottom)
+            if (j < 0 || !ps[j]?.ok || ps[j].top < headroomK(cache[j].k) || ps[j].top >= vh() - 8) {
+              const d = chooseDest(destSpots(ps, undefined, scrollSpeed() > QUICK_SCROLL ? QUICK_GAP + IN * QUICK_IN : 0.3 + IN), destOpts(null));
               j = d ? d.i : -1;
               T.to = d ? { id: cache[d.i].id, x: clampTo(d.x - cache[d.i].left, cache[d.i].ext) } : null;
               T.poi = null;
               T.then = null;
             }
             if (j < 0) {
-              // nowhere on screen: out of sight until there is
+              // nowhere on screen at all (not even the floor): out of sight for a moment, trying again
               s.tele = null;
-              s.idx = -1;
-              s.pid = '';
-              s.hidden = true;
               go(s, { type: 'arrived' }, now);
+              outOfSight(s, now);
               break;
             }
+            if (cache[j].floor) cache[j].dark = floorDark(cache[j], cache[j].left + T.to!.x);
             s.idx = j;
             s.pid = cache[j].id;
             s.k = cache[j].k;
@@ -2217,7 +2343,7 @@ export function PuppeteerStage() {
           const rFrom = ride(s.leg > 0 ? route[s.leg - 1].onto : s.routeAt.from);
           const rOnto = mv.kind === 'walk' ? rFrom : ride(mv.onto);
           s.char = { x: smp.p.x - sx, y: smp.p.y - FEET * scale - sy + lerp(rFrom, rOnto, clamp(t)) };
-          if (!reduce && s.char.y + FEET * scale * s.k > -4 && s.char.y + (FEET - TALL) * scale * s.k < HEADER) {
+          if (!reduce && s.char.y + (FEET - TALL) * scale * s.k < HEADER) {
             // this step (a jump's arc, or a route on a plate the scroll moved) would put him under the header: gone instead
             offHeader(s, now, ps, m.mode);
             ink = { k: 1, out: true };
@@ -2453,6 +2579,31 @@ export function PuppeteerStage() {
         stunt.stop();
         if (stunt.last) s.char = { ...stunt.last };
       }
+
+      // ---- v2.13 watchdog: he always appears. Out of sight for no good reason (watchdog.ts) for more
+      // than a moment, whatever the cause: back on screen at once (the best place there is, the floor
+      // at worst). It schedules its own wake, so it fires even if the loop would otherwise sleep. ----
+      {
+        const md = s.m.mode;
+        const T = s.tele;
+        const f = s.fall;
+        const lost = unseen({
+          mode: md,
+          hidden: s.hidden,
+          pageHidden: document.hidden,
+          hop: md === 'teleport' && T ? { t: (now - T.hop.at) / 1000, dur: hopDur(T.hop) } : null,
+          fall: md === 'falling' && f ? { t: (now - s.m.since) / 1000, T: f.T } : null,
+          body: { left: s.char.x - 15 * sz, right: s.char.x + 15 * sz, top: s.char.y - (TALL - FEET) * sz, bottom: s.char.y + FEET * sz },
+          view: { w: vp.w, h: vh(), header: HEADER },
+        });
+        const w = overdue(s.lostAt, lost, now);
+        if (w.since && !s.lostAt) wakeIn((w.since + WATCH_AFTER * 1000 - now) / 1000 + 0.02);
+        s.lostAt = w.since;
+        if (w.act) {
+          s.lostAt = 0;
+          rescue(s, now, ps);
+        }
+      }
       draw(ink);
 
       // settled: idle and still, everything at rest, claw gone → sleep until something changes
@@ -2565,7 +2716,17 @@ export function PuppeteerStage() {
         setAttr(fog, 'ry', (70 * sz).toFixed(1));
       }
     };
-    const loop = ticker.loop(frame);
+    // v2.13: a frame that throws (a stale index after a re-layout, say) must not leave him frozen out of
+    // sight for good: the ticker drops a throwing step, so this one logs and comes back shortly
+    const loop = ticker.loop((now, dt) => {
+      try {
+        return frame(now, dt);
+      } catch (err) {
+        console.error(err);
+        wakeIn(0.5);
+        return false;
+      }
+    });
     if (import.meta.env.DEV) {
       // dev only: `__puppet.play('scratch')` plays an action on the spot; `__puppet.mode` reads the machine
       Object.assign(window, {
@@ -2649,6 +2810,15 @@ export function PuppeteerStage() {
           /** how many places on screen he could be right now (0: nowhere, e.g. only a plate being assembled is in view) */
           get places() {
             return destSpots(lastSeen).length;
+          },
+          /** v2.13: the screen floor (viewport px of his feet there, and where along it) */
+          get floor() {
+            const { sx, sy } = viewport();
+            return cache.filter((c) => c.floor).map((c) => ({ id: c.id, x: c.left - sx, y: c.top - sy, k: c.k }));
+          },
+          /** v2.13: times he went out of sight with the page visible (should stay 0), and times the watchdog stepped in */
+          get lost() {
+            return { outOfSight: lostCount, watchdog: watchFires };
           },
           get away() {
             const s = st.current;
@@ -2959,6 +3129,8 @@ export function PuppeteerStage() {
         </g>
       </svg>
       <TrustLine ref={lineRef} />
+      {/* v2.13: the screen floor's anchor (the place he can always be); its padding is the safe area */}
+      <div ref={floorRef} data-floor="" aria-hidden="true" className="pointer-events-none fixed inset-x-0 bottom-0 h-0" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }} />
     </>
   );
 }

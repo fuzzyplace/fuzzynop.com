@@ -48,6 +48,11 @@ export type Spot = {
    * stage works it out, pinned plates included). Absent: the page is still (or it isn't known).
    */
   stay?: number;
+  /**
+   * v2.13: the screen floor (the bottom edge of the view, kept there whatever the scroll): a place he
+   * can always be. Only chosen when nowhere real will do (`chooseDest` falls back to it).
+   */
+  floor?: boolean;
 };
 export type DestOpts = {
   focus: Pt | null; // where the visitor's attention is (pointer, last tap), document px; null = the middle of the view
@@ -62,6 +67,8 @@ export type DestOpts = {
    * (within `px` of the view's top going down, of its bottom going up) are less appealing.
    */
   drift?: { dir: 1 | -1; px: number };
+  /** How much reading he'd cover standing at a floor spot (0 none .. 1 all of him): the floor that covers least wins. */
+  cover?: (s: Spot) => number;
 };
 
 /** s he must still have in view once gathered somewhere while the page scrolls (or it isn't worth going) */
@@ -69,13 +76,22 @@ export const STAY_MIN = 0.3;
 /** s of staying in view past which a spot is no better for it */
 export const STAY_FULL = 5;
 
-/** The best spot to reappear at, or null if none is on screen. */
+/**
+ * The best spot to reappear at: somewhere real near your attention if there is one, else a floor spot
+ * (`chooseFloor`). Null only if neither is on screen.
+ */
 export function chooseDest(spots: readonly Spot[], o: DestOpts): Spot | null {
+  return chooseReal(spots, o) ?? chooseFloor(spots, o);
+}
+
+/** The best real (non-floor) spot to reappear at, or null if none is on screen. */
+export function chooseReal(spots: readonly Spot[], o: DestOpts): Spot | null {
   const f = o.focus ?? { x: (o.view.left + o.view.right) / 2, y: (o.view.top + o.view.bottom) / 2 };
   const near = o.near ?? 220;
   let best: Spot | null = null;
   let bestS = -Infinity;
   for (const s of spots) {
+    if (s.floor) continue;
     if (s.x < o.view.left || s.x > o.view.right || s.y < o.view.top || s.y > o.view.bottom) continue;
     if (o.me && Math.hypot(s.x - o.me.x, s.y - o.me.y) < 60) continue; // somewhere else, not a step away
     const d = Math.hypot(s.x - f.x, (s.y - f.y) * 1.3);
@@ -100,3 +116,30 @@ export function chooseDest(spots: readonly Spot[], o: DestOpts): Spot | null {
   }
   return best;
 }
+
+/**
+ * v2.13: the fallback when nowhere real will do. Any floor spot in view counts: the pointer and the
+ * scroll don't rule one out (the floor stays with the view, so the scroll can't take it away). The
+ * one covering the least reading wins; then one out from under your attention; never the one he's on
+ * (unless it's the only one).
+ */
+export function chooseFloor(spots: readonly Spot[], o: DestOpts): Spot | null {
+  const f = o.focus ?? { x: (o.view.left + o.view.right) / 2, y: (o.view.top + o.view.bottom) / 2 };
+  const inView = spots.filter((s) => s.floor && s.x >= o.view.left && s.x <= o.view.right && s.y >= o.view.top - 1 && s.y <= o.view.bottom + 1);
+  const away = inView.filter((s) => !o.me || Math.hypot(s.x - o.me.x, s.y - o.me.y) >= 60);
+  const pool = away.length ? away : inView;
+  let best: Spot | null = null;
+  let bestS = -Infinity;
+  for (const s of pool) {
+    const d = Math.hypot(s.x - f.x, (s.y - f.y) * 1.3);
+    let score = -4 * clamp01(o.cover ? o.cover(s) : 0) + Math.min(1, d / 900);
+    if (o.recent?.includes(s.id)) score -= 0.3;
+    score += o.rand() * 0.2;
+    if (score > bestS) {
+      bestS = score;
+      best = s;
+    }
+  }
+  return best;
+}
+const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
