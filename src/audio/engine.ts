@@ -20,6 +20,9 @@ declare global {
   }
 }
 
+/** A cue that comes too soon after the same sound waits up to this long for its gap (a piece is never skipped). */
+const WAIT = 0.15;
+
 let engine: Engine | null = null;
 
 export function getEngine(ac: AudioContext): Engine {
@@ -70,14 +73,14 @@ function createEngine(ac: AudioContext): Engine {
     if (!on || document.hidden) return; // off or hidden: nothing queues up
     const s = spec(name);
     const now = ac.currentTime;
-    const ok = pool.admit(name, now + (o.at ?? 0));
+    const ok = pool.admit(name, now + (o.at ?? 0), undefined, WAIT);
     if (!ok) return;
     if (ok.evict !== null) {
       vcas.get(ok.evict)?.gain.setTargetAtTime(0, now, 0.005);
       vcas.delete(ok.evict);
     }
     const v = variation();
-    const t = now + 0.005 + v.delay + (o.at ?? 0);
+    const t = ok.at + 0.005 + v.delay;
     const vca = ac.createGain();
     vca.gain.value = (o.gain ?? 1) * v.gain * ok.duck;
     let tail: AudioNode = vca;

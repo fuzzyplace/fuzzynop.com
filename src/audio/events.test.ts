@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { JUMP, PLACE, PLATE_MAX, linesDone, pickCue, plateCues, writtenCue, type PlanLike } from './events';
-import { SOUNDS } from './mix';
+import { MOUTH_JITTER, MOUTHS, RANGE, SOUNDS } from './mix';
 
 describe('pickCue', () => {
   it('pops once as the claw closes on him, and for nothing else', () => {
@@ -44,6 +44,15 @@ describe('plateCues', () => {
     expect(sheet.rate).toBe(PLACE.sheet.rate);
     expect(PLACE.sheet.rate).toBeLessThan(PLACE.carry.rate);
     expect(PLACE.carry.rate).toBeLessThan(PLACE.deal.rate);
+  });
+  it('every placement pop settles between 170 and 470 Hz, clear of the 150 Hz floor, at any mouth and any variation', () => {
+    const v = 2 ** (RANGE.semis / 12);
+    for (const k of ['sheet', 'carry', 'deal'] as const) {
+      for (const m of MOUTHS) {
+        expect(m.f * (1 - MOUTH_JITTER) * PLACE[k].rate / v).toBeGreaterThanOrEqual(170);
+        expect(m.f * (1 + MOUTH_JITTER) * PLACE[k].rate * v).toBeLessThanOrEqual(470);
+      }
+    }
   });
   it('titles sit rounder and fuller than body lines', () => {
     const [carry] = plateCues(plan([0.5], 'carry'), 0, 1);

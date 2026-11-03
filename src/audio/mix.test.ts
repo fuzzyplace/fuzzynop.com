@@ -4,7 +4,7 @@ import { CAPS, MAX_VOICES, MOUTH_JITTER, MOUTHS, PAN_WIDTH, RANGE, SOUND_NAMES, 
 describe('the palette', () => {
   it('is only pops: short, and nothing that lingers', () => {
     expect([...SOUND_NAMES].sort()).toEqual(['pick', 'pop', 'ui']);
-    for (const n of SOUND_NAMES) expect(SOUNDS[n].dur).toBeLessThanOrEqual(0.15);
+    for (const n of SOUND_NAMES) expect(SOUNDS[n].dur).toBeLessThanOrEqual(0.18);
   });
   it('every mouth is low and round: settles between 200 and 450 Hz, rings under 1 kHz, gone in under 0.1 s', () => {
     for (const m of MOUTHS) {
@@ -83,6 +83,14 @@ describe('VoicePool', () => {
     expect(p.admit('pop', 0)).not.toBeNull();
     expect(p.admit('pop', spec('pop').gap / 2)).toBeNull();
     expect(p.admit('pop', spec('pop').gap + 0.01)).not.toBeNull();
+  });
+  it('a pop due too soon after one scheduled later waits for its gap instead of being lost', () => {
+    const p = new VoicePool();
+    p.admit('pop', 0.055); // a staggered cue from the last frame, due ahead of now
+    expect(p.admit('pop', 0.016)).toBeNull(); // no wait allowed: dropped
+    const held = p.admit('pop', 0.016, undefined, 0.15);
+    expect(held?.at).toBeCloseTo(0.055 + spec('pop').gap);
+    expect(p.admit('pop', 0.02, undefined, 0.01)).toBeNull(); // too far to wait
   });
   it('caps a layer, and only something more important gets in', () => {
     const p = new VoicePool();

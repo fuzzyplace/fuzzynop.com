@@ -1,6 +1,6 @@
 # Sound (v2.10)
 
-One sound, in many shapes: a soft, rounded mouth pop, low and wide (a tongue knock, a lip pop), every time the arms put something on the page. Each pop is a sine that falls fast into a low note (200 to 450 Hz) plus a 3 ms tongue impulse ringing in a resonant "mouth" (a bandpass between about 450 Hz and 1 kHz), gone within a tenth of a second, with a little dark room behind it. There are five mouth shapes (roughly an o, an oo, an ah, a bubble that rises, a cluck); a pop never uses the same one as the last, every shape is nudged ±14% each time, and each play also varies ±2 semitones, ±2 dB, up to 12 ms late and ±20% in tone. So no two are alike. A highpass floor at 150 Hz keeps out the low rumble the first version had. All synthesised with Web Audio; no samples, no assets, no CSP change.
+One sound, in many shapes: a soft, rounded mouth pop, low and wide (a tongue knock, a lip pop), every time the arms put something on the page. Each pop is a sine that falls into a low note within its first 6 ms (so what you hear is the note: measured offline, sheets sit around 250 Hz, titles 280, body lines 310, never above 450) plus a 3 ms tongue impulse ringing in a resonant "mouth" (a bandpass between about 450 Hz and 1 kHz), gone within a tenth of a second, with a little dark room behind it. There are five mouth shapes (roughly an o, an oo, an ah, a bubble that rises, a cluck); a pop never uses the same one as the last, every shape is nudged ±14% each time, and each play also varies ±2 semitones, ±2 dB, up to 12 ms late and ±20% in tone. So no two are alike. A highpass floor at 150 Hz keeps out the low rumble the first version had. All synthesised with Web Audio; no samples, no assets, no CSP change.
 
 ## Rules as built
 - **On by default.** Browsers allow no sound before a gesture, so it starts on the visitor's first press, tap or key (pointer, touch end or key; it keeps listening until the context is actually running, which iOS needs). Nothing plays before that, and the AudioContext isn't created before that.
@@ -12,7 +12,7 @@ One sound, in many shapes: a soft, rounded mouth pop, low and wide (a tongue kno
 - **One ticker:** the two hooks run inside existing ticker steps and are one property read (`sfx.on`) when off. No React state per frame.
 
 ## Mix
-Voices → layer gain (pop 0.6, ui 0.45) → master 0.45 → dry + room (generated 0.8 s dark tail, 18% wet) → highpass floor 150 Hz → limiter (-20 dB, 14:1) → speakers. At most 4 voices at once (3 pops, 1 ui); the same sound never twice within its gap (pop 45 ms, pick 400 ms); a full pool drops a pop for a pick; a newcomer is ducked by `1/sqrt(1 + 0.5 × voices playing)`. Pan follows the piece or the character, never past ±0.5.
+Voices → layer gain (pop 0.6, ui 0.45) → master 0.45 → dry + room (generated 0.8 s dark tail, 18% wet) → highpass floor 150 Hz → limiter (-20 dB, 14:1) → speakers. At most 4 voices at once (3 pops, 1 ui); the same sound never twice within its gap (pop 45 ms, pick 400 ms; a pop that comes too soon waits up to 150 ms for its gap rather than being skipped); a full pool drops a pop for a pick; a newcomer is ducked by `1/sqrt(1 + 0.5 × voices playing)`. Pan follows the piece or the character, never past ±0.5.
 
 ## Every sound and its trigger
 | Sound | Trigger |

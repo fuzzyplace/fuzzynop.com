@@ -37,7 +37,7 @@ export const JUMP = 1.5;
 /** At most this many pops for one frame's worth of clock. */
 export const PLATE_MAX = 3;
 /** How each kind of placement sits: the sheet lowest, carried pieces (titles, CTA, badges) round, body lines small. */
-export const PLACE = { sheet: { rate: 0.78, gain: 1 }, carry: { rate: 0.9, gain: 0.95 }, deal: { rate: 1.12, gain: 0.7 } } as const;
+export const PLACE = { sheet: { rate: 0.84, gain: 1 }, carry: { rate: 0.92, gain: 0.95 }, deal: { rate: 1, gain: 0.7 } } as const;
 
 /**
  * Pops for an assembly clock moving from t0 to t1: one as the sheet lands, and one as each piece is

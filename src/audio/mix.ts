@@ -13,9 +13,9 @@ export type Layer = 'pop' | 'ui';
 type Spec = { layer: Layer; gap: number; pri: 1 | 2; dur: number };
 
 export const SOUNDS = {
-  pop: { layer: 'pop', gap: 0.045, pri: 1, dur: 0.1 }, // something is placed on the page
-  pick: { layer: 'pop', gap: 0.4, pri: 2, dur: 0.14 }, // the claw closes on him
-  ui: { layer: 'ui', gap: 0.1, pri: 2, dur: 0.1 }, // sound turned on
+  pop: { layer: 'pop', gap: 0.045, pri: 1, dur: 0.12 }, // something is placed on the page
+  pick: { layer: 'pop', gap: 0.4, pri: 2, dur: 0.17 }, // the claw closes on him
+  ui: { layer: 'ui', gap: 0.1, pri: 2, dur: 0.12 }, // sound turned on
 } satisfies Record<string, Spec>;
 
 export type SoundName = keyof typeof SOUNDS;
@@ -53,18 +53,19 @@ export function variation(rand: () => number = Math.random): Variation {
 
 /**
  * A mouth shape for one pop. `f`: where the round tone settles (Hz); `drop`: it starts this many
- * times higher and falls to `f` (under 1: it rises a little, like a bubble); `body`/`q`: the
+ * times higher and falls to `f` in the first few ms (under 1: it rises a little, like a bubble),
+ * so what you hear is mostly `f`; `body`/`q`: the
  * hollow the knock rings in; `d`: how long it lasts (s); `click`: how much tongue is in it.
  */
 export type Mouth = { f: number; drop: number; body: number; q: number; d: number; click: number };
 
 /** Five mouths, roughly an o, an oo, an ah, a bubble and a cluck. All low and round. */
 export const MOUTHS: readonly Mouth[] = [
-  { f: 300, drop: 1.7, body: 640, q: 8, d: 0.07, click: 0.5 },
-  { f: 250, drop: 2, body: 520, q: 10, d: 0.08, click: 0.4 },
-  { f: 360, drop: 1.5, body: 820, q: 7, d: 0.06, click: 0.6 },
-  { f: 280, drop: 0.8, body: 600, q: 9, d: 0.07, click: 0.35 },
-  { f: 330, drop: 2.3, body: 720, q: 11, d: 0.055, click: 0.7 },
+  { f: 300, drop: 1.45, body: 640, q: 8, d: 0.07, click: 0.5 },
+  { f: 270, drop: 1.6, body: 520, q: 10, d: 0.08, click: 0.4 },
+  { f: 360, drop: 1.35, body: 820, q: 7, d: 0.06, click: 0.6 },
+  { f: 280, drop: 0.85, body: 600, q: 9, d: 0.07, click: 0.35 },
+  { f: 330, drop: 1.7, body: 720, q: 11, d: 0.055, click: 0.7 },
 ];
 /** Each mouth is nudged this much (±, as a share) on every play. */
 export const MOUTH_JITTER = 0.14;
@@ -88,14 +89,15 @@ export function panFor(x: number, w: number): number {
 
 /**
  * The voice cap. At most `max` voices at once (and a cap per layer); the same sound never twice
- * within its gap; a full pool only takes something more important, and drops the least important.
+ * within its gap (one that comes too soon waits for it, up to `wait` s, rather than being lost); a full pool only takes something more important, and drops the least important.
  * Each admitted voice comes with a duck: the busier the pool, the quieter the newcomer.
  */
 export const CAPS: Record<Layer, number> = { pop: 3, ui: 1 };
 export const MAX_VOICES = 4;
 
 type Active = { id: number; name: SoundName; layer: Layer; pri: number; end: number };
-export type Admit = { id: number; duck: number; evict: number | null } | null;
+/** `at`: when it plays (later than asked if it was held back to keep its gap). */
+export type Admit = { id: number; at: number; duck: number; evict: number | null } | null;
 
 export class VoicePool {
   private active: Active[] = [];
@@ -116,11 +118,16 @@ export class VoicePool {
     this.active = this.active.filter((a) => a.end > now);
   }
 
-  admit(name: SoundName, now: number, dur = spec(name).dur): Admit {
+  admit(name: SoundName, now: number, dur = spec(name).dur, wait = 0): Admit {
     const s = spec(name);
     this.prune(now);
     const last = this.last.get(name);
-    if (last !== undefined && now - last < s.gap) return null;
+    if (last !== undefined && now - last < s.gap) {
+      // `last` can be ahead of now (a staggered cue scheduled for later): wait for the gap if it's short
+      const held = last + s.gap;
+      if (held - now > wait) return null;
+      now = held;
+    }
     let evict: number | null = null;
     const full = this.active.length >= this.max || this.count(s.layer) >= this.caps[s.layer];
     if (full) {
@@ -135,6 +142,6 @@ export class VoicePool {
     const id = this.next++;
     this.active.push({ id, name, layer: s.layer, pri: s.pri, end: now + dur });
     this.last.set(name, now);
-    return { id, duck, evict };
+    return { id, at: now, duck, evict };
   }
 }

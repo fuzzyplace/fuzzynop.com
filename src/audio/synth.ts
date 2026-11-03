@@ -34,19 +34,22 @@ export function makeRoom(ac: BaseAudioContext, seconds = ROOM.seconds): AudioBuf
 }
 
 const EPS = 0.0001;
+/** s: the fall into the note, and the swell of the round part. */
+const GLIDE = 0.006;
 
 /** One pop in the given mouth, scaled by `g`. */
 function pop(V: Voice, m: Mouth, g: number, at = 0) {
   const { ac, out, v } = V;
   const t = V.t + at;
   const r = V.rate;
-  // the round part: falls (or rises a touch) into its note within the first third
+  // the round part: falls (or rises a touch) into its note in the first few ms, while it's still
+  // swelling, so what rings is the low note and not the start of the fall
   const osc = ac.createOscillator();
   osc.frequency.setValueAtTime(m.f * m.drop * r, t);
-  osc.frequency.exponentialRampToValueAtTime(m.f * r, t + m.d * 0.35);
+  osc.frequency.exponentialRampToValueAtTime(m.f * r, t + GLIDE);
   const og = ac.createGain();
   og.gain.setValueAtTime(EPS, t);
-  og.gain.linearRampToValueAtTime(0.32 * g, t + 0.002);
+  og.gain.linearRampToValueAtTime(0.32 * g, t + GLIDE);
   og.gain.exponentialRampToValueAtTime(EPS, t + m.d);
   osc.connect(og).connect(out);
   osc.start(t);
@@ -81,7 +84,7 @@ export const RECIPES: Record<SoundName, (V: Voice) => void> = {
     // the claw catching him: two pops close together, the second smaller and a touch higher
     pop(V, mouth(), 1);
     const m = mouth();
-    pop(V, { ...m, f: m.f * 1.25, body: m.body * 1.15 }, 0.6, 0.04);
+    pop(V, { ...m, f: m.f * 1.12, body: m.body * 1.1 }, 0.6, 0.04);
   },
   ui: (V) => pop(V, mouth(), 0.7),
 };
