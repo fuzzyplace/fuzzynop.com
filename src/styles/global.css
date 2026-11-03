@@ -115,17 +115,18 @@
   text-shadow: 0 calc(var(--asm-lift, 0) * 7px) calc(var(--asm-lift, 0) * 4px) rgb(0 0 0 / calc(var(--asm-lift, 0) * .3));
 }
 /* v2.7 pinned assembly: the plate sticks (native sticky, scrolling is never intercepted) while
-   the visitor scrolls through its spacer, under half a viewport (phones: under a third; v2.9, was
-   85 / 55svh). PrintedPlate sets the sticky top from the plate's height. Reduced motion: no pin. */
+   the visitor scrolls through its spacer. v2.11: the spacer is assembly + a read pause (the plate
+   stays pinned and whole long enough to read). Heights mirror PIN in src/art/assembly.ts.
+   PrintedPlate sets the sticky top from the plate's height. Reduced motion: no pin. */
 .plate-target { position: absolute; left: 0; top: 0; width: 1px; height: 1px; pointer-events: none; }
 .plate-spacer { height: 0; }
 @media (prefers-reduced-motion: no-preference) {
   .plate-pin { position: sticky; top: 88px; }
-  .plate-spacer { height: 30svh; }
-  @media (min-width: 840px) { .plate-spacer { height: 45svh; } }
-  /* a plate taller than the view places most of itself as it scrolls in: half the pin */
-  [data-tall] > .plate-spacer { height: 15svh; }
-  @media (min-width: 840px) { [data-tall] > .plate-spacer { height: 22svh; } }
+  .plate-spacer { height: calc(30svh + 60svh); }
+  @media (min-width: 840px) { .plate-spacer { height: calc(45svh + 65svh); } }
+  /* a plate taller than the view places most of itself as it scrolls in: a shorter assembly part */
+  [data-tall] > .plate-spacer { height: calc(15svh + 45svh); }
+  @media (min-width: 840px) { [data-tall] > .plate-spacer { height: calc(22svh + 45svh); } }
 }
 @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
   [data-printed='1'] > .plate-alive:is(:hover, :focus-within) {
@@ -241,15 +242,13 @@
 .caret { animation: caret-blink 1.1s steps(1) infinite; }
 @media (prefers-reduced-motion: reduce) { .caret { animation: none; } }
 
-/* ---- v2.4: the circuit tree (src/components/CircuitTree.tsx, layout in circuitLayout.ts) ----
-   Geometry arrives as unitless px custom props from layoutTree: --vx/--vy (vertical, narrow) and
-   --hx/--hy (horizontal, once the plate's content box is ≥ 520px). Ink on paper; no orange here
-   except the global focus ring. Reduced motion: the travelling dash is dropped, the lit path stays. */
-.circuit-wrap { container-type: inline-size; }
-.circuit { position: relative; height: calc(var(--v-h) * 1px); --x: var(--vx); --y: var(--vy); }
-.circuit * { --x: var(--vx); --y: var(--vy); }
+/* ---- v2.4 / v2.11: the circuit tree (src/components/CircuitTree.tsx, layout in circuitLayout.ts) ----
+   Geometry arrives as unitless px custom props from layoutTree at the wrap's measured width:
+   --x/--y (centre of a hex or a heading's left middle), --w (a node row's width), --r (root hex).
+   Ink on paper; no orange here except the 1px hover underline and the global focus ring.
+   Reduced motion: the travelling dash is dropped, the lit path stays. */
+.circuit { position: relative; }
 .circuit-svg { position: absolute; left: 0; top: 0; max-width: none; overflow: visible; pointer-events: none; }
-.circuit-svg--h { display: none; }
 .circuit-list { list-style: none; margin: 0; padding: 0; }
 
 .trace {
@@ -271,7 +270,6 @@
 
 /* root mark: an ink hex with the handle */
 .circuit-root {
-  --r: var(--vr);
   position: absolute; display: grid; place-items: center;
   width: calc(var(--r) * 2px + 4px); aspect-ratio: 60 / 52;
   left: calc(var(--x) * 1px - var(--r) * 1px - 2px); top: calc(var(--y) * 1px - var(--r) * 0.866px - 2px);
@@ -282,35 +280,27 @@
 .circuit-root.is-lit .circuit-root-rim { stroke: var(--md-ref-gray-300); }
 .circuit-root-label { position: relative; color: var(--md-sys-color-paper); letter-spacing: .06em; }
 
+/* group heading: mono label, gray, beside its via */
 .circuit-branch { position: absolute; left: calc(var(--x) * 1px); top: calc(var(--y) * 1px); transform: translateY(-50%); white-space: nowrap; }
 
-/* a node: 44px hex slot + label; the whole row is the target (≥ 48px tall) */
+/* a node: one 44px row, hex slot + label; the whole row is the target */
 .circuit-node {
-  position: absolute; display: flex; align-items: center; gap: .625rem;
-  left: calc(var(--x) * 1px - 22px); top: calc(var(--y) * 1px - 24px);
-  min-height: 48px; max-width: calc(100% - var(--x) * 1px + 22px);
-  padding-inline: 6px .5rem; text-decoration: none;
+  position: absolute; display: flex; align-items: center; gap: .375rem;
+  left: calc(var(--x) * 1px - 22px); top: calc(var(--y) * 1px - 22px);
+  height: 44px; width: calc(var(--w) * 1px); min-width: 0;
+  padding-inline: 7px 0; text-decoration: none;
 }
 .circuit-hex { flex: none; overflow: visible; transition: transform var(--md-sys-motion-duration-medium4) var(--md-sys-motion-easing-emphasized-decelerate); }
 .circuit-hex-shell { fill: var(--md-sys-color-ink); stroke: var(--md-sys-color-ink); stroke-width: 1; stroke-linejoin: round; }
 .circuit-hex-shell--soon { fill: var(--md-sys-color-paper); stroke: var(--md-ref-gray-500); stroke-width: 1.25; stroke-dasharray: 3 3; }
 .circuit-hex-core { fill: var(--md-sys-color-paper); }
-.circuit-node-label { line-height: 1.3; }
+.circuit-node-label { line-height: 1.3; min-width: 0; overflow-wrap: anywhere; }
 .circuit-node.is-lit:not(.circuit-node--soon) .circuit-hex { transform: rotate(30deg); }
 .circuit-node.is-lit:not(.circuit-node--soon) .circuit-node-label { text-decoration: underline; text-decoration-color: var(--md-sys-color-accent); text-decoration-thickness: 1px; text-underline-offset: 4px; }
 .circuit-node--soon.is-lit .circuit-hex-shell--soon { stroke: var(--md-ref-gray-700); }
 @media (prefers-reduced-motion: reduce) {
   .trace-pulse { display: none; }
   .trace, .circuit-hex, .circuit-root-rim { transition: none; }
-}
-/* wide plates: horizontal tree (kept last so it overrides the vertical defaults above) */
-@container (min-width: 520px) {
-  .circuit { height: calc(var(--h-h) * 1px); }
-  .circuit * { --x: var(--hx); --y: var(--hy); }
-  .circuit-svg--h { display: block; }
-  .circuit-svg--v { display: none; }
-  .circuit-root { --r: var(--hr); }
-  .circuit-branch { transform: translate(-100%, -50%); }
 }
 
 /* ---- v2.5: probe targets (src/art/targets.ts; contract in docs/DESIGN_SYSTEM.md) ----

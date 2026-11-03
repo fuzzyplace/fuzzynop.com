@@ -20,15 +20,17 @@ export type CircuitLink = {
 
 export type CircuitData = {
   root: { label: string };
-  branches: Record<Exclude<Branch, 'root'>, { label: string; order: number }>;
+  branches: Record<Branch, { label: string; order: number }>; // group headings ('root' = the links straight off the root)
   statusLabel: { soon: string; soonSr: string };
   links: CircuitLink[];
 };
 
 export const circuit: CircuitData = {
-  root: { label: 'FZNP' },
-  // Branch labels: Work (Z, 2026-11-01); "Play" replaced "Make" (Z, 2026-11-02). Keys stay internal.
+  root: { label: 'FZNP' }, // the root hex mark
+  // Group headings: Work (Z, 2026-11-01); "Play" replaced "Make" (Z, 2026-11-02); "Connect" for the
+  // root links (assumption, docs/DECISIONS.md). Keys stay internal.
   branches: {
+    root: { label: 'Connect', order: 0 },
     work: { label: 'Work', order: 1 },
     make: { label: 'Play', order: 2 },
   },
@@ -49,8 +51,8 @@ export const circuit: CircuitData = {
     { id: 'book', branch: 'work', label: 'Book time', href: null, status: 'soon', order: 5, kind: 'booking' },
     // play: art and sound
     { id: 'fuzzy-place', branch: 'make', label: 'The Fuzzy Place', href: 'https://fuzzy.place', status: 'live', order: 1, kind: 'art' },
-    { id: 'live-set', branch: 'make', label: 'Live set', href: 'https://www.youtube.com/watch?v=E_Jd_RxyoEc', status: 'live', order: 2, kind: 'sound' },
-    { id: 'crew', branch: 'make', label: 'The crew', href: 'https://www.skool.com/the-fuzzy-place', status: 'live', order: 3, kind: 'community' },
+    { id: 'suno', branch: 'make', label: 'Suno', href: 'https://suno.com/@fuzzymmm', status: 'live', order: 2, kind: 'sound' },
+    { id: 'live-set', branch: 'make', label: 'Live set', href: 'https://www.youtube.com/watch?v=E_Jd_RxyoEc', status: 'live', order: 3, kind: 'sound' },
     { id: 'soundcloud', branch: 'make', label: 'SoundCloud', href: 'https://soundcloud.com/fuzzynop', status: 'live', order: 4, kind: 'sound' },
     { id: 'spotify', branch: 'make', label: 'Spotify', href: 'https://open.spotify.com/artist/2KxitG0vU3vl3JaMcovgqM', status: 'live', order: 5, kind: 'sound' },
     { id: 'mixcloud', branch: 'make', label: 'Mixcloud', href: 'https://www.mixcloud.com/FZZY/', status: 'live', order: 6, kind: 'sound' },

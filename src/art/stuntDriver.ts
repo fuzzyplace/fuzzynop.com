@@ -65,6 +65,8 @@ type Ready = { prog: StuntProgram; glyph: Map<string, G>; row0: G[]; hero: Pt; s
 // calls `invite`); `played` is set again once it starts (the stage is rebuilt on resize; this isn't).
 let played = true;
 let forced: number | null = null;
+/** v2.12: the entrance show (once per page load): an intro program (stunt.ts) and asked for by the stage on arrival. */
+let introNext = false;
 function devSeed(): number | null {
   if (!import.meta.env.DEV) return null;
   const v = new URLSearchParams(window.location.search).get('stuntSeed');
@@ -141,7 +143,7 @@ export function createStunt(body: StuntBody, wake: () => void) {
     const site = siteFor(tagline, map, s);
     const seed = forced ?? devSeed() ?? newSeed();
     forced = null;
-    const prog = stuntProgram(seed, site, { mobile: vw < 700 });
+    const prog = stuntProgram(seed, site, { mobile: vw < 700, intro: introNext });
     const glyph = new Map<string, G>();
     for (const g of m.glyphs) {
       const el = h.querySelector(`[data-glyph="${g.key}"]`);
@@ -182,6 +184,7 @@ export function createStunt(body: StuntBody, wake: () => void) {
   const begin = (now: number, v: StuntView) => {
     if (!ready || !v.ground) return;
     played = true;
+    introNext = false;
     const start = { x: v.char.x + v.sx, y: v.char.y + v.sy };
     run = { p: ready, t0: now, sy: v.sy, start, facing: v.facing, ground: v.ground, groundX: start.x, ax: start.x, phase: 0, lastX: start.x, ySm: null, tilt: 0, home: null, reset: false };
     ready = null;
@@ -542,7 +545,16 @@ export function createStunt(body: StuntBody, wake: () => void) {
       retryAt = 0;
       wake();
     },
-    /** dev: play again (with this seed) next time he's free on the hero ground. */
+    /** v2.12: the entrance show, once per page load: an intro program next time he's free on the hero ground. */
+    intro() {
+      if (run) return;
+      played = false;
+      introNext = true;
+      ready = null;
+      retryAt = 0;
+      wake();
+    },
+        /** dev: play again (with this seed) next time he's free on the hero ground. */
     force(seed?: number) {
       played = false;
       ready = null;

@@ -165,4 +165,15 @@ describe('beatAt / lettersAt', () => {
       }
     }
   });
+  it('v2.12 intro: always climbs on and messes with the letters', () => {
+    for (let k = 0; k < 40; k++) {
+      const d = stuntProgram(k * 7919, site, { intro: true });
+      expect(d.variations).toContain('walk');
+      expect(d.variations).toContain('poke');
+      expect(d.variations.length).toBe(3);
+      const m = stuntProgram(k * 7919, site, { intro: true, mobile: true });
+      expect(m.variations).toContain('poke');
+      expect(m.variations.length).toBe(2);
+    }
+  });
 });

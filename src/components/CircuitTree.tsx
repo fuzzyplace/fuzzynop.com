@@ -1,15 +1,17 @@
-import { useId, useMemo, useState, type CSSProperties } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { published as defaultData, type CircuitData } from '../content/links';
-import { layoutTree, litPath, type LeafNode, type TreeLayout } from './circuitLayout';
+import { layoutTree, litPath, modeFor, type LeafNode, type TreeLayout } from './circuitLayout';
 
 /**
  * The circuit tree (docs/NARRATIVE.md): one root node sends circuit traces out to a hex per link,
- * split into branches. Layout is generated from src/content/links.ts by `layoutTree`, once per
- * orientation; a container query picks horizontal (wide) or vertical (narrow). Hover or focus on a
+ * in three headed groups (Connect / Work / Play). Layout is generated from src/content/links.ts by
+ * `layoutTree` at the wrap's measured width: three columns when wide, a stack when narrow (measured
+ * before paint, so no flash). Each node is a full-width 44px row. Hover or focus on a
  * node lights its path back to the root (ink, heavier stroke, a dash travelling along it; static
  * under reduced motion). No orange on traces: orange appears only as the focus ring.
  *
- * Semantics: <nav> with nested lists by branch; the SVG traces and the root mark are aria-hidden.
+ * Semantics: <nav> with nested lists, one per group, each labelled by its heading; the SVG traces and
+ * the root mark are aria-hidden.
  */
 
 function hexPoints(r: number, cx = 0, cy = 0) {
@@ -19,13 +21,13 @@ function hexPoints(r: number, cx = 0, cy = 0) {
   }).join(' ');
 }
 
-function Traces({ layout, lit, className }: { layout: TreeLayout; lit: Set<string>; className: string }) {
+function Traces({ layout, lit }: { layout: TreeLayout; lit: Set<string> }) {
   // lit traces last so they sit on top of shared trunk segments
   const ordered = [...layout.traces].sort((a, b) => Number(lit.has(a.id)) - Number(lit.has(b.id)));
   const litPts = new Set(layout.traces.filter((t) => lit.has(t.id)).flatMap((t) => t.points.map((p) => `${p.x},${p.y}`)));
   const on = (p: { x: number; y: number }) => litPts.has(`${p.x},${p.y}`);
   return (
-    <svg className={`circuit-svg ${className}`} data-asm="unit" width={layout.width} height={layout.height} viewBox={`0 0 ${layout.width} ${layout.height}`} aria-hidden="true" focusable="false">
+    <svg className="circuit-svg" data-asm="unit" width={layout.width} height={layout.height} viewBox={`0 0 ${layout.width} ${layout.height}`} aria-hidden="true" focusable="false">
       <g fill="none">
         {ordered.map((t) => (
           <path key={t.id} d={t.d} className={lit.has(t.id) ? 'trace is-lit' : 'trace'} />
@@ -46,7 +48,7 @@ function Traces({ layout, lit, className }: { layout: TreeLayout; lit: Set<strin
   );
 }
 
-type Pos = CSSProperties & Record<'--hx' | '--hy' | '--vx' | '--vy', number>;
+type Pos = CSSProperties & Record<'--x' | '--y' | '--w', number>;
 
 function LeafHex({ live, r }: { live: boolean; r: number }) {
   const w = r * 2 + 4;
@@ -59,17 +61,29 @@ function LeafHex({ live, r }: { live: boolean; r: number }) {
   );
 }
 
+/** Width before the first measurement (and without layout, e.g. tests): a phone-width stack. */
+const FALLBACK_W = 320;
+
 export function CircuitTree({ data = defaultData, label, className = '' }: { data?: CircuitData; label: string; className?: string }) {
-  const h = useMemo(() => layoutTree(data, 'horizontal'), [data]);
-  const v = useMemo(() => layoutTree(data, 'vertical'), [data]);
+  const wrap = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(FALLBACK_W);
+  useLayoutEffect(() => {
+    const el = wrap.current;
+    if (!el) return;
+    const measure = () => {
+      const w = Math.floor(el.clientWidth);
+      if (w > 0) setWidth((cur) => (cur === w ? cur : w));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const t = useMemo(() => layoutTree(data, modeFor(width), width), [data, width]);
   const [active, setActive] = useState<string | null>(null);
   const uid = useId();
 
-  const pos = (id: string): Pos => {
-    const a = h.leaves.find((l) => l.id === id)!;
-    const b = v.leaves.find((l) => l.id === id)!;
-    return { '--hx': a.x, '--hy': a.y, '--vx': b.x, '--vy': b.y };
-  };
+  const pos = (n: LeafNode): Pos => ({ '--x': n.x, '--y': n.y, '--w': n.w });
   const enter = (id: string) => () => setActive(id);
   const leave = (id: string) => () => setActive((cur) => (cur === id ? null : cur));
 
@@ -81,16 +95,16 @@ export function CircuitTree({ data = defaultData, label, className = '' }: { dat
     return (
       <li key={n.id}>
         {n.live ? (
-          <a href={n.link.href!} target="_blank" rel="noopener noreferrer" className={`circuit-node${lit}`} style={pos(n.id)} data-poi="node" {...probe} {...handlers}>
-            <LeafHex live r={h.hexR} />
+          <a href={n.link.href!} target="_blank" rel="noopener noreferrer" className={`circuit-node${lit}`} style={pos(n)} data-poi="node" {...probe} {...handlers}>
+            <LeafHex live r={t.hexR} />
             <span className="type-title-small circuit-node-label text-on-paper">
               {n.link.label}
               <span aria-hidden="true"> ↗</span>
             </span>
           </a>
         ) : (
-          <span className={`circuit-node circuit-node--soon${lit}`} style={pos(n.id)} {...probe} {...handlers}>
-            <LeafHex live={false} r={h.hexR} />
+          <span className={`circuit-node circuit-node--soon${lit}`} style={pos(n)} {...probe} {...handlers}>
+            <LeafHex live={false} r={t.hexR} />
             <span className="circuit-node-label text-on-paper-variant">
               <span className="type-title-small">{n.link.label}</span> <span className="type-label-small" aria-hidden="true">{data.statusLabel.soon}</span>
               <span className="sr-only">{data.statusLabel.soonSr}</span>
@@ -101,15 +115,12 @@ export function CircuitTree({ data = defaultData, label, className = '' }: { dat
     );
   };
 
-  const sizes = { '--h-w': h.width, '--h-h': h.height, '--v-h': v.height } as CSSProperties;
-  const rootPos = { '--hx': h.root.x, '--hy': h.root.y, '--vx': v.root.x, '--vy': v.root.y, '--hr': h.root.r, '--vr': v.root.r } as CSSProperties;
-  const lit = (l: TreeLayout) => litPath(l, active);
+  const rootPos = { '--x': t.root.x, '--y': t.root.y, '--r': t.root.r } as CSSProperties;
 
   return (
-    <div className={`circuit-wrap ${className}`} data-asm-cluster="">
-      <div className="circuit" style={sizes}>
-        <Traces layout={h} lit={lit(h)} className="circuit-svg--h" />
-        <Traces layout={v} lit={lit(v)} className="circuit-svg--v" />
+    <div ref={wrap} className={`circuit-wrap ${className}`} data-asm-cluster="">
+      <div className={`circuit circuit--${t.mode}`} style={{ height: t.height }}>
+        <Traces layout={t} lit={litPath(t, active)} />
 
         {/* the root mark: decoration (the handle is already in the header) */}
         <div className={`circuit-root${active ? ' is-lit' : ''}`} style={rootPos} aria-hidden="true" data-asm="unit">
@@ -122,11 +133,9 @@ export function CircuitTree({ data = defaultData, label, className = '' }: { dat
 
         <nav aria-label={label} className="circuit-nav">
           <ul className="circuit-list">
-            {h.groups.map((g) => {
-              if (!g.label) return g.leaves.map(node);
-              const vg = v.groups.find((x) => x.branch === g.branch)!;
+            {t.groups.map((g) => {
               const id = `${uid}-${g.branch}`;
-              const lp = { '--hx': g.labelAt!.x, '--hy': g.labelAt!.y, '--vx': vg.labelAt!.x, '--vy': vg.labelAt!.y } as CSSProperties;
+              const lp = { '--x': g.labelAt.x, '--y': g.labelAt.y } as CSSProperties;
               return (
                 <li key={g.branch}>
                   <span id={id} className="circuit-branch type-label-medium text-on-paper-variant" style={lp} data-asm="unit">
