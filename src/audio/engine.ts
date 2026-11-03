@@ -1,17 +1,24 @@
 import { peekView } from '../art/ticker';
 import { sfx } from './bus';
-import { linesDone, pickCue, plateCues, writtenCue, type Cue, type PlanLike } from './events';
-import { FLOOR_HZ, LAYER_GAIN, MASTER, panFor, ROOM, spec, variation, VoicePool, type Layer, type SoundName } from './mix';
-import { makeNoise, makeRoom, RECIPES } from './synth';
+import { inkCue, linesDone, plateCues, puppetCues, writtenCue, type Cue, type PlanLike } from './events';
+import { bedIn, buildGraph, duckBed, voice } from './graph';
+import { panFor, spec, variation, VoicePool, type SoundName } from './mix';
+import type { Bed } from './synth';
 
 /**
- * The sound engine (its own chunk, loaded the first time sound starts). One AudioContext: voices →
- * per-layer gain → master (dry, plus a little room) → highpass floor → limiter → speakers. It takes over the bus
- * (`sfx`) while on, and suspends the context while off or while the page is hidden.
+ * The sound engine (its own chunk, loaded the first time sound starts). One AudioContext and the
+ * graph in graph.ts, a quiet bed of fog under everything once sound is on, and the bus (`sfx`) taken
+ * over while on. The context suspends while off or while the page is hidden, bed and all.
  */
 
 export type PlayOpts = { gain?: number; rate?: number; pan?: number; at?: number };
-export type Engine = { play: (name: SoundName, o?: PlayOpts) => void; setOn: (on: boolean) => void; readonly on: boolean };
+export type Engine = {
+  play: (name: SoundName, o?: PlayOpts) => void;
+  setOn: (on: boolean) => void;
+  /** The bed on or off (dev board only; it follows sound otherwise). */
+  setBed: (on: boolean) => void;
+  readonly on: boolean;
+};
 
 type Log = { name: SoundName; t: number }[];
 declare global {
@@ -22,6 +29,8 @@ declare global {
 
 /** A cue that comes too soon after the same sound waits up to this long for its gap (a piece is never skipped). */
 const WAIT = 0.15;
+/** The circuit tree's links: a faint tick as one is hovered or focused. */
+const NODE = '[data-poi="node"]';
 
 let engine: Engine | null = null;
 
@@ -30,38 +39,15 @@ export function getEngine(ac: AudioContext): Engine {
 }
 
 function createEngine(ac: AudioContext): Engine {
-  const noise = makeNoise(ac);
-  // master: a soft limiter keeps a few pops at once from ever getting loud; a floor under it cuts rumble
-  const limiter = ac.createDynamicsCompressor();
-  limiter.threshold.value = -20;
-  limiter.knee.value = 6;
-  limiter.ratio.value = 14;
-  limiter.attack.value = 0.003;
-  limiter.release.value = 0.2;
-  const master = ac.createGain();
-  master.gain.value = MASTER;
-  const floor = ac.createBiquadFilter();
-  floor.type = 'highpass';
-  floor.frequency.value = FLOOR_HZ;
-  floor.connect(limiter).connect(ac.destination);
-  master.connect(floor);
-  // the room: a short dark tail under the dry pops
-  const room = ac.createConvolver();
-  room.buffer = makeRoom(ac);
-  const wet = ac.createGain();
-  wet.gain.value = ROOM.wet;
-  room.connect(wet).connect(floor);
-  master.connect(room);
-  const layers = {} as Record<Layer, GainNode>;
-  for (const l of Object.keys(LAYER_GAIN) as Layer[]) {
-    layers[l] = ac.createGain();
-    layers[l].gain.value = LAYER_GAIN[l];
-    layers[l].connect(master);
-  }
+  const g = buildGraph(ac);
   const pool = new VoicePool();
   const vcas = new Map<number, GainNode>();
+  let bed: Bed | null = null;
+  let bedWanted = true;
   let mode: string | null = null;
+  let ink: boolean | undefined | null = null;
   let lines: number | null = null;
+  let node: Element | null = null;
   let on = false;
 
   const dev = import.meta.env.DEV;
@@ -81,16 +67,8 @@ function createEngine(ac: AudioContext): Engine {
     }
     const v = variation();
     const t = ok.at + 0.005 + v.delay;
-    const vca = ac.createGain();
-    vca.gain.value = (o.gain ?? 1) * v.gain * ok.duck;
-    let tail: AudioNode = vca;
-    if (ac.createStereoPanner && o.pan) {
-      const p = ac.createStereoPanner();
-      p.pan.value = Math.max(-1, Math.min(1, o.pan));
-      tail = vca.connect(p);
-    }
-    tail.connect(layers[s.layer]);
-    RECIPES[name]({ ac, out: vca, t, v, rate: (o.rate ?? 1) * v.rate, noise });
+    const vca = voice(g, name, { t, v, gain: (o.gain ?? 1) * v.gain * ok.duck, rate: o.rate, pan: o.pan });
+    if (bed && name !== 'hover') duckBed(bed, t, s.dur);
     vcas.set(ok.id, vca);
     window.setTimeout(
       () => {
@@ -110,10 +88,15 @@ function createEngine(ac: AudioContext): Engine {
 
   // ---- the bus ----
   const handlers = {
-    puppet(m: string, x: number) {
-      const c = pickCue(mode, m);
+    puppet(m: string, x: number, k?: boolean) {
+      const cs = puppetCues(mode, m);
+      const c = inkCue(ink, k);
       mode = m;
-      if (c) cue(c, panFor(x, peekView().w || window.innerWidth));
+      ink = k;
+      if (!cs.length && !c) return;
+      const pan = panFor(x, peekView().w || window.innerWidth);
+      for (const q of cs) cue(q, pan);
+      if (c) cue(c, pan);
     },
     written(q: readonly number[]) {
       const c = writtenCue(lines, q);
@@ -125,6 +108,32 @@ function createEngine(ac: AudioContext): Engine {
     },
   };
 
+  // ---- the circuit tree's links (delegated: no component knows about sound) ----
+  const enter = (e: Event) => {
+    const el = e.target instanceof Element ? e.target.closest(NODE) : null;
+    if (el === node) return;
+    node = el;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    play('hover', { pan: panFor(r.left + r.width / 2, window.innerWidth) });
+  };
+  const listen = (v: boolean) => {
+    const f = v ? document.addEventListener.bind(document) : document.removeEventListener.bind(document);
+    f('pointerover', enter, { passive: true } as AddEventListenerOptions);
+    f('focusin', enter);
+  };
+
+  // ---- the bed ----
+  function bedOn(v: boolean) {
+    if (v && !bed) {
+      bed = g.bed();
+      bedIn(bed, ac.currentTime);
+    } else if (!v && bed) {
+      bed.stop();
+      bed = null;
+    }
+  }
+
   const onVis = () => {
     if (document.hidden) void ac.suspend();
     else if (on) void ac.resume();
@@ -132,15 +141,22 @@ function createEngine(ac: AudioContext): Engine {
   document.addEventListener('visibilitychange', onVis);
 
   function setOn(v: boolean) {
+    if (v === on) return;
     on = v;
     if (v) {
       Object.assign(sfx, handlers);
       sfx.on = true;
+      listen(true);
       if (!document.hidden) void ac.resume();
+      bedOn(bedWanted); // fades in from silence each time sound starts
     } else {
       sfx.on = false;
       mode = null;
+      ink = null;
       lines = null;
+      node = null;
+      listen(false);
+      bedOn(false);
       void ac.suspend();
     }
   }
@@ -148,6 +164,10 @@ function createEngine(ac: AudioContext): Engine {
   return {
     play,
     setOn,
+    setBed(v: boolean) {
+      bedWanted = v;
+      if (on) bedOn(v);
+    },
     get on() {
       return on;
     },

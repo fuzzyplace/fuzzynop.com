@@ -8,11 +8,12 @@ import { SOUND_NAMES, spec, type Layer, type SoundName } from './mix';
  * anywhere, so Z can audition them on a preview. Not part of the page; English labels here
  * are dev tooling, not site copy.
  */
-const LAYERS: Layer[] = ['pop', 'ui'];
+const LAYERS: Layer[] = ['place', 'body', 'ui'];
 
 export function Board() {
   const [pan, setPan] = useState(0);
   const [open, setOpen] = useState(true);
+  const [bed, setBed] = useState(true);
   const play = async (name: SoundName) => {
     const e = await setSound(true);
     e?.play(name, { pan });
@@ -52,7 +53,19 @@ export function Board() {
               </div>
             </div>
           ))}
-          <button type="button" className="mt-3 min-h-11 w-full border border-gray-700 px-2 hover:text-on-surface" onClick={() => void setSound(false)}>
+          <button
+            type="button"
+            className="mt-3 min-h-11 w-full border border-gray-700 px-2 hover:text-on-surface"
+            aria-pressed={bed}
+            onClick={async () => {
+              const e = await setSound(true);
+              e?.setBed(!bed);
+              setBed(!bed);
+            }}
+          >
+            bed (fog) {bed ? 'on' : 'off'}
+          </button>
+          <button type="button" className="mt-2 min-h-11 w-full border border-gray-700 px-2 hover:text-on-surface" onClick={() => void setSound(false)}>
             sound off
           </button>
         </>
