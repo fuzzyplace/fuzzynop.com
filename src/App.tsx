@@ -32,7 +32,7 @@ export default function App() {
           </a>
           <Sound />{/* ---- sfx hook ---- the toggle takes the free space between the mark and the nav */}
           <nav aria-label={ui.primaryNav}>
-            <ul className="flex gap-4 md:gap-8">
+            <ul className="flex gap-1 min-[400px]:gap-4 md:gap-8">
               {nav.map((n) => (
                 <li key={n.id}>
                   <a href={`#${n.id}`} className="type-label-small md:type-label-medium inline-flex min-h-11 min-w-11 items-center justify-center text-gray-300 transition-colors duration-[var(--md-sys-motion-duration-short4)] ease-standard hover:text-on-surface">

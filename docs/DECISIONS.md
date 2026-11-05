@@ -98,6 +98,12 @@
 - **Measured** (60 runs, 5 viewports, live harness): on screen 97.5% of the time (was 81.6%); invisibility episodes over 1.5 s outside page load: 0 (was 136 over 1 s, worst 14 s). Reduced motion: no change in how he moves, and he is never left out of sight.
 - **Assumption for Z:** standing at the bottom edge of the screen (often in the side margin on desktop) is an acceptable place to wait while a plate prints. Tuning: `FLOOR_GAP`, `FLOOR_STAY`, `COME`, `WATCH_AFTER`.
 
+### v2.14 sound you can actually find and hear (2026-11-05, Z: "there is no speaker icon, there is no sound")
+- **The toggle is part of the page** (it was lazy-loaded through the shared idle queue, so it could fail to appear) and is no longer hidden under 360px. The idle queue can't stall any more: each job has a hard fallback timer and a throwing job can't block the rest.
+- **Honest toggle:** shows "on" only while sound is really playing. Until the first click, tap or key press it shows muted ("Turn sound on"); clicking it starts sound. Clicking it while playing turns it off (remembered). A first click anywhere still starts it.
+- **Audible on laptops and phones:** limiter -24 to -9 dB, master 0.3 to 0.7 with make-up gain, ceiling 2.8 to 3.5 kHz, a gentle 1.1 kHz lift, a knock layer on the thuds and an octave on the toggle tone. Peaks now -19 to -23 dBFS full range, -17 to -28 dBFS through a simulated laptop speaker (300 Hz highpass). Still dark: nothing above the ceiling.
+- **iOS:** `navigator.audioSession.type = 'playback'` where supported, so the silent switch doesn't mute it.
+
 ## Open assumptions — Z to confirm
 
 _v2.9 pass (2026-11-02): every tuning-only item is now resolved with its outcome. What is still unchecked **needs Z** (likeness, copy and links, design taste, launch details), apart from the v2.9 entry at the end, whose values are measured choices for Z to feel out._

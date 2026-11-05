@@ -3,4 +3,4 @@
  * (docs/SOUND.md, DECISIONS "Open assumptions"). Kept here, not in src/content, while it's a draft.
  * No visible text.
  */
-export const sound = { label: 'Sound' };
+export const sound = { label: 'Sound', on: 'Turn sound on', off: 'Turn sound off' };

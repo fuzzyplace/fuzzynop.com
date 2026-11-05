@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { BED, CAPS, CEILING_HZ, FLOOR_HZ, GRAIN_JITTER, GRAINS, LAYER_GAIN, MASTER, MAX_VOICES, PAN_WIDTH, RANGE, SOUND_NAMES, SOUNDS, VoicePool, nextShape, panFor, spec, variation } from './mix';
+import { BED, CAPS, CEILING_HZ, LIMIT, FLOOR_HZ, GRAIN_JITTER, GRAINS, LAYER_GAIN, MASTER, MAX_VOICES, PAN_WIDTH, RANGE, SOUND_NAMES, SOUNDS, VoicePool, nextShape, panFor, spec, variation } from './mix';
 
 describe('the palette', () => {
   it('has every cue, and each one is short (the bed is the only thing that lingers)', () => {
     expect([...SOUND_NAMES].sort()).toEqual(['clamp', 'hover', 'inkIn', 'inkOut', 'land', 'release', 'scratch', 'sheet', 'stunt', 'tick', 'ui'].sort());
     for (const n of SOUND_NAMES) expect(SOUNDS[n].dur).toBeLessThanOrEqual(1);
   });
-  it('is quiet and dark: low master, lowpassed under 3 kHz, rumble below the floor only', () => {
-    expect(MASTER).toBeLessThanOrEqual(0.35);
+  it('is dark and never loud: master under 0.8, lowpassed under 4 kHz, limiter well below full scale', () => {
+    expect(MASTER).toBeLessThanOrEqual(0.8);
     for (const g of Object.values(LAYER_GAIN)) expect(g).toBeLessThanOrEqual(0.6);
-    expect(CEILING_HZ).toBeLessThanOrEqual(3000);
+    expect(CEILING_HZ).toBeLessThanOrEqual(4000);
+    expect(LIMIT.threshold).toBeLessThanOrEqual(-6);
     expect(FLOOR_HZ).toBeLessThan(60);
     expect(BED.level * MASTER).toBeLessThan(0.2);
   });

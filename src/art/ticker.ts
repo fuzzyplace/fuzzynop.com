@@ -160,17 +160,36 @@ const pumpIdle = () => {
   const ric: IdleFn = window.requestIdleCallback ?? ((cb) => window.setTimeout(cb, 120));
   // the first job may push in after 1.5 s; the rest wait longer for a truly idle period, so a busy
   // (or throttled) main thread doesn't get them back to back as long tasks
-  const run = (): void =>
-    void ric(
-      (d) => {
-        if (d && !d.didTimeout && d.timeRemaining() < IDLE_MIN_MS) return run();
-        idleBusy = false;
-        idleRan++;
+  // v2.14: a job runs exactly once, even if the idle callback never comes (a hard fallback timer), and
+  // a job that throws can't stall the queue for every job after it
+  const run = (): void => {
+    let done = false;
+    const go = () => {
+      if (done) return;
+      done = true;
+      window.clearTimeout(hard);
+      idleBusy = false;
+      idleRan++;
+      try {
         idleQueue.shift()?.();
+      } catch (e) {
+        console.error(e);
+      } finally {
         pumpIdle();
-      },
-      { timeout: idleRan ? 4000 : 1500 },
-    );
+      }
+    };
+    const hard = window.setTimeout(go, (idleRan ? 4000 : 1500) + 500);
+    const attempt = (): void =>
+      void ric(
+        (d) => {
+          if (done) return;
+          if (d && !d.didTimeout && d.timeRemaining() < IDLE_MIN_MS) return attempt();
+          go();
+        },
+        { timeout: idleRan ? 4000 : 1500 },
+      );
+    attempt();
+  };
   if (painted) run();
   else
     requestAnimationFrame(() => {
