@@ -1,3 +1,5 @@
+> **v2.14 update (2026-11-05):** the toggle renders with the page and shows muted until sound is really playing; levels raised for small speakers (see docs/DECISIONS.md, v2.14). Older level numbers below are pre-v2.14.
+
 # Sound (v2.11)
 
 Dark, organic, quiet. A barely-there breath of fog under the page, soft felt and paper as the arms build it, a low creak when the claw takes him, breathy ink when he runs off and gathers himself again, a nib on the tagline. Everything is synthesised with Web Audio (filtered noise and a few low sines): no samples, no assets, no CSP change. The whole mix is lowpassed at 2.8 kHz and sits far below typical UI sounds (loudest single peak about -26 dBFS; the bed about -50 dBFS RMS).

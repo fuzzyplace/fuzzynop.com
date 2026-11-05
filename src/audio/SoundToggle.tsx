@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import { armOnGesture, isOn, setSound, subscribe } from './control';
+import { armOnGesture, isRunning, setSound, subscribe } from './control';
 import { sound } from './copy';
 
 /**
@@ -8,19 +8,21 @@ import { sound } from './copy';
  * turning it on plays one soft low tone so they know it worked.
  */
 export function SoundToggle() {
-  const on = useSyncExternalStore(subscribe, isOn, () => false);
+  // v2.14: "on" only while sound is really playing; before the first gesture it offers to turn it on
+  const on = useSyncExternalStore(subscribe, isRunning, () => false);
   useEffect(() => armOnGesture(), []);
   return (
     <button
       type="button"
       aria-pressed={on}
       aria-label={sound.label}
+      title={on ? sound.off : sound.on}
       onClick={() =>
         void setSound(!on).then((e) => {
           if (e && !on) e.play('ui');
         })
       }
-      className="sfx-toggle ml-2 mr-auto inline-flex min-h-11 min-w-11 items-center justify-center text-gray-300 transition-colors duration-[var(--md-sys-motion-duration-short4)] ease-standard hover:text-on-surface max-[359px]:hidden"
+      className="sfx-toggle ml-1 mr-auto inline-flex shrink-0 min-h-11 min-w-11 items-center justify-center text-gray-300 transition-colors duration-[var(--md-sys-motion-duration-short4)] ease-standard hover:text-on-surface"
     >
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" aria-hidden="true">
         <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" />

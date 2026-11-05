@@ -1,5 +1,5 @@
 import { useEffect, useState, type ComponentType } from 'react';
-import { whenIdle } from '../art/ticker';
+import { SoundToggle } from './SoundToggle';
 
 /**
  * Sound, deferred like the character stage: the toggle is its own chunk, fetched once the page has
@@ -9,22 +9,18 @@ import { whenIdle } from '../art/ticker';
 const board = () => /(?:^|[?&])sfx=board(?:&|$)/.test(location.search) && !/(^|\.)fuzzynop\.com$/.test(location.hostname);
 
 export function Sound() {
-  const [Toggle, setToggle] = useState<ComponentType | null>(null);
+  // v2.14: the toggle is part of the page (tiny); only the engine and the dev board load lazily
   const [Board, setBoard] = useState<ComponentType | null>(null);
   useEffect(() => {
     let live = true;
-    const off = whenIdle(() => {
-      import('./SoundToggle').then((m) => live && setToggle(() => m.SoundToggle));
-      if (board()) import('./Board').then((m) => live && setBoard(() => m.Board));
-    });
+    if (board()) import('./Board').then((m) => live && setBoard(() => m.Board));
     return () => {
       live = false;
-      off();
     };
   }, []);
   return (
     <>
-      {Toggle && <Toggle />}
+      <SoundToggle />
       {Board && <Board />}
     </>
   );

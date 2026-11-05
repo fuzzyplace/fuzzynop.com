@@ -35,6 +35,8 @@ const subs = new Set<() => void>();
 const emit = () => subs.forEach((f) => f());
 
 export const isOn = () => on;
+/** Sound is actually playing (the context is running), not just wanted. */
+export const isRunning = () => on && ac?.state === 'running';
 export function subscribe(f: () => void) {
   subs.add(f);
   return () => void subs.delete(f);
@@ -46,6 +48,14 @@ function wake(): Promise<Engine> | null {
     const C: Ctor | undefined = window.AudioContext ?? (window as unknown as { webkitAudioContext?: Ctor }).webkitAudioContext;
     if (!C) return null;
     ac = new C({ latencyHint: 'interactive' });
+    ac.addEventListener('statechange', emit); // the toggle shows what's really happening
+    // iOS: without this the ringer (silent) switch mutes Web Audio
+    try {
+      const nav = navigator as Navigator & { audioSession?: { type: string } };
+      if (nav.audioSession) nav.audioSession.type = 'playback';
+    } catch {
+      // not supported: nothing to do
+    }
   }
   void ac.resume();
   loading ??= import('./engine').then((m) => (engine = m.getEngine(ac!)));
@@ -62,6 +72,7 @@ export async function setSound(next: boolean): Promise<Engine | null> {
   }
   const e = await wake();
   if (e && on) e.setOn(true);
+  emit();
   return e;
 }
 
@@ -70,11 +81,13 @@ export async function setSound(next: boolean): Promise<Engine | null> {
  * counts as one everywhere (iOS wants the touch to end), so keep listening until the context runs.
  * A gesture only starts sound that is already on; it never overrides "off".
  */
-const GESTURES = ['pointerdown', 'pointerup', 'touchend', 'keydown'] as const;
+const GESTURES = ['pointerdown', 'pointerup', 'click', 'touchend', 'keydown'] as const;
 export function armOnGesture() {
   if (!on || ac?.state === 'running') return () => {};
-  const go = () => {
+  const go = (e: Event) => {
     if (!on) return off();
+    // the toggle handles its own press (otherwise its pointerdown would start sound and its click stop it)
+    if (e.target instanceof Element && e.target.closest('.sfx-toggle')) return;
     void setSound(true).then(() => {
       if (ac?.state === 'running') off();
     });

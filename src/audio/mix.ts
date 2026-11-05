@@ -37,16 +37,23 @@ export const spec = (n: SoundName): Spec => SOUNDS[n];
 
 /** Layer levels under the master (linear). */
 export const LAYER_GAIN: Record<Layer, number> = { place: 0.5, body: 0.5, ui: 0.4 };
-/** Master level into the limiter: well under typical UI sounds. */
-export const MASTER = 0.3;
+/** Master level into the limiter. v2.14: up from 0.3, which was inaudible on laptop and phone speakers. */
+export const MASTER = 0.7;
 /** The shared room: a long, dark, soft tail (generated, no file). `wet`: its return level. */
 export const ROOM = { wet: 0.5, seconds: 1.6, dark: 0.1 };
 /** Nothing below this reaches the speakers (subsonic only: the thuds live just above it). */
 export const FLOOR_HZ = 45;
 /** Nothing above this either: the whole mix is lowpassed here, so it stays dark. */
-export const CEILING_HZ = 2800;
+export const CEILING_HZ = 3500;
+/**
+ * v2.14: small speakers (laptops, phones) barely reproduce anything under ~300 Hz, where the thuds
+ * live: the thuds carry a knock in the band they do play (synth.ts), and the mix gets a gentle lift there.
+ */
+export const SMALL_SPEAKERS = { lift: { hz: 1100, db: 4, q: 0.8 } };
+/** Make-up gain into the limiter (v2.14): peaks land around -14 to -18 dBFS; the limiter (-9 dB) keeps any pile-up in check. */
+export const OUTPUT = 2.6;
 /** Limiter: a safety net only; at these levels it should rarely touch anything. */
-export const LIMIT = { threshold: -24, ratio: 12 };
+export const LIMIT = { threshold: -9, ratio: 12 };
 
 /**
  * The bed: fog breathing. `level`: its gain (linear) once faded in; `fade`: seconds to fade in;
@@ -55,7 +62,7 @@ export const LIMIT = { threshold: -24, ratio: 12 };
  * `drone`: two low sines a hair apart (they beat slowly), and how loud they are next to the air.
  */
 export const BED = {
-  level: 0.014,
+  level: 0.03,
   fade: 4,
   duck: 0.6,
   back: 1.2,

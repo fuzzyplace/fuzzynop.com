@@ -1,4 +1,4 @@
-import { BED, CEILING_HZ, FLOOR_HZ, LAYER_GAIN, LIMIT, MASTER, ROOM, spec, type Layer, type SoundName, type Variation } from './mix';
+import { BED, CEILING_HZ, FLOOR_HZ, LAYER_GAIN, LIMIT, MASTER, ROOM, SMALL_SPEAKERS, OUTPUT, spec, type Layer, type SoundName, type Variation } from './mix';
 import { makeBed, makeBrown, makeNoise, makeRoom, RECIPES, type Bed } from './synth';
 
 /**
@@ -34,7 +34,15 @@ export function buildGraph(ac: BaseAudioContext, dest: AudioNode = ac.destinatio
   floor.Q.value = 0.5;
   const master = ac.createGain();
   master.gain.value = MASTER;
-  master.connect(ceiling).connect(floor).connect(limiter).connect(dest);
+  // a gentle presence lift (SMALL_SPEAKERS) so the mix reads on small speakers
+  const lift = ac.createBiquadFilter();
+  lift.type = 'peaking';
+  lift.frequency.value = SMALL_SPEAKERS.lift.hz;
+  lift.gain.value = SMALL_SPEAKERS.lift.db;
+  lift.Q.value = SMALL_SPEAKERS.lift.q;
+  const makeup = ac.createGain();
+  makeup.gain.value = OUTPUT;
+  master.connect(lift).connect(ceiling).connect(floor).connect(makeup).connect(limiter).connect(dest);
   // the room: one long, dark tail every voice can send into
   const room = ac.createConvolver();
   room.buffer = makeRoom(ac);

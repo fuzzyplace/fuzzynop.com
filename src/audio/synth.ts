@@ -106,6 +106,13 @@ function thud(V: Voice, t: number, f: number, size: number, lp: number) {
   const g = V.ac.createGain();
   env(g.gain, t, 0.45 * size, 0.002, 0.03 + 0.05 * size);
   n.connect(filter(V.ac, 'lowpass', lp * V.v.bright, 0.6)).connect(g).connect(V.out);
+  // v2.14: the knock of it (cardboard, wood) in the band small speakers play, so the thud is heard
+  // on a laptop or a phone too; still soft and lowpassed
+  const k = noise(V, t, 0.06);
+  const kg = V.ac.createGain();
+  env(kg.gain, t, 0.5 * size, 0.0015, 0.025 + 0.03 * size);
+  k.connect(filter(V.ac, 'bandpass', 620 * r * V.v.bright, 1.4)).connect(filter(V.ac, 'lowpass', 1800)).connect(kg).connect(V.out);
+  tone(V, t, f * 4.2 * r, f * 3.6 * r, 0.03, 0.12 * size, 0.003, 0.06 + 0.06 * size);
 }
 
 /** One small placed piece in a given grain. */
@@ -238,8 +245,9 @@ export const RECIPES: Record<SoundName, (V: Voice) => void> = {
   },
   // sound turned on: one soft low tone
   ui: (V) => {
-    tone(V, V.t, 196, 196, 0.01, 0.3, 0.02, 0.85);
-    tone(V, V.t, 392, 392, 0.01, 0.035, 0.03, 0.5);
+    tone(V, V.t, 196, 196, 0.01, 0.22, 0.02, 0.85);
+    tone(V, V.t, 392, 392, 0.01, 0.14, 0.03, 0.6); // v2.14: the octave carries it on small speakers
+    tone(V, V.t, 588, 588, 0.01, 0.05, 0.04, 0.45);
   },
   // a circuit tree link: a faint, dry tick
   hover: (V) => {
