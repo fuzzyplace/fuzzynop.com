@@ -5,7 +5,7 @@
 Copy lives in `src/content/site.ts`. Only publish what's in "Approved copy" below.
 
 ## Approved copy (Z's words, 2026-10-31)
-> I spent my career as a hacker and an executive. Red teaming, building teams, leading at the top.
+> I spent my career as a hacker and an executive. Pink teaming, building teams, leading at the top.
 >
 > I retired from that world, and what came after wasn't a pivot so much as a return: to art, to community, to the questions underneath all of it.
 >
@@ -26,11 +26,11 @@ Copy lives in `src/content/site.ts`. Only publish what's in "Approved copy" belo
 | Where | Copy | Source |
 |---|---|---|
 | Identity / title | Josh Schwartz / FuzzyNop | Z |
-| Hero | "Team Builder, / Red Teamer, / Professional Bogeyman" + "Finding creative, empathetic security solutions for cyborgs." | Z |
+| Hero | "Team Builder, / Pink Teamer, / Professional Bogeyman" + "Finding creative, empathetic security solutions for cyborgs." | Z |
 | 01 Past | **Hacker / Executive.** "I started out tracking bad guys. Then I switched sides and played the adversary for a living." "Over time that grew into building teams and leading in the security space." | Z (shaped) |
 | 02 Present | **The human side.** "Lately I’m working on how hackers take care of their own heads, what AI safety looks like from the human side, and what happens to our minds as machines and humans become indistinguishable." | Z (title from his words) |
 | Pop-out (white card) | "Setting the vibe has never been more important." "I also produce events and spaces with The Fuzzy Place." Link "See the events" (placeholder, URL from Z) | Z 2026-11-02 (body line drafted) |
-| 03 Future | **What I’m looking for.** "To make a real impact, building a team, a function or a project around:" Red teaming · AI safety · Consciousness and human flourishing · Mental health and wellness. "Also available for a full-body robot transplant." | Z 2026-11-02 |
+| 03 Future | **What I’m looking for.** "To make a real impact, building a team, a function or a project around:" Pink teaming · AI safety · Consciousness and human flourishing · Mental health and wellness. "Also available for a full-body robot transplant." | Z 2026-11-02 |
 | 04 Contact | **Say hello.** "If you’re working on any of this, or think I could help, get in touch." CTA "Message me · LinkedIn" | drafted, Z to confirm |
 | Elsewhere | Circuit tree: Work (LinkedIn), Make (SoundCloud, Spotify, Mixcloud) | Z |
 | Hidden trust line | "Nothing here is secure." "He feels safe anyway." | Z |

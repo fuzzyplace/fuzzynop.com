@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { glyphKey, mapTitle, type GlyphBox, type Rect } from './glyphs';
 import { beatAt, fxPose, lettersAt, MAX_DESKTOP, MAX_MOBILE, siteFor, stuntProgram, VARIATIONS, type Station, type StuntSite } from './stunt';
 
-const TAGLINE = ['Team Builder,', 'Red Teamer,', 'Professional Bogeyman'];
+const TAGLINE = ['Team Builder,', 'Pink Teamer,', 'Professional Bogeyman'];
 const U = 1.85; // px per character unit at desktop
 const BODY = { w: 22 * U, h: 70 * U, hangUp: 22 * U, hangDown: 48 * U };
 
@@ -11,7 +11,7 @@ function title(): GlyphBox[] {
   const g: GlyphBox[] = [];
   const rows: [number, string, number, number][] = [
     [0, 'Team Builder,', 0, 301],
-    [1, 'Red Teamer,', 0, 423],
+    [1, 'Pink Teamer,', 0, 423],
     [2, 'Professional', 0, 545],
     [2, 'Bogeyman', 13, 659],
   ];

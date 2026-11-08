@@ -295,3 +295,7 @@ _v2.9 pass (2026-11-02): every tuning-only item is now resolved with its outcome
 - [ ] **v2.11 link tree (2026-11-03, Claude):** the Contact tree is now three readable groups, Connect / Work / Play, with 44px rows. Wide (≥ 540px of plate content, so tablet and up): three columns under the FZNP hex, short traces fanning into each. Narrow: stacked groups on one trunk at the left. Roughly half the old height on desktop.
   - **"Connect"** is a new heading for the links that hang straight off the root (LinkedIn, X, GitHub, Email). Placeholder: approve or replace.
   - **Suno** (https://suno.com/@fuzzymmm) sits in Play right after The Fuzzy Place, first among the music links. Reorder if another feels more like the front door.
+
+- [ ] **v2.15 pink teaming (2026-11-08, Z's request):** "Red Teamer" → "Pink Teamer" in the hero tagline, meta/OG/noscript description and the Future list ("Pink teaming"). External press URLs left as published. Palette retinted pink: gray ramp → rose ramp, paper → pale pink, fog → pink mist, accent orange → hot pink `#FF3D9A` (same whisper-only rules). All contrast pairs still pass AA (`npm run tokens:contrast`). Supersedes the black/white/gray + orange rule in CLAUDE.md for now.
+  - **og.png** still shows the old gray art and "Red Teamer"; needs a re-render.
+  - Black shades and shadows kept black so text plates stay readable; push pinker if wanted.

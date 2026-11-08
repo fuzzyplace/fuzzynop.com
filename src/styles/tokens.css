@@ -1,24 +1,24 @@
 /* FZNP / Cyborg Dark v2.1 — design tokens. Mirror of design/tokens.json. Edit both together.
-   Palette: black, white, and a full gray ramp. Orange (--md-sys-color-accent) is a highlight only:
+   Palette: pink-tinted black, white, and a full rose ramp. Hot pink (--md-sys-color-accent) is a highlight only:
    focus ring, hairlines <= 2px, dots <= 8px, a single glyph. Never a fill behind text. */
 
 :root {
   color-scheme: dark;
 
   /* ---- gray ramp (ref) ---- */
-  --md-ref-gray-990: #0A0A0A;
-  --md-ref-gray-980: #0F0F0F;
-  --md-ref-gray-960: #141414;
-  --md-ref-gray-940: #1A1A1A;
-  --md-ref-gray-900: #222221;
-  --md-ref-gray-800: #333331;
-  --md-ref-gray-700: #4A4A47;
-  --md-ref-gray-600: #6E6E6A;
-  --md-ref-gray-500: #8C8C88;
-  --md-ref-gray-400: #A6A6A2;
-  --md-ref-gray-300: #C9C9C4;
-  --md-ref-gray-200: #E6E6E1;
-  --md-ref-gray-100: #F5F5F0;
+  --md-ref-gray-990: #120A0E;
+  --md-ref-gray-980: #170C12;
+  --md-ref-gray-960: #1D0F17;
+  --md-ref-gray-940: #24121C;
+  --md-ref-gray-900: #2E1724;
+  --md-ref-gray-800: #432033;
+  --md-ref-gray-700: #5E2D48;
+  --md-ref-gray-600: #9A5A7C;
+  --md-ref-gray-500: #C27A9F;
+  --md-ref-gray-400: #DC9DBD;
+  --md-ref-gray-300: #EDBBD3;
+  --md-ref-gray-200: #F8D9E7;
+  --md-ref-gray-100: #FFF0F6;
 
   /* ---- sys roles (M3 naming) ---- */
   --md-sys-color-background: var(--md-ref-gray-990);
@@ -41,7 +41,7 @@
   --md-sys-color-on-secondary: var(--md-ref-gray-990);
   --md-sys-color-secondary-container: var(--md-ref-gray-800);
   --md-sys-color-on-secondary-container: var(--md-ref-gray-200);
-  --md-sys-color-accent: #FF6A13;            /* traffic cone — highlight only */
+  --md-sys-color-accent: #FF3D9A;            /* hot pink — highlight only */
   --md-sys-color-inverse-surface: var(--md-ref-gray-100);
   --md-sys-color-inverse-on-surface: var(--md-ref-gray-990);
   --md-sys-color-error: #FF4D6D;
@@ -49,15 +49,15 @@
   --md-sys-color-scrim: rgba(0, 0, 0, .72);
 
   /* ---- art: ink, paper, fog, silhouettes ---- */
-  --md-sys-color-ink: #050505;
-  --md-sys-color-paper: #EDEDE8;
-  --md-sys-color-on-paper: #050505;
+  --md-sys-color-ink: #14060D;
+  --md-sys-color-paper: #FFD9EA;
+  --md-sys-color-on-paper: #14060D;
   --md-sys-color-on-paper-variant: var(--md-ref-gray-700);
-  --md-sys-color-fog-light: #C9C9C3;
-  --md-sys-color-fog-mid: #7A7A75;
-  --md-sys-color-rim: #3C3C39;
-  --md-sys-color-silhouette-far: #2C2C2A;
-  --md-sys-color-silhouette-mid: #111110;
+  --md-sys-color-fog-light: #F2B3D0;
+  --md-sys-color-fog-mid: #9E4F78;
+  --md-sys-color-rim: #4A2238;
+  --md-sys-color-silhouette-far: #36182A;
+  --md-sys-color-silhouette-mid: #160910;
 
   --md-sys-state-hover: .08;
   --md-sys-state-focus: .12;

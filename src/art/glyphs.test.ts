@@ -30,10 +30,10 @@ function fakeTitle(rows: string[][], { adv = 60, cap = 84, xh = 60, pitch = 122,
 
 describe('splitLine', () => {
   it('keeps indices aligned with the source line and drops spaces', () => {
-    const words = splitLine('Red Teamer,');
-    expect(words.map((w) => w.map((c) => c.ch).join(''))).toEqual(['Red', 'Teamer,']);
-    expect(words[1][0]).toMatchObject({ ch: 'T', i: 4 });
-    for (const w of words) for (const c of w) expect('Red Teamer,'[c.i]).toBe(c.ch);
+    const words = splitLine('Pink Teamer,');
+    expect(words.map((w) => w.map((c) => c.ch).join(''))).toEqual(['Pink', 'Teamer,']);
+    expect(words[1][0]).toMatchObject({ ch: 'T', i: 5 });
+    for (const w of words) for (const c of w) expect('Pink Teamer,'[c.i]).toBe(c.ch);
   });
   it('restores pair kerning as a margin after the first letter of a pair', () => {
     const [team] = splitLine('Team');
@@ -61,7 +61,7 @@ describe('mapTitle', () => {
   // the tagline as it wraps at 1440: four rows, "Bogeyman" alone on the last
   const title = fakeTitle([
     ['0', 'Team Builder,'],
-    ['1', 'Red Teamer,'],
+    ['1', 'Pink Teamer,'],
     ['2', 'Professional'],
     ['2', 'Bogeyman', '13'],
   ]);
@@ -103,7 +103,7 @@ describe('mapTitle', () => {
     const n = title.find((g) => g.key === '2:20')!; // last "n" of Bogeyman
     expect(n.ch).toBe('n');
     expect(m.hangs).toContainEqual({ key: '2:20', x: n.right, y: n.top, side: 1 });
-    // "Red Teamer," ends left of "Professional": a body hung off its "r" would cover "Professional"
+    // "Pink Teamer," ends left of "Professional": a body hung off its "r" would cover "Professional"
     expect(m.hangs.find((h) => h.key === '1:9' && h.side === 1)).toBeUndefined();
   });
 

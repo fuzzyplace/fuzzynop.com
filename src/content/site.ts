@@ -9,7 +9,7 @@ export const site = {
   handle: 'FuzzyNop',
   url: 'https://fuzzynop.com',
   description:
-    'Josh Schwartz (FuzzyNop). Team Builder, Red Teamer, Professional Bogeyman. Finding creative, empathetic security solutions for cyborgs.',
+    'Josh Schwartz (FuzzyNop). Team Builder, Pink Teamer, Professional Bogeyman. Finding creative, empathetic security solutions for cyborgs.',
   footerEgg: '0x90 0x90 0x90 · nothing happened here',
   /**
    * The one call to action (HANDOFF §3.5). Mechanism TBD by Z (docs/DECISIONS.md).
@@ -34,7 +34,7 @@ export const nav = [
 
 export const hero = {
   eyebrow: 'Josh Schwartz / FuzzyNop',
-  tagline: ['Team Builder,', 'Red Teamer,', 'Professional Bogeyman'],
+  tagline: ['Team Builder,', 'Pink Teamer,', 'Professional Bogeyman'],
   lede: 'Finding creative, empathetic security solutions for cyborgs.',
 };
 
@@ -84,7 +84,7 @@ export const future: Chapter = {
   title: 'What I’m looking for',
   body: [],
   lede: 'To make a real impact, building a team, a function or a project around:',
-  list: ['Red teaming', 'AI safety', 'Consciousness and human flourishing', 'Mental health and wellness'],
+  list: ['Pink teaming', 'AI safety', 'Consciousness and human flourishing', 'Mental health and wellness'],
   coda: 'Also available for a full\u2011body robot transplant.', // non-breaking hyphen
 };
 

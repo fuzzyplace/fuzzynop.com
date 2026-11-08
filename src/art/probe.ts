@@ -1,5 +1,5 @@
 /**
- * Prod and probe: which page target the character tries next, like a red teamer testing the
+ * Prod and probe: which page target the character tries next, like a pink teamer testing the
  * locks. Pure: the stage gathers targets (targets.ts `queryTargets`, plus when it last poked each),
  * its trust band and recent history; this picks one probe or nothing.
  *

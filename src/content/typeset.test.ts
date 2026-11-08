@@ -11,7 +11,7 @@ describe('tie (running copy)', () => {
     expect(tie('as machines and humans become indistinguishable.')).toBe('as machines and humans become indistinguishable.');
   });
   it('short strings stay on one line', () => {
-    expect(tie('Red teaming')).toBe(`Red${NB}teaming`);
+    expect(tie('Pink teaming')).toBe(`Pink${NB}teaming`);
   });
 });
 describe('tieTitle (headings)', () => {

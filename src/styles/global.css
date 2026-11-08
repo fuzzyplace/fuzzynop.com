@@ -28,7 +28,7 @@
 @utility fog {
   position: fixed; inset: 0; z-index: -10; pointer-events: none;
   background:
-    radial-gradient(ellipse 55% 50% at 70% 36%, var(--md-sys-color-fog-light) 0%, var(--md-sys-color-fog-mid) 24%, #3A3A37 46%, #121211 72%, #000 100%);
+    radial-gradient(ellipse 55% 50% at 70% 36%, var(--md-sys-color-fog-light) 0%, var(--md-sys-color-fog-mid) 24%, #4A1F36 46%, #170A11 72%, #000 100%);
 }
 @utility grain {
   position: fixed; inset: 0; z-index: 60; pointer-events: none; opacity: .14; mix-blend-mode: overlay;
@@ -59,12 +59,12 @@
 }
 @utility hero-pool {
   position: absolute; bottom: -120px; width: 760px; height: 520px; transform: translateX(-50%); pointer-events: none;
-  background: radial-gradient(ellipse at 50% 70%, rgba(201,201,195,.55) 0%, rgba(122,122,117,.28) 34%, rgba(0,0,0,0) 68%);
+  background: radial-gradient(ellipse at 50% 70%, rgba(242,179,208,.55) 0%, rgba(158,79,120,.28) 34%, rgba(0,0,0,0) 68%);
 }
 /* the light behind the character during the title stunt (stuntDriver.ts moves it; invisible at rest) */
 @utility hero-spot {
   position: absolute; left: -260px; top: -260px; width: 520px; height: 520px; pointer-events: none; opacity: 0;
-  background: radial-gradient(circle at 50% 50%, rgba(201,201,195,.26) 0%, rgba(122,122,117,.12) 40%, rgba(0,0,0,0) 70%);
+  background: radial-gradient(circle at 50% 50%, rgba(242,179,208,.26) 0%, rgba(158,79,120,.12) 40%, rgba(0,0,0,0) 70%);
   transition: opacity var(--md-sys-motion-duration-extra-long1) var(--md-sys-motion-easing-standard);
 }
 .hero-spot[data-on] { opacity: 1; will-change: transform; }
