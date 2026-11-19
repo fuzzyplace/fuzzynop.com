@@ -43,12 +43,14 @@ export const circuit: CircuitData = {
     { id: 'x', branch: 'root', label: 'X', href: 'https://x.com/FuzzyNop', status: 'live', order: 2, kind: 'social' },
     { id: 'github', branch: 'root', label: 'GitHub', href: 'https://github.com/fuzzyplace', status: 'live', order: 3, kind: 'social' },
     { id: 'email', branch: 'root', label: 'Email', href: null, status: 'soon', order: 4, kind: 'contact' },
-    // work: security
-    { id: 'talks', branch: 'work', label: 'Talks', href: 'https://infocondb.org/presenter/josh-schwartz-fuzzynop', status: 'live', order: 1, kind: 'talks' },
-    { id: 'interview', branch: 'work', label: 'Interview', href: 'https://www.pcmag.com/opinions/the-head-of-verizon-medias-red-team-has-one-simple-security-tip', status: 'live', order: 2, kind: 'press' },
-    { id: 'podcast', branch: 'work', label: 'Podcast', href: 'https://securityconversations.com/episode/josh-schwartz-on-red-teaming-and-proactive-security-engineering/', status: 'live', order: 3, kind: 'press' },
-    { id: 'news', branch: 'work', label: 'In the news', href: 'https://www.ksat.com/news/2019/03/14/some-hackers-use-their-skills-for-good-help-with-cybersecurity/', status: 'live', order: 4, kind: 'press' },
-    { id: 'book', branch: 'work', label: 'Book time', href: null, status: 'soon', order: 5, kind: 'booking' },
+    // work: security (Pink Team links first: Z, 2026-11-19)
+    { id: 'pink-team', branch: 'work', label: 'Pink Team', href: 'https://pinkteam.xyz', status: 'live', order: 1, kind: 'org' },
+    { id: 'pink-team-workshop', branch: 'work', label: 'Workshop', href: 'https://pinkteam.dev', status: 'live', order: 2, kind: 'org' },
+    { id: 'talks', branch: 'work', label: 'Talks', href: 'https://infocondb.org/presenter/josh-schwartz-fuzzynop', status: 'live', order: 3, kind: 'talks' },
+    { id: 'interview', branch: 'work', label: 'Interview', href: 'https://www.pcmag.com/opinions/the-head-of-verizon-medias-red-team-has-one-simple-security-tip', status: 'live', order: 4, kind: 'press' },
+    { id: 'podcast', branch: 'work', label: 'Podcast', href: 'https://securityconversations.com/episode/josh-schwartz-on-red-teaming-and-proactive-security-engineering/', status: 'live', order: 5, kind: 'press' },
+    { id: 'news', branch: 'work', label: 'In the news', href: 'https://www.ksat.com/news/2019/03/14/some-hackers-use-their-skills-for-good-help-with-cybersecurity/', status: 'live', order: 6, kind: 'press' },
+    { id: 'book', branch: 'work', label: 'Book time', href: null, status: 'soon', order: 7, kind: 'booking' },
     // play: art and sound
     { id: 'fuzzy-place', branch: 'make', label: 'The Fuzzy Place', href: 'https://fuzzy.place', status: 'live', order: 1, kind: 'art' },
     { id: 'suno', branch: 'make', label: 'Suno', href: 'https://suno.com/@fuzzymmm', status: 'live', order: 2, kind: 'sound' },
