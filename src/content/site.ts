@@ -84,7 +84,7 @@ export const future: Chapter = {
   title: 'What I’m looking for',
   body: [],
   lede: 'To make a real impact, building a team, a function or a project around:',
-  list: ['Pink teaming', 'AI safety', 'Consciousness and human flourishing', 'Mental health and wellness'],
+  list: ['Pink teaming', 'AI safety', 'Offensive security strategy', 'Human-centered security'],
   coda: 'Also available for a full\u2011body robot transplant.', // non-breaking hyphen
 };
 
