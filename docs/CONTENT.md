@@ -32,7 +32,7 @@ Copy lives in `src/content/site.ts`. Only publish what's in "Approved copy" belo
 | Pop-out (white card) | "Setting the vibe has never been more important." "I also produce events and spaces with The Fuzzy Place." Link "See the events" (placeholder, URL from Z) | Z 2026-11-02 (body line drafted) |
 | 03 Future | **What I’m looking for.** "To make a real impact, building a team, a function or a project around:" Pink teaming · AI safety · Offensive security strategy · Human-centered security. "Also available for a full-body robot transplant." | Z 2026-11-02; list lines 3–4 Z 2026-11-19 |
 | 04 Contact | **Say hello.** "If you’re working on any of this, or think I could help, get in touch." CTA "Message me · LinkedIn" | drafted, Z to confirm |
-| Elsewhere | Circuit tree: Work (LinkedIn), Make (SoundCloud, Spotify, Mixcloud) | Z |
+| Elsewhere | Circuit tree: Connect, Work (Pink Team links first), Play; full list under "Allowed links" | Z |
 | Hidden trust line | "Nothing here is secure." "He feels safe anyway." | Z |
 | Footer | `0x90 0x90 0x90 · nothing happened here` | v1 (dash removed) |
 | Meta / share | Title "Josh Schwartz / FuzzyNop"; description = tagline + hero line; OG image = tagline | derived |
@@ -43,10 +43,10 @@ Retired from the page (still Z's words): the retirement/return-to-art paragraph,
 ## Allowed links (Z, 2026-11-02: pulled from the original site and his redesign branches)
 Shown in the link tree (`src/content/links.ts`), labels neutral:
 - Root: LinkedIn https://www.linkedin.com/in/joshuaaschwartz/ · X https://x.com/FuzzyNop · GitHub https://github.com/fuzzyplace · Email (TODO, never personal Gmail without explicit OK)
-- Work: Talks https://infocondb.org/presenter/josh-schwartz-fuzzynop · Interview https://www.pcmag.com/opinions/the-head-of-verizon-medias-red-team-has-one-simple-security-tip · Podcast https://securityconversations.com/episode/josh-schwartz-on-red-teaming-and-proactive-security-engineering/ · In the news https://www.ksat.com/news/2019/03/14/some-hackers-use-their-skills-for-good-help-with-cybersecurity/ · Book time (Calendly TODO)
+- Work: Pink Team https://pinkteam.xyz · Workshop https://pinkteam.dev (the Pink Team workshop; short label so it stays on one line; both added by Z 2026-11-19) · Talks https://infocondb.org/presenter/josh-schwartz-fuzzynop · Interview https://www.pcmag.com/opinions/the-head-of-verizon-medias-red-team-has-one-simple-security-tip · Podcast https://securityconversations.com/episode/josh-schwartz-on-red-teaming-and-proactive-security-engineering/ · In the news https://www.ksat.com/news/2019/03/14/some-hackers-use-their-skills-for-good-help-with-cybersecurity/ · Book time (Calendly TODO)
 - Play: The Fuzzy Place https://fuzzy.place (also the vibe card's "See the events") · Suno https://suno.com/@fuzzymmm · Live set https://www.youtube.com/watch?v=E_Jd_RxyoEc · SoundCloud https://soundcloud.com/fuzzynop · Spotify https://open.spotify.com/artist/2KxitG0vU3vl3JaMcovgqM · Mixcloud https://www.mixcloud.com/FZZY/
 
-Left off by Z's choice (2026-11-02; The crew removed 2026-11-03): individual talk videos (Talks points to the archive), the allied crews (Proper Villains, Pink Team, Parasol Society). Not used, pending Z: HBR article, RSAC/QCon bios, ScienceDaily, skool.com/stdc.
+Left off by Z's choice (2026-11-02; The crew removed 2026-11-03): individual talk videos (Talks points to the archive), the allied crews (Proper Villains, Parasol Society; Pink Team was here until Z added it to the tree 2026-11-19). Not used, pending Z: HBR article, RSAC/QCon bios, ScienceDaily, skool.com/stdc.
 
 ## Background — reference only, DO NOT PUBLISH
 Kept so Claude understands the person, not for the page. Don't surface names, employers, titles, venues, or projects from here unless Z explicitly asks.

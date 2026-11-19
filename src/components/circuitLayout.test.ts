@@ -123,7 +123,7 @@ describe('layoutTree', () => {
 
   it('adding one link re-lays out: one more leaf and trace, the stack grows by one row', () => {
     const before = layoutTree(circuit, 'stack', 343);
-    const after = layoutTree({ ...circuit, links: [...circuit.links, L('new', 'work', 6)] }, 'stack', 343);
+    const after = layoutTree({ ...circuit, links: [...circuit.links, L('new', 'work', 8)] }, 'stack', 343);
     expect(after.leaves).toHaveLength(before.leaves.length + 1);
     expect(after.traces).toHaveLength(before.traces.length + 1);
     expect(after.height - before.height).toBe(G.row);
@@ -169,6 +169,8 @@ describe('links data', () => {
       'https://www.linkedin.com/in/joshuaaschwartz/',
       'https://x.com/FuzzyNop',
       'https://github.com/fuzzyplace',
+      'https://pinkteam.xyz',
+      'https://pinkteam.dev',
       'https://infocondb.org/presenter/josh-schwartz-fuzzynop',
       'https://www.pcmag.com/opinions/the-head-of-verizon-medias-red-team-has-one-simple-security-tip',
       'https://securityconversations.com/episode/josh-schwartz-on-red-teaming-and-proactive-security-engineering/',
