@@ -6,9 +6,10 @@ import { Puppeteer } from './art/Puppeteer';
 import { CircuitTree } from './components/CircuitTree';
 import { Chapter } from './components/Chapter';
 import { Cta } from './components/ui';
-import { contact, elsewhere, future, nav, past, present, site, ui, vibe } from './content/site';
+import { contact, elsewhere, future, nav, past, present, site, ui, vibe, work } from './content/site';
 import { tie, tieTitle } from './content/typeset';
 import { Hero } from './sections/Hero';
+import { Work } from './sections/Work';
 import { Sound } from './audio/Sound'; // ---- sfx hook ----
 
 /*
@@ -33,13 +34,23 @@ export default function App() {
           <Sound />{/* ---- sfx hook ---- the toggle takes the free space between the mark and the nav */}
           <nav aria-label={ui.primaryNav}>
             <ul className="flex gap-1 min-[400px]:gap-4 md:gap-8">
-              {nav.map((n) => (
-                <li key={n.id}>
-                  <a href={`#${n.id}`} className="type-label-small md:type-label-medium inline-flex min-h-11 min-w-11 items-center justify-center text-gray-300 transition-colors duration-[var(--md-sys-motion-duration-short4)] ease-standard hover:text-on-surface">
-                    {n.label}
-                  </a>
-                </li>
-              ))}
+              {nav
+                .filter((n) => n.id !== work.chapter.id || work.enabled)
+                .map((n) => (
+                  // the fifth item: narrower under 375px, left out under 350px (the header has no room; the plate is still one scroll below Contact)
+                  <li key={n.id} className={'short' in n ? 'max-[349px]:hidden' : undefined}>
+                    <a href={`#${n.id}`} aria-label={'short' in n ? n.label : undefined} className={`type-label-small md:type-label-medium inline-flex min-h-11 ${'short' in n ? 'min-w-9 min-[375px]:min-w-11' : 'min-w-11'} items-center justify-center whitespace-nowrap text-gray-300 transition-colors duration-[var(--md-sys-motion-duration-short4)] ease-standard hover:text-on-surface`}>
+                      {'short' in n ? (
+                        <>
+                          <span className="min-[560px]:hidden">{n.short}</span>
+                          <span className="max-[559px]:hidden">{n.label}</span>
+                        </>
+                      ) : (
+                        n.label
+                      )}
+                    </a>
+                  </li>
+                ))}
             </ul>
           </nav>
         </div>
@@ -133,6 +144,9 @@ export default function App() {
               </Chapter>
             </PrintedPlate>
           </div>
+
+          {/* ---- 05 Work with us + the brief (src/sections/Work.tsx); off with work.enabled ---- */}
+          {work.enabled && <Work />}
         </div>
       </main>
 

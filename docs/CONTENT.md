@@ -32,11 +32,13 @@ Copy lives in `src/content/site.ts`. Only publish what's in "Approved copy" belo
 | Pop-out (white card) | "Setting the vibe has never been more important." "I also produce events and spaces with The Fuzzy Place." Link "See the events" (placeholder, URL from Z) | Z 2026-11-02 (body line drafted) |
 | 03 Future | **What I’m looking for.** "To make a real impact, building a team, a function or a project around:" Pink teaming · AI safety · Offensive security strategy · Human-centered security. "Also available for a full-body robot transplant." | Z 2026-11-02; list lines 3–4 Z 2026-11-19 |
 | 04 Contact | **Say hello.** "If you’re working on any of this, or think I could help, get in touch." CTA "Message me · LinkedIn" | drafted, Z to confirm |
+| 05 Work with us (black card) | **Bring us in.** "For bigger work I bring people I trust. We shape it around your team." Four offers, name + one line: Operator training · Method acting for keyboard warriors · Building a PinkCell · Pink Team strategy (lines in `site.ts` → `work.offers`). | **Drafted 2026-11-19 from Z's four concepts. No prices or numbers anywhere (Z, 2026-11-27). Z to confirm every line** |
+| The brief (white card) | **Tell us what you’re working on.** "A few lines is enough. One of us will write back." Form labels, "How big is it" (A workshop or short engagement · A project over a few months · A long-term program · Not sure yet), "We only use this to reply to you.", sent / failed messages (`site.ts` → `brief`) | drafted, Z to confirm; labels are UI |
 | Elsewhere | Circuit tree: Connect, Work (Pink Team links first), Play; full list under "Allowed links" | Z |
 | Hidden trust line | "Nothing here is secure." "He feels safe anyway." | Z |
 | Footer | `0x90 0x90 0x90 · nothing happened here` | v1 (dash removed) |
 | Meta / share | Title "Josh Schwartz / FuzzyNop"; description = tagline + hero line; OG image = tagline | derived |
-| UI labels | Nav Past / Present / Future / Contact; "Elsewhere"; "Skip to content" | UI |
+| UI labels | Nav Past / Present / Future / Contact / Work with us ("Work" on phones); "Elsewhere"; "Skip to content" | UI |
 
 Retired from the page (still Z's words): the retirement/return-to-art paragraph, "I create things" paragraph and list, "These days" areas, "What would happen if".
 

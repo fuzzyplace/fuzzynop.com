@@ -30,6 +30,8 @@ export const nav = [
   { id: 'present', label: 'Present' },
   { id: 'future', label: 'Future' },
   { id: 'contact', label: 'Contact' },
+  // Work with us (2026-11-19). `short` shows where the header has no room for the full label.
+  { id: 'work', label: 'Work with us', short: 'Work' },
 ] as const;
 
 export const hero = {
@@ -94,6 +96,60 @@ export const contact: Chapter = {
   eyebrow: 'Contact',
   title: 'Say hello',
   body: ['If you’re working on any of this, or think I could help, get in touch.'],
+};
+
+/**
+ * Work with us (2026-11-19): the plate under Contact and the brief form after it. Drafted from Z's
+ * four starting concepts; no prices or numbers on the page (Z, 2026-11-27). Every line awaits Z's sign-off (docs/CONTENT.md).
+ * `enabled: false` removes both plates and the nav item. Nothing else on the page depends on them.
+ */
+export const work = {
+  enabled: true,
+  chapter: {
+    n: '05',
+    id: 'work',
+    eyebrow: 'Work with us',
+    tone: 'ink',
+    title: 'Bring us in',
+    body: ['For bigger work I bring people I trust. We shape it around your team.'],
+  } satisfies Chapter,
+  offers: [
+    { name: 'Operator training', line: 'Training for offensive security teams, built around your operators.' },
+    { name: 'Method acting for keyboard warriors', line: 'Acting technique for social engineers. How to build a character and hold it under pressure, for authorized testing only.' },
+    { name: 'Building a PinkCell', line: 'Standing up a pink team inside your organization. Who to hire, how it runs, what it tests first.' },
+    { name: 'Pink Team strategy', line: 'For leaders deciding where pink teaming fits and what to do about it.' },
+  ],
+};
+
+/**
+ * The brief: collects interest, no payment. Posts to /api/lead on this site (a private file per
+ * enquiry, the same way the Pink Team workshop site does it). If that fails, the visitor keeps
+ * what they wrote: copy it and message on LinkedIn. Labels are UI.
+ */
+export const brief = {
+  title: 'Tell us what you’re working on',
+  lede: 'A few lines is enough. One of us will write back.',
+  fields: {
+    name: { label: 'Name', error: 'Add your name.' },
+    email: { label: 'Work email', error: 'Add an email we can reply to.' },
+    org: { label: 'Organization' },
+    need: { label: 'What you need', other: 'Something else' },
+    scale: { label: 'How big is it', options: ['A workshop or short engagement', 'A project over a few months', 'A long-term program', 'Not sure yet'] },
+    notes: { label: 'What are you trying to do?' },
+    trap: { label: 'Leave this empty' },
+    choose: 'Choose one',
+    required: 'required',
+  },
+  submit: 'Send the brief',
+  sending: 'Sending',
+  privacy: 'We only use this to reply to you.',
+  done: { title: 'Got it', body: 'Thank you. One of us will be in touch.' },
+  failed: {
+    body: 'That didn’t send. Nothing is lost: copy your brief and message me on LinkedIn.',
+    copy: 'Copy the brief',
+    copied: 'Copied',
+    link: { label: 'Message me', via: 'LinkedIn', href: LINKEDIN },
+  },
 };
 
 /** Name of the circuit-tree nav (screen readers) and its small visible label. */

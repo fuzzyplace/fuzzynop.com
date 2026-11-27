@@ -237,6 +237,35 @@
 .plate-paper .cta-btn:hover { background: var(--md-ref-gray-900); }
 .plate-paper .cta-btn--placeholder, .plate-paper .cta-btn--placeholder:hover { background: transparent; color: var(--md-sys-color-on-paper); }
 
+/* ---- Work with us: the brief form (src/sections/Work.tsx). Lives on a paper plate: ink lines,
+   tokens only. Controls are outlined, never filled (the one filled control stays the Contact CTA).
+   Errors are words plus a heavier line, never colour alone. No orange except the global focus ring
+   and the 1px hover underline. */
+.brief { color-scheme: light; }
+.field { display: grid; gap: .5rem; align-content: start; }
+.field-input {
+  width: 100%; min-height: 3rem; padding: .75rem .875rem; margin: 0;
+  font-family: var(--font-sans); font-size: 1rem; line-height: 1.5; color: var(--md-sys-color-on-paper);
+  background: transparent; border: 1px solid var(--md-sys-color-ink); border-radius: var(--md-sys-shape-corner-extra-small);
+}
+textarea.field-input { min-height: 7rem; resize: vertical; }
+.field-input[aria-invalid='true'] { box-shadow: inset 0 0 0 1px var(--md-sys-color-ink); }
+/* a focused invalid field keeps both: the heavier line and the focus ring */
+.field-input[aria-invalid='true']:focus-visible { box-shadow: inset 0 0 0 1px var(--md-sys-color-ink), 0 0 0 5px var(--md-sys-color-accent); }
+/* the sent / failed message takes focus so it is announced; it is not a control, so no ring */
+.plate-paper .result:focus-visible { outline: none; box-shadow: none; }
+.field-error { color: var(--md-sys-color-on-paper); font-weight: 500; }
+.field-trap { position: absolute; left: -200vw; width: 1px; height: 1px; overflow: hidden; }
+.btn-outline {
+  display: inline-flex; align-items: center; justify-content: center; gap: .75rem; min-height: 3rem;
+  padding: .9rem 1.75rem; color: var(--md-sys-color-on-paper); background: transparent; cursor: pointer;
+  border: 1px solid var(--md-sys-color-ink); border-radius: var(--md-sys-shape-corner-extra-small);
+  transition: background-color var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard);
+}
+.btn-outline:hover:not(:disabled) { background: color-mix(in srgb, var(--md-sys-color-ink) 8%, transparent); }
+.btn-outline:hover:not(:disabled) .btn-label { text-decoration: underline; text-decoration-color: var(--md-sys-color-accent); text-decoration-thickness: 1px; text-underline-offset: 6px; }
+.btn-outline:disabled { opacity: .38; cursor: default; }
+
 /* the open question's cursor: left blinking after the arm writes */
 @keyframes caret-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
 .caret { animation: caret-blink 1.1s steps(1) infinite; }
