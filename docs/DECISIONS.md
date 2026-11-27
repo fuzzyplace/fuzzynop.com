@@ -1,6 +1,23 @@
 # Decisions & open assumptions
 
 ## Decisions
+**2026-11-19 — Work with us: two plates under Contact, a brief that collects interest (Claude, awaiting Z)**
+1. **Scope.** Nothing above the footer changed except one more nav item. Two new plates after Contact (`src/sections/Work.tsx`): an ink plate "05 Work with us" (four offers) and a paper plate with the brief form. `work.enabled = false` in `site.ts` removes both and the nav item.
+2. **Routing: same as the Pink Team workshop site.** The form posts to `/api/lead` on this site (`api/lead.js`, a near copy of `fuzzyplace/pink-team`'s), which saves one private JSON file per brief in Vercel Blob under `leads/fuzzynop-com/`. No new inbox, CRM or subscription. No payment. Chosen over: `mailto` (no public address exists yet, and many work laptops have no mail client set up); a third-party form (new subscription, and the production CSP `connect-src 'self'; form-action 'self'` would have to be opened); LinkedIn only (no scope signal).
+3. **A failed send keeps the brief.** (A filled honeypot is the exception: it gets an ok and nothing is saved.) If the post fails for any reason (store not connected, offline, blocked), the page shows the brief as text with a copy button and the LinkedIn link the Contact plate already uses. Until the Blob store is connected in production this fallback is what every visitor gets.
+4. **Blob is silent.** Nobody is told when a brief arrives. `api/lead.js` will post one line (what they need / how big / organization; no email address, no notes) to `LEAD_NOTIFY_URL` if that env var is set (the `{ text }` shape Slack incoming webhooks take). **Open: which existing channel should get that ping.**
+5. **One filled control stays.** The brief's submit is outlined (`.btn-outline`); the Contact CTA is still the only filled control on the page. Form styles are tokens only, ink lines on paper; errors are words plus a heavier line, not colour.
+6. **Nav.** Fifth item "Work with us"; "Work" under 560px; narrower tap width (36px) under 375px; left out of the header under 350px, where five items don't fit (the plate is still one scroll below Contact).
+7. **To turn it on (each step needs Z's go):** connect a Blob store to the `fuzzynop-com` Vercel project (the pink-team one or a new one) so `BLOB_READ_WRITE_TOKEN` exists; optionally set `LEAD_NOTIFY_URL`; push the branch for a preview and send one real test brief; merge to `main` (production).
+8. **Not verified:** the endpoint running on Vercel. Local dev has no `/api`; the handler is unit-tested with Blob mocked (`src/content/lead.test.ts`) and the page was tested with the request stubbed (sent, failed, validation, 375px, reduced motion).
+
+**Open assumptions (Work with us, 2026-11-19)**
+- All copy in `work` and `brief` is drafted. "PinkCell" is kept as Z wrote it; "Pink Team strategy" follows the link tree's spelling.
+- **No prices or numbers on the page (Z, 2026-11-27).** The terms line and the budget ranges are gone; the brief asks "How big is it" in words instead. Budget is a conversation after the brief arrives.
+- "Us" is not named anywhere on the page (no collaborator names, per the no-name-dropping rule).
+- The Vercel team is on the Hobby plan, whose terms are for non-commercial use. The workshop site already takes enquiries there; Z to decide whether to move to Pro before this goes live.
+- Briefs hold a name and work email. They are stored privately and only written by the endpoint; there is no retention rule yet.
+
 **2026-11-01 — v2.3 explorer: turns, fidgets, a curious character (Claude)**
 1. **Turns** (`poses.ts` → `turnPose`, tested): facing flips instantly 40% into a 0.2 s pivot. Before the flip his head already looks the new way, his weight shifts back and the front foot steps across; after it he leans into the new direction and his feet settle. Standing turns are a small hop. Width never drops below 0.92 (was 0.08). Held, falling or reduced motion: plain instant flip.
 2. **Pose math is pure** (`poses.ts`): every body pose (walk gait base, swat / jump / climb / fall, fidgets, activities, sitting, duck, landing follow-through) is a function of progress; `Character.tsx` only turns a `Body` into paths. Arms can bend at an elbow now. Jumps get a deeper crouch with arms swung back; landings from jumps / falls get a 0.34 s knees-give follow-through.
