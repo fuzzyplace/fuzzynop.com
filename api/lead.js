@@ -2,10 +2,15 @@
 // Same pattern as the Pink Team workshop site (fuzzyplace/pink-team, api/lead.js).
 // Nothing is public: the store is private and this endpoint only writes.
 //
-// Needs a Blob store connected to the project (BLOB_READ_WRITE_TOKEN). Optional: LEAD_NOTIFY_URL,
-// a webhook that gets one short line per brief ({ text }, the shape Slack incoming webhooks take).
-// The line carries no email address and no notes.
+// Needs a Blob store connected to the project (BLOB_READ_WRITE_TOKEN).
+// Email: when RESEND_API_KEY and LEAD_EMAIL_TO are set, each saved brief is also emailed to
+// LEAD_EMAIL_TO (the address lives in the env var, never in this public repo), with reply-to set to
+// the sender so a reply goes straight back to them. LEAD_EMAIL_FROM overrides the from address.
+// Optional: LEAD_NOTIFY_URL, a webhook that gets one short line per brief ({ text }, the shape Slack
+// incoming webhooks take); that line carries no email address and no notes.
+// A failed email or ping never loses a brief: it is saved first.
 import { put } from "@vercel/blob";
+import { Resend } from "resend";
 
 const clean = (v, max) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const json = (status, body) =>
@@ -29,6 +34,39 @@ export function parseLead(data, now = new Date()) {
   if (!lead.name) return { error: "name_required" };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(lead.email)) return { error: "email_invalid" };
   return { lead };
+}
+
+/** The brief as a plain-text email. Pure. */
+export function leadEmail(lead) {
+  const rows = [
+    ["Name", lead.name],
+    ["Email", lead.email],
+    ["Organization", lead.org],
+    ["What they need", lead.need],
+    ["How big", lead.scale],
+    ["Notes", lead.notes],
+  ].filter(([, v]) => v);
+  return {
+    subject: `New brief: ${[lead.name, lead.org].filter(Boolean).join(", ")}`.replace(/[\r\n]+/g, " ").slice(0, 160),
+    text: rows.map(([k, v]) => `${k}: ${v}`).join("\n") + `\n\nReceived ${lead.receivedAt} on fuzzynop.com. Reply to this email to answer them.`,
+  };
+}
+
+async function email(lead) {
+  const key = process.env.RESEND_API_KEY;
+  const to = process.env.LEAD_EMAIL_TO;
+  if (!key || !to) return;
+  try {
+    const { error } = await new Resend(key).emails.send({
+      from: process.env.LEAD_EMAIL_FROM || "fuzzynop.com <onboarding@resend.dev>",
+      to: [to],
+      replyTo: lead.email,
+      ...leadEmail(lead),
+    });
+    if (error) console.error("lead email failed", error.name, error.message);
+  } catch (err) {
+    console.error("lead email failed", err && err.message); // the brief is already saved
+  }
 }
 
 async function notify(lead) {
@@ -67,7 +105,7 @@ export async function POST(request) {
     console.error("lead save failed", err && err.message);
     return json(500, { ok: false, error: "save_failed" });
   }
-  await notify(lead);
+  await Promise.all([email(lead), notify(lead)]);
   return json(200, { ok: true });
 }
 

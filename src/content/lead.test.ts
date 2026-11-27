@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const put = vi.fn();
 vi.mock('@vercel/blob', () => ({ put: (...a: unknown[]) => put(...a) }));
-import { GET, parseLead, POST } from '../../api/lead.js';
+const send = vi.fn();
+vi.mock('resend', () => ({ Resend: class { emails = { send: (...a: unknown[]) => send(...a) }; } }));
+import { GET, leadEmail, parseLead, POST } from '../../api/lead.js';
 
 const post = (body: unknown) => POST(new Request('https://fuzzynop.com/api/lead', { method: 'POST', body: typeof body === 'string' ? body : JSON.stringify(body) }));
 const good = { name: ' Ada ', email: 'Ada@Example.org', org: 'Example', need: 'Building a PinkCell', scale: 'A long-term program', notes: 'hello', website: '' };
@@ -11,6 +13,8 @@ describe('api/lead', () => {
   beforeEach(() => {
     put.mockReset();
     put.mockResolvedValue({});
+    send.mockReset();
+    send.mockResolvedValue({ data: { id: '1' }, error: null });
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
   });
@@ -65,6 +69,34 @@ describe('api/lead', () => {
     expect(sent).toContain('Building a PinkCell');
     expect(sent).not.toContain('ada@example.org');
     expect(sent).not.toContain('hello');
+  });
+
+  it('emails the saved brief to the configured address with reply-to set to the sender', async () => {
+    vi.stubEnv('RESEND_API_KEY', 'test-key');
+    vi.stubEnv('LEAD_EMAIL_TO', 'owner@example.org');
+    expect((await post(good)).status).toBe(200);
+    const mail = send.mock.calls[0][0];
+    expect(mail.to).toEqual(['owner@example.org']);
+    expect(mail.replyTo).toBe('ada@example.org');
+    expect(mail.subject).toBe('New brief: Ada, Example');
+    expect(mail.text).toContain('What they need: Building a PinkCell');
+    expect(mail.text).toContain('Notes: hello');
+  });
+
+  it('sends no email unless both the key and the address are set, and a failed email never loses the brief', async () => {
+    expect((await post(good)).status).toBe(200);
+    expect(send).not.toHaveBeenCalled();
+    vi.stubEnv('RESEND_API_KEY', 'test-key');
+    vi.stubEnv('LEAD_EMAIL_TO', 'owner@example.org');
+    send.mockRejectedValue(new Error('down'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect((await post(good)).status).toBe(200);
+    expect(put).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps line breaks out of the subject', () => {
+    const { lead } = parseLead({ ...good, name: 'A\nB' });
+    expect(leadEmail(lead!).subject).not.toMatch(/[\r\n]/);
   });
 
   it('only accepts POST', () => {
